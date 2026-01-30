@@ -1,0 +1,42 @@
+<svg width="240" height="60" viewBox="0 0 240 60" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+  <!-- Drafting Table -->
+  <g>
+    <!-- Table Surface -->
+    <path d="M10 25 L50 15 L50 35 L10 45 Z" fill="#BFDBFE" stroke="#1E40AF" stroke-width="1.5"/>
+    <!-- Grid lines on table -->
+    <line x1="15" y1="22" x2="45" y2="18" stroke="#93C5FD" stroke-width="0.5"/>
+    <line x1="15" y1="28" x2="45" y2="24" stroke="#93C5FD" stroke-width="0.5"/>
+    <line x1="15" y1="34" x2="45" y2="30" stroke="#93C5FD" stroke-width="0.5"/>
+    <line x1="15" y1="40" x2="45" y2="36" stroke="#93C5FD" stroke-width="0.5"/>
+    <line x1="20" y1="20" x2="20" y2="45" stroke="#93C5FD" stroke-width="0.5"/>
+    <line x1="30" y1="18" x2="30" y2="43" stroke="#93C5FD" stroke-width="0.5"/>
+    <line x1="40" y1="16" x2="40" y2="41" stroke="#93C5FD" stroke-width="0.5"/>
+    
+    <!-- Table Legs (A-frame) - adjusted to fit within viewBox -->
+    <path d="M10 45 L8 55 L12 55 Z" fill="#BFDBFE" stroke="#1E40AF" stroke-width="1.5"/>
+    <path d="M50 35 L52 45 L48 45 Z" fill="#BFDBFE" stroke="#1E40AF" stroke-width="1.5"/>
+    
+    <!-- T-Square (Red) -->
+    <rect x="12" y="18" width="35" height="3" fill="#EF4444" stroke="#DC2626" stroke-width="0.5"/>
+    <rect x="12" y="18" width="4" height="8" fill="#EF4444" stroke="#DC2626" stroke-width="0.5"/>
+    <!-- T-Square markings -->
+    <line x1="15" y1="19" x2="15" y2="20" stroke="white" stroke-width="0.3"/>
+    <line x1="20" y1="19" x2="20" y2="20" stroke="white" stroke-width="0.3"/>
+    <line x1="25" y1="19" x2="25" y2="20" stroke="white" stroke-width="0.3"/>
+    <line x1="30" y1="19" x2="30" y2="20" stroke="white" stroke-width="0.3"/>
+    <line x1="35" y1="19" x2="35" y2="20" stroke="white" stroke-width="0.3"/>
+    <line x1="40" y1="19" x2="40" y2="20" stroke="white" stroke-width="0.3"/>
+    <line x1="45" y1="19" x2="45" y2="20" stroke="white" stroke-width="0.3"/>
+    
+    <!-- Set Square (Red Triangle) -->
+    <path d="M12 18 L12 28 L20 18 Z" fill="#EF4444" stroke="#DC2626" stroke-width="0.5"/>
+    <!-- Set Square markings -->
+    <line x1="14" y1="20" x2="18" y2="20" stroke="white" stroke-width="0.3"/>
+    <line x1="14" y1="22" x2="18" y2="22" stroke="white" stroke-width="0.3"/>
+    <line x1="14" y1="24" x2="18" y2="24" stroke="white" stroke-width="0.3"/>
+    <line x1="14" y1="26" x2="18" y2="26" stroke="white" stroke-width="0.3"/>
+  </g>
+  
+  <!-- Cartographer Text - adjusted to ensure full visibility -->
+  <text x="65" y="38" font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="600" fill="#1E293B">Cartographer</text>
+</svg>
