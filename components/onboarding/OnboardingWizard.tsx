@@ -42,6 +42,24 @@ function WizardField({ field, answers, setAnswers }: WizardFieldProps) {
     [field.key, setAnswers]
   );
 
+  // Top-level hook: location updater. isCurrentField is passed at call site to avoid conditional hook.
+  const setLocationAnswer = useCallback(
+    (v: LocationOption | null | LocationOption[], isCurrentField: boolean) => {
+      setAnswers((prev) => {
+        const next = { ...prev };
+        if (isCurrentField) {
+          next.currentLocation = (v as LocationOption | null) ?? null;
+        } else {
+          next.selectedLocations = Array.isArray(v) ? v : v != null ? [v as LocationOption] : [];
+        }
+        next.defaultLocationId =
+          (next.currentLocation?.id ?? next.selectedLocations?.[0]?.id ?? null) ?? null;
+        return next;
+      });
+    },
+    [setAnswers]
+  );
+
   if (field.type === "select") {
     return (
       <div className="space-y-1">
@@ -364,23 +382,6 @@ function WizardField({ field, answers, setAnswers }: WizardFieldProps) {
     const isMulti = situation === "moving" || situation === "deciding";
     const isCurrent = field.key === "currentLocation";
 
-    const setLocationAnswer = useCallback(
-      (v: LocationOption | null | LocationOption[]) => {
-        setAnswers((prev) => {
-          const next = { ...prev };
-          if (isCurrent) {
-            next.currentLocation = (v as LocationOption | null) ?? null;
-          } else {
-            next.selectedLocations = Array.isArray(v) ? v : v != null ? [v as LocationOption] : [];
-          }
-          next.defaultLocationId =
-            (next.currentLocation?.id ?? next.selectedLocations?.[0]?.id ?? null) ?? null;
-          return next;
-        });
-      },
-      [isCurrent, setAnswers]
-    );
-
     if (isCurrent) {
       const current = (value as LocationOption | null | undefined) ?? null;
       return (
@@ -389,7 +390,7 @@ function WizardField({ field, answers, setAnswers }: WizardFieldProps) {
           <LocationPicker
             mode="single"
             value={current}
-            onChange={(opt) => setLocationAnswer(opt)}
+            onChange={(opt) => setLocationAnswer(opt, true)}
             id={`${field.key}-input`}
             placeholder="Search state or city..."
           />
@@ -404,7 +405,7 @@ function WizardField({ field, answers, setAnswers }: WizardFieldProps) {
         <LocationPicker
           mode={isMulti ? "multi" : "single"}
           value={list}
-          onChange={(opts) => setLocationAnswer(opts)}
+          onChange={(opts) => setLocationAnswer(opts, false)}
           id={`${field.key}-input`}
           placeholder="Search state or city..."
         />
