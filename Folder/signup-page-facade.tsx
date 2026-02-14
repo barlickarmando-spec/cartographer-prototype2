@@ -51,7 +51,7 @@ export default function SignupPage() {
 
       <main className="max-w-md mx-auto px-4 py-16">
         <div className="mb-6 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 px-4 py-2 text-sm font-medium">
-          Testing Mode: No authentication required
+          ⚠️ Testing Mode: No authentication required
         </div>
         
         <h1 className="text-2xl font-bold text-slate-800 mb-2">Get Started</h1>

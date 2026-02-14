@@ -28,7 +28,29 @@ export default function OnboardingPage() {
       const profile = normalizeOnboardingAnswers(answers);
       setOnboardingAnswers(answers);
       setUserProfile(profile);
-      router.push("/stress-test");
+      
+      // Run calculations for selected locations
+      const locations = profile.selectedLocations.length > 0 
+        ? profile.selectedLocations 
+        : ['Utah']; // Default to Utah if no locations selected
+      
+      const results = locations.map(loc => {
+        try {
+          const { calculateAutoApproach } = require('@/lib/calculation-engine');
+          return calculateAutoApproach(profile, loc, 30);
+        } catch (error) {
+          console.error(`Error calculating for ${loc}:`, error);
+          return null;
+        }
+      }).filter(r => r !== null);
+      
+      // Save results
+      if (results.length > 0) {
+        localStorage.setItem('calculation-results', JSON.stringify(results));
+      }
+      
+      // Navigate to results
+      router.push('/results');
     },
     [router]
   );

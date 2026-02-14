@@ -1,102 +1,155 @@
 /**
- * Normalize OnboardingAnswers into UserProfile with derived flags.
+ * Normalize OnboardingAnswers into UserProfile for calculations
+ * Handles partner income doubling rule, debt consolidation, and household type determination
  */
 
-import type { LocationOption } from "@/lib/locations";
-import { OCCUPATION_KEYS, isOccupationKey } from "@/lib/occupations";
-import type { OnboardingAnswers, UserProfile } from "./types";
+import {
+  OnboardingAnswers,
+  UserProfile,
+  HouseholdTypeEnum,
+  determineHouseholdType,
+  HardRule,
+} from './types';
 
-function num(x: unknown): number | null {
-  if (typeof x === "number" && !Number.isNaN(x)) return x;
-  if (typeof x === "string") {
-    const n = parseFloat(x);
-    return Number.isNaN(n) ? null : n;
-  }
-  return null;
-}
-
-function str(x: unknown): string {
-  if (x == null) return "";
-  return String(x);
-}
-
+/**
+ * Convert raw onboarding answers into normalized UserProfile
+ */
 export function normalizeOnboardingAnswers(answers: OnboardingAnswers): UserProfile {
-  const a = answers ?? {};
-  const goal = str(a.goal);
-  const currentStatus = str(a.currentStatus);
-  const relationshipStatus = str(a.relationshipStatus);
-  const financialRelationship = str(a.financialRelationship);
-  const planKids = str(a.planKids);
-  const locationSituation = str(a.locationSituation);
-
-  // isStudent: student_independent, student_soon, or career student_deciding / student_sure
-  const isStudent =
-    currentStatus === "student_independent" ||
-    currentStatus === "student_soon" ||
-    str(a.careerOutlook) === "student_deciding" ||
-    str(a.careerOutlook) === "student_sure";
-
-  // isFinanciallyIndependent
-  const isFinanciallyIndependent = currentStatus === "graduated_independent" || currentStatus === "student_independent";
-
-  // expectedIndependenceAge: from currentAge (already independent), expectedIndependenceAge, or expectedGraduationAge
-  let expectedIndependenceAge: number | null = null;
-  if (currentStatus === "graduated_independent") expectedIndependenceAge = num(a.currentAge) ?? null;
-  else if (currentStatus === "student_soon") expectedIndependenceAge = num(a.expectedIndependenceAge) ?? null;
-  else if (currentStatus === "student_independent") expectedIndependenceAge = num(a.expectedGraduationAge) ?? null;
-
-  // householdType
-  let householdType: UserProfile["householdType"] = "unknown";
-  if (relationshipStatus === "single") householdType = "single";
-  else if (relationshipStatus === "married") householdType = "married";
-  else if (relationshipStatus === "prefer_not") householdType = "single";
-
-  // numEarners: 1 or 2 based on relationship + financial relationship / two incomes
-  let numEarners = 1;
-  if (relationshipStatus === "married" && financialRelationship === "two_earners") numEarners = 2;
-  else if (relationshipStatus === "single" && str(a.planToMarry) === "yes" && str(a.twoIncomesOrJustMe) === "two_incomes") numEarners = 2;
-
-  // kidsPlan
-  let kidsPlan: UserProfile["kidsPlan"] = "none";
-  if (planKids === "yes") kidsPlan = "planned";
-  else if (planKids === "already") kidsPlan = "existing";
-  else if (planKids === "unsure") kidsPlan = "unsure";
-
-  // locationMode
-  let locationMode: UserProfile["locationMode"] = "unknown";
-  if (locationSituation === "moving") locationMode = "moving";
-  else if (locationSituation === "know_exactly") locationMode = "fixed";
-  else if (locationSituation === "deciding") locationMode = "choosing";
-  else if (locationSituation === "no_idea") locationMode = "unknown";
-
-  // locations: defaultLocationId, currentLocation, consideredLocations
-  const currentLocation: LocationOption | null =
-    a.currentLocation && typeof a.currentLocation === "object" && "id" in a.currentLocation && "label" in a.currentLocation
-      ? (a.currentLocation as LocationOption)
-      : null;
-  const selectedList: LocationOption[] = Array.isArray(a.selectedLocations)
-    ? a.selectedLocations.filter((x): x is LocationOption => x != null && typeof x === "object" && "id" in x && "label" in x)
-    : [];
-  const defaultLocationId = currentLocation?.id ?? selectedList[0]?.id ?? null;
-
-  // career: primary and partner occupation keys (fallback primary to first key if missing/invalid)
-  const primaryOccupation = isOccupationKey(str(a.occupation)) ? str(a.occupation) : OCCUPATION_KEYS[0];
-  const partnerOccupation = numEarners === 2 && isOccupationKey(str(a.partnerOccupation)) ? str(a.partnerOccupation) : null;
-
+  // === Demographics ===
+  const isFinanciallyIndependent =
+    answers.currentSituation === 'graduated-independent' ||
+    answers.currentSituation === 'student-independent';
+  
+  const currentAge = answers.currentAge || answers.expectedIndependenceAge || 22;
+  const expectedIndependenceAge = !isFinanciallyIndependent ? answers.expectedIndependenceAge : undefined;
+  
+  // === Household ===
+  const relationshipStatus = answers.relationshipStatus;
+  const numEarners: 1 | 2 = relationshipStatus === 'linked' && answers.partnerOccupation ? 2 : 1;
+  const numKids = answers.kidsPlan === 'have-kids' ? (answers.numKids || 0) : 0;
+  
+  const householdType = determineHouseholdType(relationshipStatus, numEarners, numKids);
+  
+  // === Life Planning ===
+  const kidsPlan = answers.kidsPlan;
+  const plannedKidAges: number[] = [];
+  
+  if (answers.firstKidAge) {
+    plannedKidAges.push(answers.firstKidAge);
+  }
+  
+  if (answers.plannedNextKidAge) {
+    plannedKidAges.push(answers.plannedNextKidAge);
+  }
+  
+  // Hard rules (can be multiple, but we'll take the first for calculations)
+  const hardRules: HardRule[] = answers.hardRules || ['none'];
+  
+  // === Income ===
+  const userOccupation = answers.userOccupation || 'Management';
+  const userSalary = answers.userSalary;
+  const partnerOccupation = answers.partnerOccupation;
+  const partnerSalary = answers.partnerSalary;
+  
+  // Partner income doubling rule: If linked but no partner occupation specified
+  const usePartnerIncomeDoubling =
+    relationshipStatus === 'linked' && !partnerOccupation && !partnerSalary;
+  
+  // === Debt ===
+  const userLoanDebt = answers.userStudentLoanDebt || 0;
+  const userLoanRate = answers.userStudentLoanRate || 0.05;
+  const partnerLoanDebt = answers.partnerStudentLoanDebt || 0;
+  const partnerLoanRate = answers.partnerStudentLoanRate || 0.05;
+  
+  // Combined student loan debt (weighted average rate)
+  const totalLoanDebt = userLoanDebt + partnerLoanDebt;
+  const studentLoanRate =
+    totalLoanDebt > 0
+      ? (userLoanDebt * userLoanRate + partnerLoanDebt * partnerLoanRate) / totalLoanDebt
+      : 0.05;
+  
+  // Additional debts
+  let creditCardDebt = 0;
+  let creditCardAPR = 0.216; // Default 21.6%
+  let creditCardRefreshMonths = 12; // Default 1 year refresh
+  let carDebt = 0;
+  let carDebtRate = 0.07; // Default 7%
+  let otherDebt = 0;
+  let otherDebtRate = 0.06; // Default 6%
+  
+  for (const debt of answers.additionalDebts || []) {
+    if (debt.type === 'cc-debt') {
+      creditCardDebt += debt.totalDebt;
+      creditCardAPR = debt.interestRate || 0.216;
+      creditCardRefreshMonths = debt.ccRefreshMonths || 12;
+    } else if (debt.type === 'car-debt') {
+      carDebt += debt.totalDebt;
+      carDebtRate = debt.interestRate || 0.07;
+    } else {
+      otherDebt += debt.totalDebt;
+      otherDebtRate = debt.interestRate || 0.06;
+    }
+  }
+  
+  // === Savings ===
+  const currentSavings = answers.savingsAccountValue || 0;
+  
+  // === Allocation ===
+  const disposableIncomeAllocation = answers.disposableIncomeAllocation || 75;
+  
+  // === Location ===
+  const locationSituation = answers.locationSituation;
+  const selectedLocations: string[] = [];
+  
+  if (answers.exactLocation) {
+    selectedLocations.push(answers.exactLocation);
+  }
+  
+  if (answers.potentialLocations && answers.potentialLocations.length > 0) {
+    selectedLocations.push(...answers.potentialLocations);
+  }
+  
+  if (answers.currentLocation && !selectedLocations.includes(answers.currentLocation)) {
+    selectedLocations.push(answers.currentLocation);
+  }
+  
+  // If no locations selected, default to "Utah" (or any default you prefer)
+  if (selectedLocations.length === 0) {
+    selectedLocations.push('Utah');
+  }
+  
+  const currentLocation = answers.currentLocation;
+  
+  // === Build Profile ===
   return {
-    raw: { ...a },
-    isStudent,
+    currentAge,
     isFinanciallyIndependent,
     expectedIndependenceAge,
     householdType,
+    relationshipStatus,
     numEarners,
+    numKids,
     kidsPlan,
-    locationMode,
-    locations: {
-      defaultLocationId,
-      currentLocation: currentLocation ?? null,
-      consideredLocations: selectedList,
-    },
-    career: { primaryOccupation, partnerOccupation },
+    plannedKidAges,
+    hardRules,
+    userOccupation,
+    userSalary,
+    partnerOccupation,
+    partnerSalary,
+    usePartnerIncomeDoubling,
+    studentLoanDebt: totalLoanDebt,
+    studentLoanRate,
+    creditCardDebt,
+    creditCardAPR,
+    creditCardRefreshMonths,
+    carDebt,
+    carDebtRate,
+    otherDebt,
+    otherDebtRate,
+    currentSavings,
+    disposableIncomeAllocation,
+    locationSituation,
+    selectedLocations,
+    currentLocation,
   };
 }

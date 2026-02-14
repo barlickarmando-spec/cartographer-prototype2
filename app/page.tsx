@@ -343,7 +343,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="bg-slate-800 text-slate-300 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-8 mb-8">
             <div>
               <div className="flex items-center gap-2 mb-4">
                 <Image 
@@ -397,6 +397,17 @@ export default function Home() {
                 </li>
                 <li>
                   <Link href="/login" className="hover:text-white transition-colors">Security</Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-semibold text-white mb-4">Developer</h4>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <Link href="/test-data" className="hover:text-white transition-colors">Test data</Link>
+                </li>
+                <li>
+                  <Link href="/onboarding" className="hover:text-white transition-colors">Onboarding</Link>
                 </li>
               </ul>
             </div>

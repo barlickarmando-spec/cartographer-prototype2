@@ -1,700 +1,1369 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import type { OnboardingAnswers } from "@/lib/onboarding/types";
-import type { FinancialSupportEntry, OtherDebtRow } from "@/lib/onboarding/types";
-import {
-  ONBOARDING_SCHEMA,
-  getVisibleFieldsForStep,
-  isCcAprRequired,
-  SUPPORT_TYPES,
-  SUPPORT_DURATION_OPTIONS,
-  SUPPORT_AFFECTS_OPTIONS,
-} from "@/lib/onboarding/schema";
-import type { SchemaField, SchemaStep } from "@/lib/onboarding/schema";
-import { searchLocations, type LocationOption } from "@/lib/locations";
-import { OCCUPATION_KEYS } from "@/lib/occupations";
+import { useState, useEffect } from "react";
+import { OnboardingAnswers } from "@/lib/onboarding/types";
+import { getAllLocations, getOccupationList } from "@/lib/data-extraction";
 
-const INPUT_CLASS =
-  "w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-800 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500";
-const LABEL_CLASS = "block text-sm font-medium text-slate-700 mb-1";
-
-function getAnswer(answers: OnboardingAnswers, key: keyof OnboardingAnswers): unknown {
-  return answers[key];
-}
-
-function setAnswer(answers: OnboardingAnswers, key: keyof OnboardingAnswers, value: unknown): OnboardingAnswers {
-  return { ...answers, [key]: value };
-}
-
-interface WizardFieldProps {
-  field: SchemaField;
-  answers: OnboardingAnswers;
-  setAnswers: React.Dispatch<React.SetStateAction<OnboardingAnswers>>;
-}
-
-function WizardField({ field, answers, setAnswers }: WizardFieldProps) {
-  const value = getAnswer(answers, field.key);
-  const update = useCallback(
-    (v: unknown) => {
-      setAnswers((prev) => setAnswer(prev, field.key, v));
-    },
-    [field.key, setAnswers]
-  );
-
-  // Top-level hook: location updater. isCurrentField is passed at call site to avoid conditional hook.
-  const setLocationAnswer = useCallback(
-    (v: LocationOption | null | LocationOption[], isCurrentField: boolean) => {
-      setAnswers((prev) => {
-        const next = { ...prev };
-        if (isCurrentField) {
-          next.currentLocation = (v as LocationOption | null) ?? null;
-        } else {
-          next.selectedLocations = Array.isArray(v) ? v : v != null ? [v as LocationOption] : [];
-        }
-        next.defaultLocationId =
-          (next.currentLocation?.id ?? next.selectedLocations?.[0]?.id ?? null) ?? null;
-        return next;
-      });
-    },
-    [setAnswers]
-  );
-
-  if (field.type === "select") {
-    return (
-      <div className="space-y-1">
-        <label className={LABEL_CLASS} htmlFor={field.key}>
-          {field.label}
-          {field.required && <span className="text-red-500"> *</span>}
-        </label>
-        <select
-          id={field.key}
-          className={INPUT_CLASS}
-          value={typeof value === "string" ? value : ""}
-          onChange={(e) => update(e.target.value)}
-        >
-          <option value="">Select...</option>
-          {(field.options ?? []).map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </div>
-    );
-  }
-
-  if (field.type === "multiselect") {
-    const arr = Array.isArray(value) ? (value as string[]) : [];
-    return (
-      <div className="space-y-2">
-        <span className={LABEL_CLASS}>
-          {field.label}
-          {field.required && <span className="text-red-500"> *</span>}
-        </span>
-        <div className="flex flex-wrap gap-3">
-          {(field.options ?? []).map((o) => (
-            <label key={o.value} className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={arr.includes(o.value)}
-                onChange={(e) => {
-                  if (e.target.checked) update([...arr, o.value]);
-                  else update(arr.filter((x) => x !== o.value));
-                }}
-                className="rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
-              />
-              <span className="text-slate-700">{o.label}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (field.type === "number") {
-    const n = typeof value === "number" ? value : value === "" || value == null ? "" : Number(value);
-    return (
-      <div className="space-y-1">
-        <label className={LABEL_CLASS} htmlFor={field.key}>
-          {field.label}
-          {field.required && <span className="text-red-500"> *</span>}
-        </label>
-        <input
-          id={field.key}
-          type="number"
-          className={INPUT_CLASS}
-          value={n === "" ? "" : n}
-          min={field.min}
-          max={field.max}
-          step={field.step ?? 1}
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v === "") update(undefined);
-            else update(parseFloat(v));
-          }}
-          placeholder={field.placeholder}
-        />
-      </div>
-    );
-  }
-
-  if (field.type === "text") {
-    return (
-      <div className="space-y-1">
-        <label className={LABEL_CLASS} htmlFor={field.key}>
-          {field.label}
-          {field.required && <span className="text-red-500"> *</span>}
-        </label>
-        <input
-          id={field.key}
-          type="text"
-          className={INPUT_CLASS}
-          value={typeof value === "string" ? value : ""}
-          onChange={(e) => update(e.target.value)}
-          placeholder={field.placeholder}
-        />
-      </div>
-    );
-  }
-
-  if (field.type === "checkbox") {
-    const checked = Boolean(value);
-    return (
-      <div className="flex items-center gap-2">
-        <input
-          id={field.key}
-          type="checkbox"
-          checked={checked}
-          onChange={(e) => update(e.target.checked)}
-          className="rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
-        />
-        <label className={LABEL_CLASS + " mb-0"} htmlFor={field.key}>
-          {field.label}
-        </label>
-      </div>
-    );
-  }
-
-  if (field.type === "slider") {
-    const n = typeof value === "number" ? value : (field.default as number) ?? field.min ?? 0;
-    const min = field.min ?? 0;
-    const max = field.max ?? 100;
-    const step = field.step ?? 1;
-    return (
-      <div className="space-y-2">
-        <label className={LABEL_CLASS}>
-          {field.label}
-          {field.required && <span className="text-red-500"> *</span>}
-          <span className="ml-2 font-semibold text-cyan-600">{n}%</span>
-        </label>
-        <input
-          type="range"
-          min={min}
-          max={max}
-          step={step}
-          value={n}
-          onChange={(e) => update(parseFloat(e.target.value))}
-          className="w-full accent-cyan-600"
-        />
-      </div>
-    );
-  }
-
-  if (field.type === "support_entries") {
-    const entries = (value as FinancialSupportEntry[] | undefined) ?? [];
-    const selectedTypes = [...new Set(entries.map((e) => e.type))];
-    const hasNone = selectedTypes.includes("none");
-    return (
-      <div className="space-y-4">
-        <span className={LABEL_CLASS}>Support types (select all that apply)</span>
-        <div className="flex flex-wrap gap-3 mb-4">
-          {SUPPORT_TYPES.map((o) => (
-            <label key={o.value} className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={selectedTypes.includes(o.value)}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    if (o.value === "none") {
-                      update([{ type: "none", duration: "not_sure", affects: "not_sure", annualAmount: null }]);
-                      return;
-                    }
-                    const next = entries.filter((x) => x.type !== "none");
-                    if (next.some((x) => x.type === o.value)) return;
-                    next.push({ type: o.value, duration: "", affects: "", annualAmount: null });
-                    update(next);
-                  } else {
-                    const next = entries.filter((x) => x.type !== o.value);
-                    update(next);
-                  }
-                }}
-                className="rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
-              />
-              <span className="text-slate-700">{o.label}</span>
-            </label>
-          ))}
-        </div>
-        {selectedTypes.filter((t) => t !== "none").map((type) => (
-          <div key={type} className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
-            <p className="font-medium text-slate-700">{SUPPORT_TYPES.find((o) => o.value === type)?.label ?? type}</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="text-xs text-slate-600">Duration</label>
-                <select
-                  className={INPUT_CLASS}
-                  value={entries.find((e) => e.type === type)?.duration ?? ""}
-                  onChange={(e) => {
-                    const d = e.target.value;
-                    update(
-                      entries.map((x) => (x.type === type ? { ...x, duration: d } : x))
-                    );
-                  }}
-                >
-                  {SUPPORT_DURATION_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-slate-600">Affects</label>
-                <select
-                  className={INPUT_CLASS}
-                  value={entries.find((e) => e.type === type)?.affects ?? ""}
-                  onChange={(e) => {
-                    const a = e.target.value;
-                    update(
-                      entries.map((x) => (x.type === type ? { ...x, affects: a } : x))
-                    );
-                  }}
-                >
-                  {SUPPORT_AFFECTS_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-slate-600">Annual amount ($) or leave blank if not sure</label>
-                <input
-                  type="number"
-                  className={INPUT_CLASS}
-                  value={entries.find((e) => e.type === type)?.annualAmount ?? ""}
-                  min={0}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    const n = v === "" ? null : parseFloat(v);
-                    update(
-                      entries.map((x) => (x.type === type ? { ...x, annualAmount: n } : x))
-                    );
-                  }}
-                  placeholder="Not sure"
-                />
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (field.type === "other_debts") {
-    const rows = (value as OtherDebtRow[] | undefined) ?? [];
-    return (
-      <div className="space-y-3">
-        <span className={LABEL_CLASS}>Other debts (category, balance, interest rate %)</span>
-        {rows.map((row, i) => (
-          <div key={i} className="flex flex-wrap gap-2 items-center">
-            <input
-              type="text"
-              className={INPUT_CLASS + " flex-1 min-w-[120px]"}
-              placeholder="Category"
-              value={row.category}
-              onChange={(e) => {
-                const next = [...rows];
-                next[i] = { ...next[i], category: e.target.value };
-                update(next);
-              }}
-            />
-            <input
-              type="number"
-              className={INPUT_CLASS + " w-28"}
-              placeholder="Balance"
-              min={0}
-              value={row.balance ?? ""}
-              onChange={(e) => {
-                const next = [...rows];
-                next[i] = { ...next[i], balance: parseFloat(e.target.value) || 0 };
-                update(next);
-              }}
-            />
-            <input
-              type="number"
-              className={INPUT_CLASS + " w-24"}
-              placeholder="Rate %"
-              min={0}
-              max={50}
-              value={row.interestRate ?? ""}
-              onChange={(e) => {
-                const next = [...rows];
-                next[i] = { ...next[i], interestRate: parseFloat(e.target.value) || 0 };
-                update(next);
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => update(rows.filter((_, j) => j !== i))}
-              className="px-3 py-2 text-slate-600 hover:text-red-600"
-            >
-              Remove
-            </button>
-          </div>
-        ))}
-        <button
-          type="button"
-          onClick={() => update([...rows, { category: "", balance: 0, interestRate: 0 }])}
-          className="text-cyan-600 font-medium hover:text-cyan-700"
-        >
-          + Add debt
-        </button>
-      </div>
-    );
-  }
-
-  if (field.type === "occupation") {
-    const selected = typeof value === "string" ? value : "";
-    return (
-      <div className="space-y-1">
-        <label className={LABEL_CLASS} htmlFor={field.key}>
-          {field.label}
-          {field.required && <span className="text-red-500"> *</span>}
-        </label>
-        <OccupationPicker
-          id={field.key}
-          value={selected}
-          onChange={(v) => update(v)}
-        />
-      </div>
-    );
-  }
-
-  if (field.type === "locations_picker") {
-    const situation = String(answers.locationSituation ?? "");
-    const isMulti = situation === "moving" || situation === "deciding";
-    const isCurrent = field.key === "currentLocation";
-
-    if (isCurrent) {
-      const current = (value as LocationOption | null | undefined) ?? null;
-      return (
-        <div className="space-y-2">
-          <label className={LABEL_CLASS}>{field.label}</label>
-          <LocationPicker
-            mode="single"
-            value={current}
-            onChange={(opt) => setLocationAnswer(opt, true)}
-            id={`${field.key}-input`}
-            placeholder="Search state or city..."
-          />
-        </div>
-      );
-    }
-
-    const list = (Array.isArray(value) ? value : []) as LocationOption[];
-    return (
-      <div className="space-y-2">
-        <label className={LABEL_CLASS}>{field.label}</label>
-        <LocationPicker
-          mode={isMulti ? "multi" : "single"}
-          value={list}
-          onChange={(opts) => setLocationAnswer(opts, false)}
-          id={`${field.key}-input`}
-          placeholder="Search state or city..."
-        />
-      </div>
-    );
-  }
-
-  return null;
-}
-
-function filterOccupations(query: string): string[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return [...OCCUPATION_KEYS];
-  return OCCUPATION_KEYS.filter((s) => s.toLowerCase().includes(q));
-}
-
-function OccupationPicker({
-  id,
-  value,
-  onChange,
-}: {
-  id: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const [search, setSearch] = useState("");
-  const [open, setOpen] = useState(false);
-  const suggestions = filterOccupations(search);
-
-  const handleSelect = (occupation: string) => {
-    onChange(occupation);
-    setSearch("");
-    setOpen(false);
-  };
-
-  const showInput = !value || open;
-
-  return (
-    <div className="space-y-2">
-      {value && !open && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="inline-flex items-center rounded-full bg-cyan-50 px-3 py-1 text-sm font-medium text-cyan-800 border border-cyan-200">
-            {value}
-          </span>
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="text-sm text-cyan-600 font-medium hover:text-cyan-700"
-          >
-            Change
-          </button>
-        </div>
-      )}
-      {showInput && (
-        <div className="relative">
-          <input
-            id={id}
-            type="text"
-            className={INPUT_CLASS}
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setOpen(true);
-            }}
-            onFocus={() => setOpen(true)}
-            onBlur={() => setTimeout(() => setOpen(false), 150)}
-            placeholder="Search occupation..."
-          />
-          {open && suggestions.length > 0 && (
-            <ul className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg max-h-48 overflow-auto">
-              {suggestions.map((occ) => (
-                <li
-                  key={occ}
-                  className="px-4 py-2 cursor-pointer hover:bg-cyan-50 text-slate-800"
-                  onMouseDown={() => handleSelect(occ)}
-                >
-                  {occ}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function LocationPicker({
-  mode,
-  value,
-  onChange,
-  id,
-  placeholder = "Search state or city...",
-}: {
-  mode: "single" | "multi";
-  value: LocationOption | null | LocationOption[];
-  onChange: (v: LocationOption | null | LocationOption[]) => void;
-  id?: string;
-  placeholder?: string;
-}) {
-  const singleValue = mode === "single" ? (Array.isArray(value) ? value[0] ?? null : (value as LocationOption | null)) : null;
-  const multiValue = mode === "multi" ? (Array.isArray(value) ? value : []) : [];
-  const selected = mode === "single" ? (singleValue ? [singleValue] : []) : multiValue;
-
-  const [search, setSearch] = useState("");
-  const [open, setOpen] = useState(false);
-  const suggestions = searchLocations(search, 25);
-
-  const handleSelect = (opt: LocationOption) => {
-    setSearch("");
-    setOpen(false);
-    if (mode === "single") {
-      onChange(opt);
-    } else {
-      const exists = selected.some((s) => s.id.toLowerCase() === opt.id.toLowerCase());
-      if (!exists) onChange([...selected, opt]);
-    }
-  };
-
-  const remove = (opt: LocationOption) => {
-    if (mode === "single") {
-      onChange(null);
-    } else {
-      onChange(selected.filter((s) => s.id !== opt.id));
-    }
-  };
-
-  return (
-    <div className="space-y-2">
-      {selected.length > 0 && (
-        <ul className="flex flex-wrap gap-2">
-          {selected.map((opt) => (
-            <li
-              key={opt.id}
-              className="inline-flex items-center gap-1 bg-cyan-50 text-cyan-800 rounded-full px-3 py-1.5 text-sm border border-cyan-200"
-            >
-              <span>{opt.label}</span>
-              <button
-                type="button"
-                onClick={() => remove(opt)}
-                className="text-cyan-600 hover:text-red-600 font-medium leading-none"
-                aria-label={`Remove ${opt.label}`}
-              >
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="relative">
-        <input
-          id={id}
-          type="text"
-          className={INPUT_CLASS}
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder={placeholder}
-        />
-        {open && suggestions.length > 0 && (
-          <ul className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg max-h-48 overflow-auto">
-            {suggestions
-              .filter((s) => !selected.some((sel) => sel.id.toLowerCase() === s.id.toLowerCase()))
-              .map((opt) => (
-                <li
-                  key={opt.id}
-                  className="px-4 py-2 cursor-pointer hover:bg-cyan-50 text-slate-800"
-                  onMouseDown={() => handleSelect(opt)}
-                >
-                  {opt.label}
-                </li>
-              ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function validateStep(step: SchemaStep, answers: OnboardingAnswers): string | null {
-  const visible = getVisibleFieldsForStep(step, answers);
-  for (const f of visible) {
-    if (f.required) {
-      const v = getAnswer(answers, f.key);
-      if (v === undefined || v === null || v === "") return `${f.label} is required`;
-      if (Array.isArray(v) && v.length === 0) return `${f.label} is required`;
-    }
-  }
-  if (isCcAprRequired(answers)) {
-    const apr = getAnswer(answers, "ccApr");
-    if (apr === undefined || apr === null || apr === "") return "Credit card APR is required when you have credit card debt";
-  }
-  return null;
-}
-
-export interface OnboardingWizardProps {
-  initialAnswers?: OnboardingAnswers | null;
+interface OnboardingWizardProps {
+  initialAnswers?: Partial<OnboardingAnswers>;
   onComplete: (answers: OnboardingAnswers) => void;
-  onProgress?: (answers: OnboardingAnswers) => void;
+  onProgress: (answers: OnboardingAnswers) => void;
 }
 
 export function OnboardingWizard({ initialAnswers, onComplete, onProgress }: OnboardingWizardProps) {
-  const [answers, setAnswers] = useState<OnboardingAnswers>(initialAnswers ?? {});
-  const [stepIndex, setStepIndex] = useState(0);
+  const [currentStep, setCurrentStep] = useState(1);
+  const [answers, setAnswers] = useState<Partial<OnboardingAnswers>>(initialAnswers || {
+    hardRules: [],
+    additionalDebts: [],
+    potentialLocations: [],
+    disposableIncomeAllocation: 70,
+  });
 
   useEffect(() => {
-    onProgress?.(answers);
+    if (Object.keys(answers).length > 0) {
+      onProgress(answers as OnboardingAnswers);
+    }
   }, [answers, onProgress]);
 
-  const step = ONBOARDING_SCHEMA[stepIndex];
-  const isReview = step?.id === "step9_review";
-  const visibleFields = step ? getVisibleFieldsForStep(step, answers) : [];
+  const updateAnswer = <K extends keyof OnboardingAnswers>(key: K, value: OnboardingAnswers[K]) => {
+    setAnswers(prev => ({ ...prev, [key]: value }));
+  };
+
+  const canProceed = () => {
+    switch (currentStep) {
+      case 1: return !!answers.currentSituation;
+      case 2: {
+        // Only require relationshipStatus if user is independent
+        const isIndependent = answers.currentSituation === 'graduated-independent' || 
+                              answers.currentSituation === 'student-independent' ||
+                              answers.currentSituation === 'no-college' ||
+                              answers.currentSituation === 'other';
+        if (isIndependent) {
+          return !!answers.relationshipStatus && !!answers.kidsPlan;
+        }
+        return !!answers.kidsPlan;
+      }
+      case 3: 
+        if (answers.currentSituation === 'graduated-independent' || answers.currentSituation === 'no-college' || answers.currentSituation === 'other') {
+          return !!answers.currentAge && !!answers.userOccupation;
+        }
+        return !!answers.expectedIndependenceAge && !!answers.userOccupation;
+      case 4: return true;
+      case 5: return answers.disposableIncomeAllocation !== undefined;
+      case 6: return !!answers.locationSituation;
+      default: return false;
+    }
+  };
 
   const handleNext = () => {
-    if (!step) return;
-    const err = validateStep(step, answers);
-    if (err) {
-      alert(err);
-      return;
+    if (canProceed() && currentStep < 6) {
+      setCurrentStep(currentStep + 1);
     }
-    if (isReview) {
-      onComplete(answers);
-      return;
-    }
-    setStepIndex((i) => Math.min(i + 1, ONBOARDING_SCHEMA.length - 1));
   };
 
   const handleBack = () => {
-    setStepIndex((i) => Math.max(0, i - 1));
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
   };
 
-  if (!step) return null;
+  const handleFinish = () => {
+    if (canProceed()) {
+      onComplete(answers as OnboardingAnswers);
+    }
+  };
+
+  const progressPercent = Math.round((currentStep / 6) * 100);
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8">
-        <div className="mb-6">
-          <p className="text-sm text-cyan-600 font-medium">
-            Step {stepIndex + 1} of {ONBOARDING_SCHEMA.length}
-          </p>
-          <h2 className="text-2xl font-bold text-slate-800 mt-1">{step.title}</h2>
+    <div className="min-h-screen bg-[#F8FAFB]">
+      {/* Progress Bar */}
+      <div className="bg-white border-b border-[#E5E7EB]">
+        <div className="max-w-4xl mx-auto px-8 py-4">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm font-medium text-[#6B7280]">Step {currentStep} of 6</span>
+            <span className="text-sm text-[#9CA3AF]">{progressPercent}% Complete</span>
+          </div>
+          <div className="w-full bg-[#E5E7EB] rounded-full h-2">
+            <div 
+              className="bg-[#5BA4E5] h-2 rounded-full transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-4xl mx-auto px-8 py-16">
+        <div className="bg-white rounded-xl shadow-sm border border-[#E5E7EB] px-16 py-12">
+          {currentStep === 1 && <Step1CurrentSituation answers={answers} updateAnswer={updateAnswer} />}
+          {currentStep === 2 && <Step2HouseholdType answers={answers} updateAnswer={updateAnswer} />}
+          {currentStep === 3 && <Step3AgeOccupation answers={answers} updateAnswer={updateAnswer} />}
+          {currentStep === 4 && <Step4FinancialPortfolio answers={answers} updateAnswer={updateAnswer} />}
+          {currentStep === 5 && <Step5Allocation answers={answers} updateAnswer={updateAnswer} />}
+          {currentStep === 6 && <Step6Location answers={answers} updateAnswer={updateAnswer} />}
         </div>
 
-        {isReview ? (
-          <div className="space-y-4 mb-8">
-            <p className="text-slate-600">Review your answers below. Click Finish to continue.</p>
-            <dl className="space-y-2 text-sm">
-              <dt className="font-medium text-slate-700">Goal</dt>
-              <dd className="text-slate-600">{ONBOARDING_SCHEMA[0].fields[0].options?.find((o) => o.value === answers.goal)?.label ?? answers.goal}</dd>
-              <dt className="font-medium text-slate-700">Status</dt>
-              <dd className="text-slate-600">{ONBOARDING_SCHEMA[1].fields[0].options?.find((o) => o.value === answers.currentStatus)?.label ?? answers.currentStatus}</dd>
-              <dt className="font-medium text-slate-700">Relationship</dt>
-              <dd className="text-slate-600">{ONBOARDING_SCHEMA[2].fields[0].options?.find((o) => o.value === answers.relationshipStatus)?.label ?? answers.relationshipStatus}</dd>
-              <dt className="font-medium text-slate-700">Career</dt>
-              <dd className="text-slate-600">{answers.occupation ?? answers.careerOutlook}</dd>
-              <dt className="font-medium text-slate-700">Student loan balance</dt>
-              <dd className="text-slate-600">${answers.studentLoanBalance ?? 0} @ {answers.studentLoanRate ?? 0}%</dd>
-            </dl>
-          </div>
-        ) : (
-          <div className="space-y-6 mb-8">
-            {visibleFields.map((f) => (
-              <WizardField key={`${f.key}-${f.label}`} field={f} answers={answers} setAnswers={setAnswers} />
-            ))}
-          </div>
-        )}
-
-        <div className="flex justify-between pt-4 border-t border-slate-200">
+        {/* Navigation */}
+        <div className="flex justify-between items-center mt-8">
           <button
-            type="button"
             onClick={handleBack}
-            disabled={stepIndex === 0}
-            className="px-5 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={currentStep === 1}
+            className="flex items-center gap-2 px-4 py-2 text-[#6B7280] hover:text-[#2C3E50] disabled:opacity-0 disabled:cursor-default transition-colors"
           >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
             Back
           </button>
-          <button
-            type="button"
-            onClick={handleNext}
-            className="px-6 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:from-cyan-600 hover:to-blue-600"
-          >
-            {isReview ? "Finish" : "Next"}
-          </button>
+
+          {/* Progress Dots */}
+          <div className="flex gap-2">
+            {[1, 2, 3, 4, 5, 6].map(step => (
+              <div
+                key={step}
+                className={`w-2 h-2 rounded-full transition-all ${
+                  step === currentStep ? 'bg-[#5BA4E5] w-8' : 
+                  step < currentStep ? 'bg-[#5BA4E5]' : 
+                  'bg-[#E5E7EB]'
+                }`}
+              />
+            ))}
+          </div>
+          
+          {currentStep < 6 ? (
+            <button
+              onClick={handleNext}
+              disabled={!canProceed()}
+              className="flex items-center gap-2 px-6 py-2.5 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm font-medium"
+            >
+              Next
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          ) : (
+            <button
+              onClick={handleFinish}
+              disabled={!canProceed()}
+              className="flex items-center gap-2 px-6 py-2.5 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm font-medium"
+            >
+              Continue
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
     </div>
   );
 }
+
+type StepProps = {
+  answers: Partial<OnboardingAnswers>;
+  updateAnswer: <K extends keyof OnboardingAnswers>(key: K, value: OnboardingAnswers[K]) => void;
+};
+
+// ===== STEP 1: CURRENT SITUATION =====
+function Step1CurrentSituation({ answers, updateAnswer }: StepProps) {
+  const options = [
+    { value: 'graduated-independent', label: 'Graduated: Financially Independent' },
+    { value: 'student-independent', label: 'Student: Financially Independent' },
+    { value: 'student-soon-independent', label: 'Student: Soon Independent' },
+    { value: 'no-college', label: 'No College Experience or Intent' },
+    { value: 'younger-student', label: 'Younger Student: Soon to go to college' },
+    { value: 'other', label: 'Other/In Transition' },
+  ];
+
+  return (
+    <div>
+      <h1 className="text-3xl font-bold text-[#2C3E50] mb-3 text-center">
+        Which Best Describes Your Current Situation?
+      </h1>
+      <p className="text-[#6B7280] mb-10 text-center">
+        Help us understand where you are today
+      </p>
+      
+      <div className="space-y-3">
+        {options.map(option => (
+          <label
+            key={option.value}
+            className={`flex items-center w-full px-5 py-4 rounded-lg border cursor-pointer transition-all ${
+              answers.currentSituation === option.value
+                ? 'border-[#5BA4E5] bg-[#EFF6FF]'
+                : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
+            }`}
+          >
+            <input
+              type="radio"
+              name="currentSituation"
+              value={option.value}
+              checked={answers.currentSituation === option.value}
+              onChange={(e) => updateAnswer('currentSituation', e.target.value as any)}
+              className="w-5 h-5 text-[#5BA4E5] border-[#D1D5DB] focus:ring-[#5BA4E5] focus:ring-offset-0"
+            />
+            <span className="ml-4 text-[#2C3E50]">{option.label}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ===== FIXED STEP 2: HOUSEHOLD PLANNING =====
+function Step2HouseholdType({ answers, updateAnswer }: StepProps) {
+  const isIndependent = answers.currentSituation === 'graduated-independent' || 
+                        answers.currentSituation === 'student-independent' ||
+                        answers.currentSituation === 'no-college' ||
+                        answers.currentSituation === 'other';
+
+  return (
+    <div>
+      <h1 className="text-3xl font-bold text-[#2C3E50] mb-3 text-center">
+        Household Planning
+      </h1>
+      <p className="text-[#6B7280] mb-10 text-center">
+        Tell us about your relationship and family plans
+      </p>
+      
+      <div className="space-y-8">
+        {/* Relationship Status - only if independent */}
+        {isIndependent && (
+          <div>
+            <label className="block text-sm font-medium text-[#2C3E50] mb-3">
+              Are you in a financially linked relationship/marriage?
+            </label>
+            <div className="space-y-3">
+              {[
+                { value: 'linked', label: 'Yes' },
+                { value: 'single', label: 'No' },
+                { value: 'prefer-not-say', label: 'Prefer not to say' },
+              ].map(option => (
+                <label
+                  key={option.value}
+                  className={`flex items-center w-full px-5 py-4 rounded-lg border cursor-pointer transition-all ${
+                    answers.relationshipStatus === option.value
+                      ? 'border-[#5BA4E5] bg-[#EFF6FF]'
+                      : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="relationshipStatus"
+                    value={option.value}
+                    checked={answers.relationshipStatus === option.value}
+                    onChange={(e) => updateAnswer('relationshipStatus', e.target.value as any)}
+                    className="w-5 h-5 text-[#5BA4E5] border-[#D1D5DB] focus:ring-[#5BA4E5]"
+                  />
+                  <span className="ml-4 text-[#2C3E50]">{option.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Relationship Plans - only if single */}
+        {isIndependent && answers.relationshipStatus === 'single' && (
+          <div>
+            <label className="block text-sm font-medium text-[#2C3E50] mb-3">
+              Do you plan to be in a relationship in the future?
+            </label>
+            <div className="space-y-3">
+              {[
+                { value: 'yes', label: 'Yes' },
+                { value: 'no', label: 'No' },
+                { value: 'unsure', label: 'Unsure' },
+              ].map(option => (
+                <label
+                  key={option.value}
+                  className={`flex items-center w-full px-5 py-4 rounded-lg border cursor-pointer transition-all ${
+                    answers.relationshipPlans === option.value
+                      ? 'border-[#5BA4E5] bg-[#EFF6FF]'
+                      : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="relationshipPlans"
+                    value={option.value}
+                    checked={answers.relationshipPlans === option.value}
+                    onChange={(e) => updateAnswer('relationshipPlans', e.target.value as any)}
+                    className="w-5 h-5 text-[#5BA4E5] border-[#D1D5DB] focus:ring-[#5BA4E5]"
+                  />
+                  <span className="ml-4 text-[#2C3E50]">{option.label}</span>
+                </label>
+              ))}
+            </div>
+
+            {/* Age for relationship - if planning */}
+            {(answers.relationshipPlans === 'yes' || answers.relationshipPlans === 'unsure') && (
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+                  Expected age for relationship (optional)
+                </label>
+                <input
+                  type="number"
+                  min="18"
+                  max="100"
+                  value={answers.plannedRelationshipAge || ''}
+                  onChange={(e) => updateAnswer('plannedRelationshipAge', parseInt(e.target.value) || undefined)}
+                  className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+                  placeholder="Leave blank for default (age 30)"
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Kids Plan */}
+        <div>
+          <label className="block text-sm font-medium text-[#2C3E50] mb-3">
+            Do you plan on having kids?
+          </label>
+          <div className="space-y-3">
+            {[
+              { value: 'yes', label: 'Yes' },
+              { value: 'no', label: 'No' },
+              { value: 'unsure', label: 'Unsure' },
+              { value: 'have-kids', label: 'I already have kids' },
+            ].map(option => (
+              <label
+                key={option.value}
+                className={`flex items-center w-full px-5 py-4 rounded-lg border cursor-pointer transition-all ${
+                  answers.kidsPlan === option.value
+                    ? 'border-[#5BA4E5] bg-[#EFF6FF]'
+                    : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="kidsPlan"
+                  value={option.value}
+                  checked={answers.kidsPlan === option.value}
+                  onChange={(e) => updateAnswer('kidsPlan', e.target.value as any)}
+                  className="w-5 h-5 text-[#5BA4E5] border-[#D1D5DB] focus:ring-[#5BA4E5]"
+                />
+                <span className="ml-4 text-[#2C3E50]">{option.label}</span>
+              </label>
+            ))}
+          </div>
+
+          {/* Kid age inputs - if planning kids */}
+          {(answers.kidsPlan === 'yes' || answers.kidsPlan === 'unsure') && (
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+                  Expected age for first kid (optional)
+                </label>
+                <input
+                  type="number"
+                  min="18"
+                  max="100"
+                  value={answers.firstKidAge || ''}
+                  onChange={(e) => updateAnswer('firstKidAge', parseInt(e.target.value) || undefined)}
+                  className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+                  placeholder="Leave blank for default (age 32)"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Already have kids - ask how many */}
+          {answers.kidsPlan === 'have-kids' && (
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+                  How many kids do you have?
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={answers.numKids || ''}
+                  onChange={(e) => updateAnswer('numKids', parseInt(e.target.value) || 0)}
+                  className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+                  placeholder="Number of kids"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#2C3E50] mb-3">
+                  Do you plan to have more kids?
+                </label>
+                <div className="space-y-2">
+                  {[
+                    { value: true, label: 'Yes' },
+                    { value: false, label: 'No' },
+                  ].map(option => (
+                    <label
+                      key={String(option.value)}
+                      className={`flex items-center w-full px-4 py-3 rounded-lg border cursor-pointer transition-all ${
+                        answers.planMoreKids === option.value
+                          ? 'border-[#5BA4E5] bg-[#EFF6FF]'
+                          : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="planMoreKids"
+                        checked={answers.planMoreKids === option.value}
+                        onChange={() => updateAnswer('planMoreKids', option.value)}
+                        className="w-4 h-4 text-[#5BA4E5] border-[#D1D5DB] focus:ring-[#5BA4E5]"
+                      />
+                      <span className="ml-3 text-[#2C3E50]">{option.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Hard Rules */}
+        <div>
+          <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+            Should we set any of these hard rules?
+          </label>
+          <p className="text-sm text-[#9CA3AF] mb-4">
+            These are hard parameters for the formula and will affect your calculations
+          </p>
+          <div className="space-y-3">
+            {[
+              { value: 'debt-before-kids', label: 'Pay off all student debt before having kids' },
+              { value: 'mortgage-before-kids', label: 'Obtain a mortgage before having kids' },
+              { value: 'kids-asap-viable', label: 'Have kids as soon as financially viable' },
+              { value: 'none', label: 'None of the Above' },
+            ].map(option => {
+              const isSelected = answers.hardRules?.includes(option.value as any) || false;
+              const isNoneSelected = answers.hardRules?.includes('none');
+              const isDisabled = isNoneSelected && option.value !== 'none';
+              
+              return (
+                <label
+                  key={option.value}
+                  className={`flex items-center w-full px-5 py-4 rounded-lg border cursor-pointer transition-all ${
+                    isSelected
+                      ? 'border-[#5BA4E5] bg-[#EFF6FF]'
+                      : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
+                  } ${isDisabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                >
+                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                    isSelected ? 'bg-[#2C3E50] border-[#2C3E50]' : 'border-[#D1D5DB] bg-white'
+                  }`}>
+                    {isSelected && (
+                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    disabled={isDisabled}
+                    onChange={() => {
+                      let newRules = [...(answers.hardRules || [])];
+                      if (option.value === 'none') {
+                        // If clicking "none", clear all others or uncheck none
+                        newRules = isSelected ? [] : ['none'];
+                      } else {
+                        // Remove "none" if selecting any other rule
+                        newRules = newRules.filter(r => r !== 'none');
+                        if (isSelected) {
+                          // Uncheck this rule
+                          newRules = newRules.filter(r => r !== option.value);
+                        } else {
+                          // Check this rule
+                          newRules.push(option.value as any);
+                        }
+                      }
+                      updateAnswer('hardRules', newRules);
+                    }}
+                    className="sr-only"
+                  />
+                  <span className="ml-4 text-[#2C3E50]">{option.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== FIXED STEP 3: AGE & OCCUPATION =====
+function Step3AgeOccupation({ answers, updateAnswer }: StepProps) {
+  const [occupations] = useState(getOccupationList());
+  const [showUserSalaryOverride, setShowUserSalaryOverride] = useState(false);
+  const [showPartnerSalaryOverride, setShowPartnerSalaryOverride] = useState(false);
+  
+  const needsExpectedAge = answers.currentSituation === 'student-soon-independent' || 
+                           answers.currentSituation === 'younger-student';
+
+  return (
+    <div>
+      <h1 className="text-3xl font-bold text-[#2C3E50] mb-3 text-center">
+        Age & Occupation
+      </h1>
+      <p className="text-[#6B7280] mb-10 text-center">
+        Tell us about your work and timeline
+      </p>
+      
+      <div className="space-y-6 max-w-2xl mx-auto">
+        {/* Age */}
+        <div>
+          <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+            {needsExpectedAge ? 'Expected age when financially independent' : 'Current age'}
+          </label>
+          <input
+            type="number"
+            min="18"
+            max="100"
+            value={needsExpectedAge ? answers.expectedIndependenceAge || '' : answers.currentAge || ''}
+            onChange={(e) => {
+              const value = parseInt(e.target.value) || undefined;
+              if (needsExpectedAge) {
+                updateAnswer('expectedIndependenceAge', value);
+              } else {
+                updateAnswer('currentAge', value);
+              }
+            }}
+            className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+            placeholder="Enter age"
+          />
+        </div>
+
+        {/* User Occupation */}
+        <div>
+          <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+            Your occupation
+          </label>
+          <select
+            value={answers.userOccupation || ''}
+            onChange={(e) => updateAnswer('userOccupation', e.target.value)}
+            className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all bg-white"
+          >
+            <option value="">Select occupation...</option>
+            {occupations.map(occ => (
+              <option key={occ} value={occ}>{occ}</option>
+            ))}
+          </select>
+
+          {/* Toggle for salary override */}
+          {answers.userOccupation && !showUserSalaryOverride && (
+            <button
+              onClick={() => setShowUserSalaryOverride(true)}
+              className="mt-2 text-sm text-[#5BA4E5] hover:text-[#4A93D4] font-medium"
+            >
+              + Manually override salary
+            </button>
+          )}
+
+          {/* User Salary Override - conditionally shown */}
+          {showUserSalaryOverride && (
+            <div className="mt-3 p-4 bg-[#F8FAFB] rounded-lg border border-[#E5E7EB]">
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm font-medium text-[#2C3E50]">
+                  Manual salary override
+                </label>
+                <button
+                  onClick={() => {
+                    setShowUserSalaryOverride(false);
+                    updateAnswer('userSalary', undefined);
+                  }}
+                  className="text-xs text-[#9CA3AF] hover:text-[#6B7280]"
+                >
+                  Remove override
+                </button>
+              </div>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-[#6B7280]">$</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={answers.userSalary || ''}
+                  onChange={(e) => updateAnswer('userSalary', parseInt(e.target.value) || undefined)}
+                  className="w-full pl-7 pr-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-1 focus:ring-[#5BA4E5] outline-none transition-all"
+                  placeholder="Enter annual salary"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Partner Occupation - if linked */}
+        {answers.relationshipStatus === 'linked' && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+                Partner's occupation
+              </label>
+              <select
+                value={answers.partnerOccupation || ''}
+                onChange={(e) => updateAnswer('partnerOccupation', e.target.value || undefined)}
+                className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all bg-white"
+              >
+                <option value="">Select occupation...</option>
+                {occupations.map(occ => (
+                  <option key={occ} value={occ}>{occ}</option>
+                ))}
+              </select>
+
+              {/* Toggle for partner salary override */}
+              {answers.partnerOccupation && !showPartnerSalaryOverride && (
+                <button
+                  onClick={() => setShowPartnerSalaryOverride(true)}
+                  className="mt-2 text-sm text-[#5BA4E5] hover:text-[#4A93D4] font-medium"
+                >
+                  + Manually override partner salary
+                </button>
+              )}
+
+              {/* Partner Salary Override - conditionally shown */}
+              {showPartnerSalaryOverride && (
+                <div className="mt-3 p-4 bg-[#F8FAFB] rounded-lg border border-[#E5E7EB]">
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-sm font-medium text-[#2C3E50]">
+                      Partner's manual salary override
+                    </label>
+                    <button
+                      onClick={() => {
+                        setShowPartnerSalaryOverride(false);
+                        updateAnswer('partnerSalary', undefined);
+                      }}
+                      className="text-xs text-[#9CA3AF] hover:text-[#6B7280]"
+                    >
+                      Remove override
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-[#6B7280]">$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={answers.partnerSalary || ''}
+                      onChange={(e) => updateAnswer('partnerSalary', parseInt(e.target.value) || undefined)}
+                      className="w-full pl-7 pr-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-1 focus:ring-[#5BA4E5] outline-none transition-all"
+                      placeholder="Enter annual salary"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Info note about income doubling */}
+        {answers.relationshipStatus === 'single' && (answers.relationshipPlans === 'yes' || answers.relationshipPlans === 'unsure') && (
+          <div className="bg-[#EFF6FF] border border-[#5BA4E5] rounded-lg p-4">
+            <p className="text-sm text-[#2C3E50]">
+              <strong>Note:</strong> Since you're planning a relationship but don't have a partner yet, 
+              we'll use income doubling (your salary × 2) when you enter a relationship unless you 
+              specify a partner occupation later.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Continue in next file due to length...
+
+// ===== STEP 4: FINANCIAL PORTFOLIO =====
+function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
+  const hasCollege = answers.currentSituation !== 'no-college';
+
+  return (
+    <div>
+      <h1 className="text-3xl font-bold text-[#2C3E50] mb-3 text-center">
+        Financial Portfolio
+      </h1>
+      <p className="text-[#6B7280] mb-10 text-center">
+        Help us understand your current financial situation
+      </p>
+      
+      <div className="space-y-8 max-w-2xl mx-auto">
+        {/* Student Loans */}
+        {hasCollege && (
+          <div>
+            <h3 className="font-semibold text-[#2C3E50] mb-4">Student Loans</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+                  Your student loan debt
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-3.5 text-[#6B7280]">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={answers.userStudentLoanDebt || ''}
+                    onChange={(e) => updateAnswer('userStudentLoanDebt', parseInt(e.target.value) || 0)}
+                    className="w-full pl-8 pr-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+                  Interest rate (%)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={answers.userStudentLoanRate ? answers.userStudentLoanRate * 100 : ''}
+                  onChange={(e) => updateAnswer('userStudentLoanRate', (parseFloat(e.target.value) || 0) / 100)}
+                  className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+                  placeholder="6.5"
+                />
+              </div>
+
+              {answers.relationshipStatus === 'linked' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+                      Partner's student loan debt
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-3.5 text-[#6B7280]">$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={answers.partnerStudentLoanDebt || ''}
+                        onChange={(e) => updateAnswer('partnerStudentLoanDebt', parseInt(e.target.value) || 0)}
+                        className="w-full pl-8 pr-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+                      Partner's interest rate (%)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={answers.partnerStudentLoanRate ? answers.partnerStudentLoanRate * 100 : ''}
+                      onChange={(e) => updateAnswer('partnerStudentLoanRate', (parseFloat(e.target.value) || 0) / 100)}
+                      className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+                      placeholder="6.5"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Additional Debts */}
+        <div>
+          <h3 className="font-semibold text-[#2C3E50] mb-4">Additional Debts (Optional)</h3>
+          
+          <div className="space-y-6">
+            {/* Credit Card Debt */}
+            <div className="bg-[#F8FAFB] rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-[#2C3E50]">Credit Card Debt</h4>
+                <button
+                  onClick={() => {
+                    const debts = answers.additionalDebts || [];
+                    const hasCCDebt = debts.some(d => d.type === 'cc-debt');
+                    if (hasCCDebt) {
+                      updateAnswer('additionalDebts', debts.filter(d => d.type !== 'cc-debt'));
+                    } else {
+                      updateAnswer('additionalDebts', [...debts, { type: 'cc-debt', totalDebt: 0, interestRate: 0.216, ccRefreshMonths: 36 }]);
+                    }
+                  }}
+                  className="text-sm text-[#5BA4E5] hover:text-[#4A93D4] font-medium"
+                >
+                  {answers.additionalDebts?.some(d => d.type === 'cc-debt') ? 'Remove' : 'Add'}
+                </button>
+              </div>
+              
+              {answers.additionalDebts?.find(d => d.type === 'cc-debt') && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-[#6B7280] mb-1">Total amount</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-[#6B7280] text-sm">$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={answers.additionalDebts.find(d => d.type === 'cc-debt')?.totalDebt || ''}
+                        onChange={(e) => {
+                          const debts = answers.additionalDebts || [];
+                          const updated = debts.map(d => 
+                            d.type === 'cc-debt' ? { ...d, totalDebt: Number(e.target.value) || 0 } : d
+                          );
+                          updateAnswer('additionalDebts', updated);
+                        }}
+                        className="w-full pl-7 pr-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-1 focus:ring-[#5BA4E5] outline-none transition-all text-sm"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-[#6B7280] mb-1">APR (%)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={answers.additionalDebts.find(d => d.type === 'cc-debt')?.interestRate ? (answers.additionalDebts.find(d => d.type === 'cc-debt')?.interestRate || 0) * 100 : ''}
+                      onChange={(e) => {
+                        const debts = answers.additionalDebts || [];
+                        const updated = debts.map(d => 
+                          d.type === 'cc-debt' ? { ...d, interestRate: (Number(e.target.value) || 0) / 100 } : d
+                        );
+                        updateAnswer('additionalDebts', updated);
+                      }}
+                      className="w-full px-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-1 focus:ring-[#5BA4E5] outline-none transition-all text-sm"
+                      placeholder="21.6"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-[#6B7280] mb-1">Refresh rate (months)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={answers.additionalDebts.find(d => d.type === 'cc-debt')?.ccRefreshMonths || ''}
+                      onChange={(e) => {
+                        const debts = answers.additionalDebts || [];
+                        const updated = debts.map(d => 
+                          d.type === 'cc-debt' ? { ...d, ccRefreshMonths: Number(e.target.value) || 36 } : d
+                        );
+                        updateAnswer('additionalDebts', updated);
+                      }}
+                      className="w-full px-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-1 focus:ring-[#5BA4E5] outline-none transition-all text-sm"
+                      placeholder="36"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Car Debt */}
+            <div className="bg-[#F8FAFB] rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-[#2C3E50]">Car Debt</h4>
+                <button
+                  onClick={() => {
+                    const debts = answers.additionalDebts || [];
+                    const hasCarDebt = debts.some(d => d.type === 'car-debt');
+                    if (hasCarDebt) {
+                      updateAnswer('additionalDebts', debts.filter(d => d.type !== 'car-debt'));
+                    } else {
+                      updateAnswer('additionalDebts', [...debts, { type: 'car-debt', totalDebt: 0, interestRate: 0.05 }]);
+                    }
+                  }}
+                  className="text-sm text-[#5BA4E5] hover:text-[#4A93D4] font-medium"
+                >
+                  {answers.additionalDebts?.some(d => d.type === 'car-debt') ? 'Remove' : 'Add'}
+                </button>
+              </div>
+              
+              {answers.additionalDebts?.find(d => d.type === 'car-debt') && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-[#6B7280] mb-1">Total amount</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-[#6B7280] text-sm">$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={answers.additionalDebts.find(d => d.type === 'car-debt')?.totalDebt || ''}
+                        onChange={(e) => {
+                          const debts = answers.additionalDebts || [];
+                          const updated = debts.map(d => 
+                            d.type === 'car-debt' ? { ...d, totalDebt: Number(e.target.value) || 0 } : d
+                          );
+                          updateAnswer('additionalDebts', updated);
+                        }}
+                        className="w-full pl-7 pr-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-1 focus:ring-[#5BA4E5] outline-none transition-all text-sm"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-[#6B7280] mb-1">Interest rate (%)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={answers.additionalDebts.find(d => d.type === 'car-debt')?.interestRate ? (answers.additionalDebts.find(d => d.type === 'car-debt')?.interestRate || 0) * 100 : ''}
+                      onChange={(e) => {
+                        const debts = answers.additionalDebts || [];
+                        const updated = debts.map(d => 
+                          d.type === 'car-debt' ? { ...d, interestRate: (Number(e.target.value) || 0) / 100 } : d
+                        );
+                        updateAnswer('additionalDebts', updated);
+                      }}
+                      className="w-full px-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-1 focus:ring-[#5BA4E5] outline-none transition-all text-sm"
+                      placeholder="5.0"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Current Savings */}
+        <div>
+          <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+            Current savings
+          </label>
+          <div className="relative">
+            <span className="absolute left-4 top-3.5 text-[#6B7280]">$</span>
+            <input
+              type="number"
+              min="0"
+              value={answers.savingsAccountValue || ''}
+              onChange={(e) => updateAnswer('savingsAccountValue', parseInt(e.target.value) || 0)}
+              className="w-full pl-8 pr-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+              placeholder="0"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== STEP 5: ALLOCATION =====
+function Step5Allocation({ answers, updateAnswer }: StepProps) {
+  const allocation = answers.disposableIncomeAllocation || 70;
+
+  return (
+    <div>
+      <h1 className="text-3xl font-bold text-[#2C3E50] mb-3 text-center">
+        Disposable Income Allocation
+      </h1>
+      <p className="text-[#6B7280] mb-10 text-center">
+        How much can you allocate toward debts and savings?
+      </p>
+      
+      <div className="max-w-3xl mx-auto">
+        <p className="text-sm text-[#6B7280] mb-6">
+          How much of your annual disposable income are you willing to put towards debts and savings?
+        </p>
+
+        {/* Visual Display */}
+        <div className="bg-[#EFF6FF] rounded-lg p-8 mb-6">
+          <div className="flex items-end justify-between mb-6">
+            <div>
+              <div className="text-5xl font-bold text-[#5BA4E5] mb-1">
+                {allocation}%
+              </div>
+              <div className="text-sm text-[#6B7280]">of disposable income</div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={allocation}
+                onChange={(e) => {
+                  const val = Math.min(100, Math.max(0, parseInt(e.target.value) || 0));
+                  updateAnswer('disposableIncomeAllocation', val);
+                }}
+                className="w-20 px-3 py-2 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all text-center bg-white"
+              />
+              <span className="text-[#6B7280]">%</span>
+            </div>
+          </div>
+
+          {/* Slider */}
+          <div className="relative">
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={allocation}
+              onChange={(e) => updateAnswer('disposableIncomeAllocation', parseInt(e.target.value))}
+              className="w-full h-2 bg-[#D1D5DB] rounded-lg appearance-none cursor-pointer slider"
+              style={{
+                background: `linear-gradient(to right, #5BA4E5 0%, #5BA4E5 ${allocation}%, #D1D5DB ${allocation}%, #D1D5DB 100%)`
+              }}
+            />
+            <style jsx>{`
+              .slider::-webkit-slider-thumb {
+                appearance: none;
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+                background: #5BA4E5;
+                cursor: pointer;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+              }
+              .slider::-moz-range-thumb {
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+                background: #5BA4E5;
+                cursor: pointer;
+                border: none;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+              }
+            `}</style>
+          </div>
+
+          {/* Labels */}
+          <div className="flex justify-between mt-2 text-xs text-[#6B7280]">
+            <span>0%</span>
+            <span className="text-[#5BA4E5] font-medium">70% Recommended</span>
+            <span>100%</span>
+          </div>
+        </div>
+
+        {/* Recommendation Box */}
+        <div className="bg-[#EFF6FF] border border-[#D1D5DB] rounded-lg p-4">
+          <p className="text-sm text-[#2C3E50]">
+            <span className="font-semibold">Recommended baseline: 70%</span>
+            {' '}- This balance allows you to make meaningful progress on debts and savings while maintaining quality of life.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== STEP 6: LOCATION (WITH STATE FLAGS) =====
+
+// State code mapping for flags
+const STATE_CODES: Record<string, string> = {
+  'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR',
+  'California': 'CA', 'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE',
+  'Florida': 'FL', 'Georgia': 'GA', 'Hawaii': 'HI', 'Idaho': 'ID',
+  'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA', 'Kansas': 'KS',
+  'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
+  'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS',
+  'Missouri': 'MO', 'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV',
+  'New Hampshire': 'NH', 'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY',
+  'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH', 'Oklahoma': 'OK',
+  'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
+  'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT',
+  'Vermont': 'VT', 'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV',
+  'Wisconsin': 'WI', 'Wyoming': 'WY', 'District of Columbia': 'DC'
+};
+
+// Helper to get state code from city location data
+function getStateCodeForLocation(loc: any): string {
+  if (loc.type === 'state') {
+    return STATE_CODES[loc.name] || '';
+  }
+  // For cities, extract state from displayName like "Austin, TX"
+  const parts = loc.displayName.split(', ');
+  return parts[1] || '';
+}
+
+function Step6Location({ answers, updateAnswer }: StepProps) {
+  const [allLocations] = useState(getAllLocations());
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  
+  const filteredLocations = allLocations.filter(loc => 
+    loc.displayName.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+  
+  const states = filteredLocations.filter(l => l.type === 'state');
+  const cities = filteredLocations.filter(l => l.type === 'city');
+
+  return (
+    <div>
+      <h1 className="text-3xl font-bold text-[#2C3E50] mb-3 text-center">
+        Location Analysis
+      </h1>
+      <p className="text-[#6B7280] mb-10 text-center">
+        Where do you want to analyze affordability?
+      </p>
+      
+      <div className="space-y-8 max-w-2xl mx-auto">
+        {/* Location Situation */}
+        <div>
+          <label className="block text-sm font-medium text-[#2C3E50] mb-3">
+            Which best describes your situation?
+          </label>
+          <div className="space-y-3">
+            {[
+              { value: 'currently-live-may-move', label: 'I currently live/work somewhere and may move soon' },
+              { value: 'know-exactly', label: 'I know exactly where I want to live' },
+              { value: 'deciding-between', label: 'I am deciding between a few places' },
+              { value: 'no-idea', label: 'I have no idea and want to see the best fit' },
+            ].map(option => (
+              <label
+                key={option.value}
+                className={`flex items-center w-full px-5 py-4 rounded-lg border cursor-pointer transition-all ${
+                  answers.locationSituation === option.value
+                    ? 'border-[#5BA4E5] bg-[#EFF6FF]'
+                    : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="locationSituation"
+                  value={option.value}
+                  checked={answers.locationSituation === option.value}
+                  onChange={(e) => updateAnswer('locationSituation', e.target.value as any)}
+                  className="w-5 h-5 text-[#5BA4E5] border-[#D1D5DB] focus:ring-[#5BA4E5]"
+                />
+                <span className="ml-4 text-[#2C3E50]">{option.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* Current Location (Dropdown with Flags) */}
+        {answers.locationSituation === 'currently-live-may-move' && (
+          <div>
+            <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+              Where do you currently live?
+            </label>
+            <select
+              value={answers.currentLocation || ''}
+              onChange={(e) => updateAnswer('currentLocation', e.target.value || undefined)}
+              className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all bg-white"
+            >
+              <option value="">Select location...</option>
+              <optgroup label="States">
+                {states.map(loc => {
+                  const stateCode = STATE_CODES[loc.name];
+                  return (
+                    <option key={loc.name} value={loc.displayName}>
+                      {loc.displayName}
+                    </option>
+                  );
+                })}
+              </optgroup>
+              <optgroup label="Major Cities">
+                {cities.map(loc => (
+                  <option key={loc.displayName} value={loc.displayName}>
+                    {loc.displayName}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+          </div>
+        )}
+
+        {/* Exact Location (Dropdown with Flags) */}
+        {answers.locationSituation === 'know-exactly' && (
+          <div>
+            <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+              Where do you want to live?
+            </label>
+            <select
+              value={answers.exactLocation || ''}
+              onChange={(e) => updateAnswer('exactLocation', e.target.value || undefined)}
+              className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all bg-white"
+              required
+            >
+              <option value="">Select location...</option>
+              <optgroup label="States">
+                {states.map(loc => (
+                  <option key={loc.name} value={loc.displayName}>
+                    {loc.displayName}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Major Cities">
+                {cities.map(loc => (
+                  <option key={loc.displayName} value={loc.displayName}>
+                    {loc.displayName}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+          </div>
+        )}
+
+        {/* Multiple Locations (List with Flags) */}
+        {(answers.locationSituation === 'currently-live-may-move' || answers.locationSituation === 'deciding-between') && (
+          <div>
+            <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+              {answers.locationSituation === 'currently-live-may-move' 
+                ? 'What places are you considering?' 
+                : 'What places are you deciding between?'}
+            </label>
+            
+            <input
+              type="text"
+              placeholder="Search states and cities..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+              className="w-full px-4 py-3 mb-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+            />
+            
+            {isSearchFocused && (
+            <div className="max-h-80 overflow-y-auto border border-[#E5E7EB] rounded-lg p-4 bg-white">
+              {/* States */}
+              {states.length > 0 && (
+                <div className="mb-4">
+                  <div className="text-xs font-semibold text-[#9CA3AF] uppercase tracking-wide mb-2 px-2">
+                    States ({states.length})
+                  </div>
+                  <div className="space-y-2">
+                    {states.map(loc => {
+                      const isSelected = answers.potentialLocations?.includes(loc.displayName) || false;
+                      const stateCode = STATE_CODES[loc.name];
+                      
+                      return (
+                        <label
+                          key={loc.name}
+                          className={`flex items-center justify-between w-full px-4 py-3 rounded-lg cursor-pointer transition-all ${
+                            isSelected ? 'bg-[#EFF6FF] border border-[#5BA4E5]' : 'border border-transparent hover:bg-[#F8FAFB]'
+                          }`}
+                        >
+                          <div className="flex items-center flex-1">
+                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all flex-shrink-0 ${
+                              isSelected ? 'bg-[#5BA4E5] border-[#5BA4E5]' : 'border-[#D1D5DB] bg-white'
+                            }`}>
+                              {isSelected && (
+                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                const current = answers.potentialLocations || [];
+                                if (isSelected) {
+                                  updateAnswer('potentialLocations', current.filter(s => s !== loc.displayName));
+                                } else {
+                                  updateAnswer('potentialLocations', [...current, loc.displayName]);
+                                }
+                              }}
+                              className="sr-only"
+                            />
+                            <span className="ml-3 font-medium text-[#2C3E50]">{loc.displayName}</span>
+                          </div>
+                          {stateCode && (
+                            <span className="text-xs font-mono text-[#9CA3AF] bg-[#F8FAFB] px-2 py-1 rounded ml-2 font-medium">
+                              {stateCode}
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Cities */}
+              {cities.length > 0 && (
+                <div>
+                  <div className="text-xs font-semibold text-[#9CA3AF] uppercase tracking-wide mb-2 px-2">
+                    Major Cities ({cities.length})
+                  </div>
+                  <div className="space-y-2">
+                    {cities.map(loc => {
+                      const isSelected = answers.potentialLocations?.includes(loc.displayName) || false;
+                      const stateCode = getStateCodeForLocation(loc);
+                      
+                      return (
+                        <label
+                          key={loc.displayName}
+                          className={`flex items-center justify-between w-full px-4 py-3 rounded-lg cursor-pointer transition-all ${
+                            isSelected ? 'bg-[#EFF6FF] border border-[#5BA4E5]' : 'border border-transparent hover:bg-[#F8FAFB]'
+                          }`}
+                        >
+                          <div className="flex items-center flex-1">
+                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all flex-shrink-0 ${
+                              isSelected ? 'bg-[#5BA4E5] border-[#5BA4E5]' : 'border-[#D1D5DB] bg-white'
+                            }`}>
+                              {isSelected && (
+                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                const current = answers.potentialLocations || [];
+                                if (isSelected) {
+                                  updateAnswer('potentialLocations', current.filter(s => s !== loc.displayName));
+                                } else {
+                                  updateAnswer('potentialLocations', [...current, loc.displayName]);
+                                }
+                              }}
+                              className="sr-only"
+                            />
+                            <span className="ml-3 font-medium text-[#2C3E50] flex-1">{loc.name}</span>
+                            <span className="text-sm text-[#9CA3AF] mx-3">{stateCode}</span>
+                          </div>
+                          {stateCode && (
+                            <span className="text-xs font-mono text-[#9CA3AF] bg-[#F8FAFB] px-2 py-1 rounded ml-2 font-medium">
+                              {stateCode}
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {filteredLocations.length === 0 && (
+                <div className="text-center py-8 text-[#9CA3AF]">
+                  No locations found matching "{searchTerm}"
+                </div>
+              )}
+            </div>
+            )}
+            
+            {answers.potentialLocations && answers.potentialLocations.length > 0 && (
+              <div className="mt-3 flex items-center gap-3 text-sm">
+                <p className="text-[#6B7280]">
+                  {answers.potentialLocations.length} location{answers.potentialLocations.length !== 1 ? 's' : ''} selected
+                </p>
+                <button
+                  onClick={() => updateAnswer('potentialLocations', [])}
+                  className="text-[#5BA4E5] hover:text-[#4A93D4] font-medium"
+                >
+                  Clear all
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* No Idea Info */}
+        {answers.locationSituation === 'no-idea' && (
+          <div className="bg-[#EFF6FF] border border-[#5BA4E5] rounded-lg p-5">
+            <p className="text-sm text-[#2C3E50] mb-2">
+              <strong>We'll analyze all {allLocations.length} locations</strong> (states + major cities) and recommend the best fits based on:
+            </p>
+            <ul className="text-sm text-[#6B7280] space-y-1 ml-4">
+              <li>• Your occupation and expected salary</li>
+              <li>• Cost of living for your household type</li>
+              <li>• Housing affordability</li>
+              <li>• Years to achieve your financial goals</li>
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export { Step4FinancialPortfolio, Step5Allocation, Step6Location };

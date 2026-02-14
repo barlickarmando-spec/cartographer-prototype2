@@ -62,12 +62,12 @@ export interface OnboardingAnswers {
   
   // Step 2: Household & Life Plan
   relationshipStatus: RelationshipStatus;
-  relationshipPlans?: RelationshipPlan; // If single (note: plural)
+  relationshipPlan?: RelationshipPlan; // If single
   plannedRelationshipAge?: number; // If planning relationship
   kidsPlan: KidsPlan;
-  firstKidAge?: number; // If planning kids
-  numKids?: number; // If already have kids
-  planMoreKids?: boolean; // If already have kids (boolean not string)
+  plannedFirstKidAge?: number; // If planning kids
+  numberOfExistingKids?: number; // If already have kids
+  planMoreKids?: 'yes' | 'no' | 'unsure'; // If already have kids
   plannedNextKidAge?: number; // If planning more kids
   hardRules: HardRule[]; // Can select multiple
   
@@ -75,9 +75,9 @@ export interface OnboardingAnswers {
   currentAge?: number; // If independent
   expectedIndependenceAge?: number; // If not independent yet
   userOccupation: string;
-  userSalary?: number; // Optional manual override (renamed from userSalaryManual)
+  userSalaryManual?: number; // Optional manual override
   partnerOccupation?: string; // Only if linked/planning relationship
-  partnerSalary?: number; // Optional manual override (renamed from partnerSalaryManual)
+  partnerSalaryManual?: number; // Optional manual override
   
   // Step 4: Financial Portfolio
   userStudentLoanDebt: number;
@@ -206,8 +206,8 @@ export function determineHouseholdType(
 /**
  * Map household type enum to adjusted COL field names in location data
  */
-export function getAdjustedCOLKey(householdType: HouseholdTypeEnum): keyof import('../data-extraction').LocationData['adjustedCOL'] {
-  const mapping: Record<HouseholdTypeEnum, keyof import('../data-extraction').LocationData['adjustedCOL']> = {
+export function getAdjustedCOLKey(householdType: HouseholdTypeEnum): keyof import('./data-extraction').LocationData['adjustedCOL'] {
+  const mapping: Record<HouseholdTypeEnum, keyof import('./data-extraction').LocationData['adjustedCOL']> = {
     [HouseholdTypeEnum.OnePerson]: 'onePerson',
     [HouseholdTypeEnum.OneWorkerOneAdult]: 'oneWorkerOneAdult',
     [HouseholdTypeEnum.TwoEarners]: 'twoEarners',
