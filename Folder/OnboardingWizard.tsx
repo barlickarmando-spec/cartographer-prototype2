@@ -265,8 +265,8 @@ function Step2HouseholdType({ answers, updateAnswer }: StepProps) {
             <input
               type="number"
               placeholder="Age when you'll have your first kid (optional)"
-              value={answers.plannedFirstKidAge || ''}
-              onChange={(e) => updateAnswer('plannedFirstKidAge', e.target.value ? Number(e.target.value) : undefined)}
+              value={answers.firstKidAge || ''}
+              onChange={(e) => updateAnswer('firstKidAge', e.target.value ? Number(e.target.value) : undefined)}
               className="w-full mt-3 px-4 py-2 rounded-lg border border-slate-300 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none"
               min={18}
               max={60}
