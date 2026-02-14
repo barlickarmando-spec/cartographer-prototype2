@@ -209,9 +209,9 @@ function Step2HouseholdType({ answers, updateAnswer }: StepProps) {
               {['yes', 'no', 'unsure'].map(option => (
                 <button
                   key={option}
-                  onClick={() => updateAnswer('relationshipPlan', option as any)}
+                  onClick={() => updateAnswer('relationshipPlans', option as any)}
                   className={`flex-1 px-4 py-2 rounded-lg border-2 transition-all ${
-                    answers.relationshipPlan === option
+                    answers.relationshipPlans === option
                       ? 'border-cyan-500 bg-cyan-50'
                       : 'border-slate-200 hover:border-slate-300'
                   }`}
@@ -220,7 +220,7 @@ function Step2HouseholdType({ answers, updateAnswer }: StepProps) {
                 </button>
               ))}
             </div>
-            {(answers.relationshipPlan === 'yes' || answers.relationshipPlan === 'unsure') && (
+            {(answers.relationshipPlans === 'yes' || answers.relationshipPlans === 'unsure') && (
               <input
                 type="number"
                 placeholder="Age when relationship will begin (optional)"
@@ -378,7 +378,7 @@ function Step3AgeOccupation({ answers, updateAnswer }: StepProps) {
                         answers.currentSituation === 'no-college' ||
                         answers.currentSituation === 'other';
   const needsAge = isIndependent;
-  const isLinkedOrPlanning = answers.relationshipStatus === 'linked' || answers.relationshipPlan === 'yes';
+  const isLinkedOrPlanning = answers.relationshipStatus === 'linked' || answers.relationshipPlans === 'yes';
 
   return (
     <div>
