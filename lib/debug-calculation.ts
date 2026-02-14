@@ -280,10 +280,12 @@ export function validateProfileDetailed(profile: any) {
   return errors;
 }
 
-// Export all debug functions
-export default {
+// Export all debug functions as a named export
+const debugUtils = {
   debugCalculation,
   quickTest,
   testDataExtraction,
   validateProfileDetailed,
 };
+
+export default debugUtils;

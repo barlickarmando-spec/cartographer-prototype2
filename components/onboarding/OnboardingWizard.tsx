@@ -597,7 +597,7 @@ function Step3AgeOccupation({ answers, updateAnswer }: StepProps) {
           <>
             <div>
               <label className="block text-sm font-medium text-[#2C3E50] mb-2">
-                Partner's occupation
+                Partner&apos;s occupation
               </label>
               <select
                 value={answers.partnerOccupation || ''}
@@ -625,7 +625,7 @@ function Step3AgeOccupation({ answers, updateAnswer }: StepProps) {
                 <div className="mt-3 p-4 bg-[#F8FAFB] rounded-lg border border-[#E5E7EB]">
                   <div className="flex justify-between items-center mb-2">
                     <label className="block text-sm font-medium text-[#2C3E50]">
-                      Partner's manual salary override
+                      Partner&apos;s manual salary override
                     </label>
                     <button
                       onClick={() => {
@@ -658,8 +658,8 @@ function Step3AgeOccupation({ answers, updateAnswer }: StepProps) {
         {answers.relationshipStatus === 'single' && (answers.relationshipPlans === 'yes' || answers.relationshipPlans === 'unsure') && (
           <div className="bg-[#EFF6FF] border border-[#5BA4E5] rounded-lg p-4">
             <p className="text-sm text-[#2C3E50]">
-              <strong>Note:</strong> Since you're planning a relationship but don't have a partner yet, 
-              we'll use income doubling (your salary × 2) when you enter a relationship unless you 
+              <strong>Note:</strong> Since you&apos;re planning a relationship but don&apos;t have a partner yet, 
+              we&apos;ll use income doubling (your salary × 2) when you enter a relationship unless you 
               specify a partner occupation later.
             </p>
           </div>
@@ -728,7 +728,7 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
                 <>
                   <div>
                     <label className="block text-sm font-medium text-[#2C3E50] mb-2">
-                      Partner's student loan debt
+                      Partner&apos;s student loan debt
                     </label>
                     <div className="relative">
                       <span className="absolute left-4 top-3.5 text-[#6B7280]">$</span>
@@ -745,7 +745,7 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
 
                   <div>
                     <label className="block text-sm font-medium text-[#2C3E50] mb-2">
-                      Partner's interest rate (%)
+                      Partner&apos;s interest rate (%)
                     </label>
                     <input
                       type="number"
@@ -1325,7 +1325,7 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
 
               {filteredLocations.length === 0 && (
                 <div className="text-center py-8 text-[#9CA3AF]">
-                  No locations found matching "{searchTerm}"
+                  No locations found matching &quot;{searchTerm}&quot;
                 </div>
               )}
             </div>
@@ -1351,7 +1351,7 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
         {answers.locationSituation === 'no-idea' && (
           <div className="bg-[#EFF6FF] border border-[#5BA4E5] rounded-lg p-5">
             <p className="text-sm text-[#2C3E50] mb-2">
-              <strong>We'll analyze all {allLocations.length} locations</strong> (states + major cities) and recommend the best fits based on:
+              <strong>We&apos;ll analyze all {allLocations.length} locations</strong> (states + major cities) and recommend the best fits based on:
             </p>
             <ul className="text-sm text-[#6B7280] space-y-1 ml-4">
               <li>• Your occupation and expected salary</li>

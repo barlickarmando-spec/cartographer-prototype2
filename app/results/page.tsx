@@ -48,7 +48,7 @@ export default function ResultsPage() {
         <main className="max-w-4xl mx-auto px-4 py-16">
           <h1 className="text-2xl font-bold text-slate-800 mb-4">No Results Available</h1>
           <p className="text-slate-600 mb-6">
-            It looks like you haven't completed the onboarding survey yet.
+            It looks like you haven&apos;t completed the onboarding survey yet.
           </p>
           <Link
             href="/onboarding"
@@ -86,7 +86,7 @@ export default function ResultsPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-800 mb-2">Your Financial Plan Results</h1>
           <p className="text-slate-600">
-            Based on your answers, here's your personalized financial roadmap for {results.length} location{results.length > 1 ? 's' : ''}.
+            Based on your answers, here&apos;s your personalized financial roadmap for {results.length} location{results.length > 1 ? 's' : ''}.
           </p>
         </div>
 
@@ -298,7 +298,7 @@ export default function ResultsPage() {
               <div className="mt-4 bg-blue-50 rounded-lg p-4 border border-blue-200">
                 <p className="text-sm text-blue-900">
                   <strong>Sustainability Note:</strong> Your savings could buy a larger home, 
-                  but we're showing the maximum price your income can sustain long-term. 
+                  but we&apos;re showing the maximum price your income can sustain long-term. 
                   Buying beyond this could strain your budget.
                 </p>
               </div>
