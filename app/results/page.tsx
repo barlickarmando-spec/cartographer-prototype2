@@ -446,7 +446,7 @@ function HouseProjectionCard({ title, projection, location, showHomes, onToggle 
         {!projection.canAfford && (
           <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
             <p className="text-sm text-yellow-800">
-              You'll need to save longer to afford the down payment
+              You&apos;ll need to save longer to afford the down payment
             </p>
           </div>
         )}
