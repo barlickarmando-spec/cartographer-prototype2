@@ -278,8 +278,8 @@ function Step2HouseholdType({ answers, updateAnswer }: StepProps) {
               <input
                 type="number"
                 placeholder="Number of kids you have"
-                value={answers.numberOfExistingKids || ''}
-                onChange={(e) => updateAnswer('numberOfExistingKids', e.target.value ? Number(e.target.value) : undefined)}
+                value={answers.numKids || ''}
+                onChange={(e) => updateAnswer('numKids', e.target.value ? Number(e.target.value) : undefined)}
                 className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none"
                 min={1}
                 max={10}
