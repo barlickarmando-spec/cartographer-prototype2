@@ -62,7 +62,7 @@ export interface OnboardingAnswers {
   
   // Step 2: Household & Life Plan
   relationshipStatus: RelationshipStatus;
-  relationshipPlan?: RelationshipPlan; // If single
+  relationshipPlans?: RelationshipPlan; // If single (note: plural)
   plannedRelationshipAge?: number; // If planning relationship
   kidsPlan: KidsPlan;
   plannedFirstKidAge?: number; // If planning kids

@@ -37,7 +37,7 @@ export function normalizeOnboardingAnswers(answers: OnboardingAnswers): UserProf
   let usePartnerIncomeDoubling = false;
   
   // If single but planning relationship, we'll handle both scenarios
-  if (relationshipStatus === 'single' && answers.relationshipPlan === 'yes') {
+  if (relationshipStatus === 'single' && answers.relationshipPlans === 'yes') {
     // For now, treat as single (calculations will create scenarios)
     usePartnerIncomeDoubling = true; // Flag for later income doubling
   }
