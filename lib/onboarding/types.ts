@@ -110,6 +110,8 @@ export interface UserProfile {
   // Household Type
   householdType: HouseholdTypeEnum;
   relationshipStatus: RelationshipStatus;
+  relationshipPlans?: RelationshipPlan;
+  plannedRelationshipAge?: number;
   numEarners: 1 | 2;
   numKids: number;
   

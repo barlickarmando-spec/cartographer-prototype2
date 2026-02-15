@@ -227,14 +227,22 @@ function buildLocationData(
     },
     
     housing: {
-      medianHomeValue: affordabilityData['Typical Home Value (Single Family Normal)'] || 0,
-      smallHomeValue: affordabilityData['Typical Home Value (Small)'] || 0,
-      largeHomeValue: affordabilityData['Typical Home Value (Large)'] || 0,
-      veryLargeHomeValue: affordabilityData['Typical Home Value (Very Large)'] || 0,
-      mortgageRate: affordabilityData['Average Mortgage Rate (Fixed 30 Year)'] || 0.065,
-      downPaymentPercent: affordabilityData['Median Mortgage Down Payment %'] || 0.1,
-      downPaymentValue: affordabilityData['Median Mortgage Down Payment Total Value'] || 0,
-      annualMortgagePayment: affordabilityData['Median Annual Overall Payment'] || 0,
+      medianHomeValue: affordabilityData['Typical Home Value (Single Family Normal)'] || 
+                       housingData['Typical Home Value (Single Family Normal)'] || 0,
+      smallHomeValue: affordabilityData['Typical Home Value (Small)'] || 
+                      housingData['Typical Home Value (Small)'] || 0,
+      largeHomeValue: affordabilityData['Typical Home Value (Large)'] || 
+                      housingData['Typical Home Value (Large)'] || 0,
+      veryLargeHomeValue: affordabilityData['Typical Home Value (Very Large)'] || 
+                          housingData['Typical Home Value (Very Large)'] || 0,
+      mortgageRate: affordabilityData['Average Mortgage Rate (Fixed 30 Year)'] || 
+                    housingData['Average Mortgage Rate (Fixed 30 Year)'] || 0.065,
+      downPaymentPercent: affordabilityData['Median Mortgage Down Payment %'] || 
+                          housingData['Median Mortgage Down Payment %'] || 0.1,
+      downPaymentValue: affordabilityData['Median Mortgage Down Payment Total Value'] || 
+                        housingData['Median Mortgage Down Payment Total Value'] || 0,
+      annualMortgagePayment: affordabilityData['Median Annual Overall Payment'] || 
+                             housingData['Median Annual Overall Payment'] || 0,
     },
     
     adjustedCOL: {

@@ -372,10 +372,9 @@ function runYearByYearSimulation(
       relationshipStartedThisYear,
     });
     
-    // Early exit if mortgage acquired and debt free (accomplished main goals)
-    if (hasMortgage && loanDebt === 0 && year > 10) {
-      break;
-    }
+    // Note: Don't exit early - we need full 30 years for house projections
+    // Even if main goals achieved, continue to show long-term financial picture
+    // This ensures 5/10/15 year projections show increasing values over time
   }
   
   return snapshots;
@@ -468,6 +467,40 @@ function calculateMinimumAllocation(profile: UserProfile, locationData: Location
   return result;
 }
 
+/**
+ * Calculate the annual cost factor for mortgage payments using the correct formula
+ */
+function calculateAnnualCostFactor(mortgageRate: number, downPaymentPercent: number): number {
+  const monthlyRate = mortgageRate / 12;
+  const numPayments = 30 * 12; // 30-year mortgage
+  
+  // Calculate monthly payment factor using mortgage formula
+  const monthlyFactor = (monthlyRate * Math.pow(1 + monthlyRate, numPayments)) / 
+                        (Math.pow(1 + monthlyRate, numPayments) - 1);
+  
+  // Convert to annual payment factor (as % of loan amount)
+  const annualMortgageFactor = monthlyFactor * 12;
+  
+  // Add property tax + insurance (~1.5% of home value)
+  const propertyTaxInsurance = 0.015; // 1.5% of home value
+  
+  return annualMortgageFactor + propertyTaxInsurance;
+}
+
+/**
+ * Calculate total annual costs for a house (mortgage + tax + insurance)
+ */
+function calculateTotalAnnualCosts(
+  housePrice: number,
+  downPaymentPercent: number,
+  annualCostFactor: number
+): number {
+  const loanAmount = housePrice * (1 - downPaymentPercent);
+  const annualMortgage = loanAmount * (annualCostFactor - 0.015); // Subtract tax/insurance to get just mortgage factor
+  const annualTaxInsurance = housePrice * 0.015;
+  return annualMortgage + annualTaxInsurance;
+}
+
 function calculateHouseProjections(
   profile: UserProfile,
   locationData: LocationData,
@@ -484,11 +517,15 @@ function calculateHouseProjections(
     const downPaymentPercent = locationData.housing.downPaymentPercent;
     const mortgageRate = locationData.housing.mortgageRate;
     
-    // Max possible house (savings-based)
-    const maxPossibleHousePrice = savings / (downPaymentPercent + 0.0613); // Rough estimate
+    // Calculate annual cost factor using actual mortgage formula
+    const annualCostFactor = calculateAnnualCostFactor(mortgageRate, downPaymentPercent);
+    
+    // Max possible house (savings-based) using correct formula
+    const totalCostFactor = downPaymentPercent + ((1 - downPaymentPercent) * annualCostFactor);
+    const maxPossibleHousePrice = savings / totalCostFactor;
     
     // Check sustainability
-    const annualPayment = maxPossibleHousePrice * 0.0613; // Rough annual payment
+    const annualPayment = calculateTotalAnnualCosts(maxPossibleHousePrice, downPaymentPercent, annualCostFactor);
     const postMortgageDI = snapshot.totalIncome - (snapshot.adjustedCOL + annualPayment);
     
     const key = targetYear === 3 ? 'threeYears' : 

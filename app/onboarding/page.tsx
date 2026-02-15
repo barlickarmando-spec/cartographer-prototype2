@@ -16,6 +16,13 @@ export default function OnboardingPage() {
   useEffect(() => {
     const stored = getOnboardingAnswers<OnboardingAnswers>((d): d is OnboardingAnswers => d != null && typeof d === "object");
     setInitialAnswers(stored ?? null);
+    
+    // Clear any old calculation results when returning to onboarding
+    // This ensures fresh calculation when user changes inputs
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('calculation-results');
+    }
+    
     setMounted(true);
   }, []);
 
@@ -34,10 +41,22 @@ export default function OnboardingPage() {
         ? profile.selectedLocations 
         : ['Utah']; // Default to Utah if no locations selected
       
+      console.log('📍 Running calculations for locations:', locations);
+      console.log('👤 User profile:', {
+        age: profile.currentAge,
+        occupation: profile.userOccupation,
+        relationship: profile.relationshipStatus,
+        debt: profile.studentLoanDebt,
+        allocation: profile.disposableIncomeAllocation,
+      });
+      
       const results = locations.map(loc => {
         try {
+          console.log(`Calculating for ${loc}...`);
           const { calculateAutoApproach } = require('@/lib/calculation-engine');
-          return calculateAutoApproach(profile, loc, 30);
+          const result = calculateAutoApproach(profile, loc, 30);
+          console.log(`Calculation complete for ${loc}`);
+          return result;
         } catch (error) {
           console.error(`Error calculating for ${loc}:`, error);
           return null;
@@ -47,10 +66,11 @@ export default function OnboardingPage() {
       // Save results
       if (results.length > 0) {
         localStorage.setItem('calculation-results', JSON.stringify(results));
+        console.log(`💾 Saved ${results.length} calculation result(s)`);
       }
       
-      // Navigate to results
-      router.push('/results');
+      // Navigate to profile
+      router.push('/profile');
     },
     [router]
   );

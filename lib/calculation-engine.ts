@@ -168,6 +168,8 @@ function calculateAutoApproach(
   simulationYears: number = 30
 ): CalculationResult | null {
   
+  let locationData: LocationData | null = null;
+  
   try {
     // Validate inputs
     if (!profile) {
@@ -181,7 +183,7 @@ function calculateAutoApproach(
     }
     
     // Get location data
-    const locationData = getLocationData(locationName);
+    locationData = getLocationData(locationName);
     if (!locationData) {
       console.error(`calculateAutoApproach: Could not find location data for "${locationName}"`);
       return null;
@@ -209,11 +211,11 @@ function calculateAutoApproach(
     const ageDebtFree = yearsToDebtFree > 0 ? profile.currentAge + yearsToDebtFree : -1;
     const ageMortgageAcquired = yearsToMortgage > 0 ? profile.currentAge + yearsToMortgage : -1;
     
-    // Calculate viability
-    const viability = classifyViability(yearsToMortgage, yearsToDebtFree, simulation.snapshots, profile);
-    
-    // Calculate minimum allocation required
+    // Calculate minimum allocation required FIRST (needed for viability classification)
     const minAllocation = calculateMinimumAllocation(profile, locationData);
+    
+    // Calculate viability (now considers if user meets minimum allocation)
+    const viability = classifyViability(yearsToMortgage, yearsToDebtFree, simulation.snapshots, profile, minAllocation);
     
     // House size projections
     const houseProjections = calculateHouseProjections(profile, locationData, simulation.snapshots);
@@ -247,9 +249,13 @@ function calculateAutoApproach(
     
   } catch (error) {
     console.error('calculateAutoApproach: Unexpected error:', error);
+    if (!locationData) {
+      console.error('calculateAutoApproach: Error occurred before location data was loaded');
+      return null;
+    }
     return createErrorResult(
       locationName, 
-      locationData || {} as LocationData, 
+      locationData, 
       error instanceof Error ? error.message : 'Unknown error occurred'
     );
   }
@@ -673,7 +679,7 @@ function checkMortgageHardRules(hardRules: string[], loanDebt: number): boolean 
  * Classifications:
  * - very-viable-stable: ≤3 years to mortgage, sustainable
  * - viable: ≤5 years to mortgage
- * - viable-higher-allocation: ≤8 years, requires discipline
+ * - viable-higher-allocation: User needs to increase allocation (below minimum required)
  * - viable-extreme-care: ≤12 years, fragile situation
  * - viable-when-renting: >15 years but positive DI
  * - no-viable-path: Cannot achieve mortgage or structural issues
@@ -682,9 +688,10 @@ function classifyViability(
   yearsToMortgage: number,
   yearsToDebtFree: number,
   simulation: YearSnapshot[],
-  profile: UserProfile
+  profile: UserProfile,
+  minRequiredAllocation: number
 ): ViabilityClass {
-  const allocation = profile.disposableIncomeAllocation;
+  const userAllocation = profile.disposableIncomeAllocation;
   
   // Check for structural issues
   const hasNegativeDI = simulation.some(s => s.disposableIncome < 0);
@@ -703,24 +710,27 @@ function classifyViability(
     return 'no-viable-path';
   }
   
-  // Classification based on TIMELINE (allocation already baked into simulation)
+  // Check if user's allocation is BELOW minimum required
+  // This means they need to allocate MORE to improve their timeline
+  if (userAllocation < minRequiredAllocation - 3) {
+    // User is significantly below minimum - needs to increase allocation
+    return 'viable-higher-allocation';
+  }
   
-  // Very Viable & Stable: Quick path to mortgage
+  // User MEETS or EXCEEDS minimum allocation
+  // Classification based on TIMELINE
+  
+  // Very Viable & Stable: Quick path to mortgage with buffer
   if (yearsToMortgage <= 3 && lastYear.savingsEnd > 0) {
     return 'very-viable-stable';
   }
   
-  // Viable: Reasonable timeline
-  if (yearsToMortgage <= 5) {
+  // Viable: Reasonable timeline (4-8 years)
+  if (yearsToMortgage <= 8) {
     return 'viable';
   }
   
-  // Viable with Higher Allocation: Medium timeline
-  if (yearsToMortgage <= 8) {
-    return 'viable-higher-allocation';
-  }
-  
-  // Viable with Extreme Care: Long timeline
+  // Viable with Extreme Care: Long timeline (9-12 years)
   if (yearsToMortgage <= 12) {
     return 'viable-extreme-care';
   }
@@ -790,12 +800,66 @@ function calculateMinimumAllocation(profile: UserProfile, locationData: Location
 }
 
 /**
+ * Calculate the annual cost factor for mortgage payments using the correct formula
+ * 
+ * Uses standard 30-year fixed mortgage formula:
+ * Monthly Payment = Loan × (r × (1 + r)^n) / ((1 + r)^n - 1)
+ * 
+ * Then adds property tax + insurance (~1.5% of home value)
+ * 
+ * @param mortgageRate - Annual mortgage interest rate (e.g., 0.0679 for 6.79%)
+ * @param downPaymentPercent - Down payment as decimal (e.g., 0.107 for 10.7%)
+ * @returns Annual cost factor as a decimal (e.g., 0.0944 for 9.44% of loan amount)
+ */
+function calculateAnnualCostFactor(mortgageRate: number, downPaymentPercent: number): number {
+  const monthlyRate = mortgageRate / 12;
+  const numPayments = 30 * 12; // 30-year mortgage
+  
+  // Calculate monthly payment factor using mortgage formula
+  const monthlyFactor = (monthlyRate * Math.pow(1 + monthlyRate, numPayments)) / 
+                        (Math.pow(1 + monthlyRate, numPayments) - 1);
+  
+  // Convert to annual payment factor (as % of loan amount)
+  const annualMortgageFactor = monthlyFactor * 12;
+  
+  // Add property tax + insurance (~1.5% of home value)
+  // Since this is relative to home value, not loan amount, we need to adjust
+  const propertyTaxInsurance = 0.015; // 1.5% of home value
+  
+  return annualMortgageFactor + propertyTaxInsurance;
+}
+
+/**
+ * Calculate total annual costs for a house (mortgage + tax + insurance)
+ * 
+ * @param housePrice - Total price of the house
+ * @param downPaymentPercent - Down payment as decimal
+ * @param annualCostFactor - Pre-calculated annual cost factor
+ * @returns Total annual costs in dollars
+ */
+function calculateTotalAnnualCosts(
+  housePrice: number,
+  downPaymentPercent: number,
+  annualCostFactor: number
+): number {
+  const loanAmount = housePrice * (1 - downPaymentPercent);
+  const annualMortgage = loanAmount * (annualCostFactor - 0.015); // Subtract tax/insurance to get just mortgage factor
+  const annualTaxInsurance = housePrice * 0.015;
+  return annualMortgage + annualTaxInsurance;
+}
+
+/**
  * Calculate house size projections for 3, 5, 10, and 15 year milestones
  * 
  * For each milestone, calculates:
- * - Savings-based max: What your savings can afford
+ * - Savings-based max: What your savings can afford (down payment + first year costs)
  * - Sustainability-based max: What your income can sustain long-term
  * - The LOWER of the two is the realistic maximum
+ * 
+ * Uses correct mortgage formula with location-specific rates:
+ * - Monthly payment factor from standard mortgage formula
+ * - Adds property tax + insurance (1.5% of home value)
+ * - No hardcoded rates - uses actual location data
  * 
  * @example
  * const projections = calculateHouseProjections(profile, locationData, simulation);
@@ -846,13 +910,17 @@ function calculateHouseProjections(
       continue;
     }
     
+    // Calculate annual cost factor using actual mortgage formula
+    const annualCostFactor = calculateAnnualCostFactor(mortgageRate, downPaymentPercent);
+    
     // === SAVINGS-BASED CALCULATION ===
-    // Total cost = down payment + first year carrying costs
-    // Carrying costs ≈ 6.13% of home price (mortgage + tax + insurance)
-    const totalCostFactor = downPaymentPercent + 0.0613;
+    // Formula: Savings = Down Payment + First Year Costs
+    // Savings = (House × downPaymentPercent) + ((House × (1 - downPaymentPercent)) × annualCostFactor)
+    // Savings = House × (downPaymentPercent + ((1 - downPaymentPercent) × annualCostFactor))
+    const totalCostFactor = downPaymentPercent + ((1 - downPaymentPercent) * annualCostFactor);
     const maxPossibleHousePrice = savings / totalCostFactor;
     const downPaymentRequired = maxPossibleHousePrice * downPaymentPercent;
-    const firstYearPaymentRequired = maxPossibleHousePrice * 0.0613;
+    const firstYearPaymentRequired = calculateTotalAnnualCosts(maxPossibleHousePrice, downPaymentPercent, annualCostFactor);
     
     // === SUSTAINABILITY-BASED CALCULATION ===
     // Max house price where post-mortgage DI >= 0
@@ -863,7 +931,7 @@ function calculateHouseProjections(
     
     for (let i = 0; i < 20; i++) {
       const mid = (low + high) / 2;
-      const annualPayment = mid * 0.0613;
+      const annualPayment = calculateTotalAnnualCosts(mid, downPaymentPercent, annualCostFactor);
       const postMortgageDI = snapshot.totalIncome - (snapshot.adjustedCOL + annualPayment);
       
       if (postMortgageDI >= 0) {
@@ -875,7 +943,7 @@ function calculateHouseProjections(
     }
     
     const sustainableDownPayment = sustainablePrice * downPaymentPercent;
-    const sustainableAnnualPayment = sustainablePrice * 0.0613;
+    const sustainableAnnualPayment = calculateTotalAnnualCosts(sustainablePrice, downPaymentPercent, annualCostFactor);
     const postMortgageDisposableIncome = snapshot.totalIncome - (snapshot.adjustedCOL + sustainableAnnualPayment);
     
     // === FINAL VALUES ===

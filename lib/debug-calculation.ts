@@ -20,7 +20,7 @@ export function debugCalculation(answers: any) {
     // Step 1: Normalize answers
     console.log('\n2. Normalizing answers...');
     const profile = normalizeOnboardingAnswers(answers);
-    console.log('   ✅ Profile created:', JSON.stringify(profile, null, 2));
+    console.log('   Profile created:', JSON.stringify(profile, null, 2));
     
     // Step 2: Check profile fields
     console.log('\n3. Checking profile fields...');
@@ -39,14 +39,14 @@ export function debugCalculation(answers: any) {
     
     const locationData = getLocationData(testLocation);
     if (!locationData) {
-      console.error(`   ❌ FAILED: Location "${testLocation}" not found!`);
+      console.error(`   FAILED: Location "${testLocation}" not found!`);
       console.log('   Available locations sample:');
       console.log('   - Try: "Utah"');
       console.log('   - Try: "Texas"');
       console.log('   - Try: "Austin, TX"');
       return;
     }
-    console.log(`   ✅ Location data found:`, {
+    console.log(`   Location data found:`, {
       name: locationData.name,
       type: locationData.type,
       hasRentData: !!locationData.rent,
@@ -60,7 +60,7 @@ export function debugCalculation(answers: any) {
     console.log(`   Salary for "${profile.userOccupation}" in ${testLocation}: $${salary}`);
     
     if (salary === 0) {
-      console.warn(`   ⚠️ WARNING: Salary is $0! Occupation might not be found.`);
+      console.warn(`   WARNING: Salary is $0! Occupation might not be found.`);
       console.log(`   Occupation entered: "${profile.userOccupation}"`);
       console.log('   Common occupations:');
       console.log('   - "Computer and Mathematics"');
@@ -77,19 +77,19 @@ export function debugCalculation(answers: any) {
     const result = calculateAutoApproach(profile, testLocation, 30);
     
     if (!result) {
-      console.error('   ❌ FAILED: calculateAutoApproach returned null');
+      console.error('   FAILED: calculateAutoApproach returned null');
       console.log('   This means location was not found in data-extraction.ts');
       return;
     }
     
     if (!result.calculationSuccessful) {
-      console.error('   ❌ FAILED: Calculation unsuccessful');
+      console.error('   FAILED: Calculation unsuccessful');
       console.error('   Error message:', result.errorMessage);
       console.error('   Warnings:', result.warnings);
       return;
     }
     
-    console.log('   ✅ SUCCESS!');
+    console.log('   SUCCESS!');
     console.log('   Results:', {
       location: result.location,
       viable: result.isViable,
@@ -103,7 +103,7 @@ export function debugCalculation(answers: any) {
     return result;
     
   } catch (error) {
-    console.error('\n❌ EXCEPTION THROWN:', error);
+    console.error('\nEXCEPTION THROWN:', error);
     console.error('Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
   }
 }
@@ -155,9 +155,9 @@ export function testDataExtraction() {
   // Test 1: Import check
   console.log('\n1. Checking imports...');
   try {
-    console.log('   ✅ data-extraction.ts imported successfully');
+    console.log('   data-extraction.ts imported successfully');
   } catch (error) {
-    console.error('   ❌ FAILED to import data-extraction.ts');
+    console.error('   FAILED to import data-extraction.ts');
     console.error('   Error:', error);
     return;
   }
@@ -169,12 +169,12 @@ export function testDataExtraction() {
   locations.forEach(loc => {
     const data = getLocationData(loc);
     if (data) {
-      console.log(`   ✅ "${loc}" found:`, {
+      console.log(`   "${loc}" found:`, {
         name: data.name,
         type: data.type,
       });
     } else {
-      console.error(`   ❌ "${loc}" NOT FOUND`);
+      console.error(`   "${loc}" NOT FOUND`);
     }
   });
   
@@ -204,74 +204,74 @@ export function validateProfileDetailed(profile: any) {
   
   if (!profile.currentAge) {
     errors.push('currentAge is missing');
-    console.error('   ❌ currentAge is missing');
+    console.error('   currentAge is missing');
   } else if (typeof profile.currentAge !== 'number') {
     errors.push('currentAge is not a number');
-    console.error(`   ❌ currentAge is not a number: ${typeof profile.currentAge}`);
+    console.error(`   currentAge is not a number: ${typeof profile.currentAge}`);
   } else if (profile.currentAge < 18 || profile.currentAge > 100) {
     errors.push('currentAge must be 18-100');
-    console.error(`   ❌ currentAge out of range: ${profile.currentAge}`);
+    console.error(`   currentAge out of range: ${profile.currentAge}`);
   } else {
-    console.log(`   ✅ currentAge: ${profile.currentAge}`);
+    console.log(`   currentAge: ${profile.currentAge}`);
   }
   
   if (!profile.userOccupation) {
     errors.push('userOccupation is missing');
-    console.error('   ❌ userOccupation is missing');
+    console.error('   userOccupation is missing');
   } else if (typeof profile.userOccupation !== 'string') {
     errors.push('userOccupation is not a string');
-    console.error(`   ❌ userOccupation is not a string: ${typeof profile.userOccupation}`);
+    console.error(`   userOccupation is not a string: ${typeof profile.userOccupation}`);
   } else {
-    console.log(`   ✅ userOccupation: "${profile.userOccupation}"`);
+    console.log(`   userOccupation: "${profile.userOccupation}"`);
   }
   
   if (profile.studentLoanDebt === undefined || profile.studentLoanDebt === null) {
     errors.push('studentLoanDebt is missing');
-    console.error('   ❌ studentLoanDebt is missing');
+    console.error('   studentLoanDebt is missing');
   } else if (typeof profile.studentLoanDebt !== 'number') {
     errors.push('studentLoanDebt is not a number');
-    console.error(`   ❌ studentLoanDebt is not a number: ${typeof profile.studentLoanDebt}`);
+    console.error(`   studentLoanDebt is not a number: ${typeof profile.studentLoanDebt}`);
   } else if (profile.studentLoanDebt < 0) {
     errors.push('studentLoanDebt cannot be negative');
-    console.error(`   ❌ studentLoanDebt is negative: ${profile.studentLoanDebt}`);
+    console.error(`   studentLoanDebt is negative: ${profile.studentLoanDebt}`);
   } else {
-    console.log(`   ✅ studentLoanDebt: $${profile.studentLoanDebt}`);
+    console.log(`   studentLoanDebt: $${profile.studentLoanDebt}`);
   }
   
   if (profile.studentLoanRate === undefined || profile.studentLoanRate === null) {
     errors.push('studentLoanRate is missing');
-    console.error('   ❌ studentLoanRate is missing');
+    console.error('   studentLoanRate is missing');
   } else if (typeof profile.studentLoanRate !== 'number') {
     errors.push('studentLoanRate is not a number');
-    console.error(`   ❌ studentLoanRate is not a number: ${typeof profile.studentLoanRate}`);
+    console.error(`   studentLoanRate is not a number: ${typeof profile.studentLoanRate}`);
   } else if (profile.studentLoanRate < 0 || profile.studentLoanRate > 1) {
     errors.push('studentLoanRate must be 0-1 (e.g., 0.065 for 6.5%)');
-    console.error(`   ⚠️ studentLoanRate might be wrong format: ${profile.studentLoanRate}`);
+    console.error(`   studentLoanRate might be wrong format: ${profile.studentLoanRate}`);
     if (profile.studentLoanRate > 1) {
       console.error('   NOTE: Should be 0.065 NOT 6.5');
     }
   } else {
-    console.log(`   ✅ studentLoanRate: ${profile.studentLoanRate} (${profile.studentLoanRate * 100}%)`);
+    console.log(`   studentLoanRate: ${profile.studentLoanRate} (${profile.studentLoanRate * 100}%)`);
   }
   
   if (profile.disposableIncomeAllocation === undefined || profile.disposableIncomeAllocation === null) {
     errors.push('disposableIncomeAllocation is missing');
-    console.error('   ❌ disposableIncomeAllocation is missing');
+    console.error('   disposableIncomeAllocation is missing');
   } else if (typeof profile.disposableIncomeAllocation !== 'number') {
     errors.push('disposableIncomeAllocation is not a number');
-    console.error(`   ❌ disposableIncomeAllocation is not a number: ${typeof profile.disposableIncomeAllocation}`);
+    console.error(`   disposableIncomeAllocation is not a number: ${typeof profile.disposableIncomeAllocation}`);
   } else if (profile.disposableIncomeAllocation < 0 || profile.disposableIncomeAllocation > 100) {
     errors.push('disposableIncomeAllocation must be 0-100');
-    console.error(`   ❌ disposableIncomeAllocation out of range: ${profile.disposableIncomeAllocation}`);
+    console.error(`   disposableIncomeAllocation out of range: ${profile.disposableIncomeAllocation}`);
   } else {
-    console.log(`   ✅ disposableIncomeAllocation: ${profile.disposableIncomeAllocation}%`);
+    console.log(`   disposableIncomeAllocation: ${profile.disposableIncomeAllocation}%`);
   }
   
   console.log('\n2. Summary:');
   if (errors.length === 0) {
-    console.log('   ✅ All fields valid!');
+    console.log('   All fields valid!');
   } else {
-    console.error(`   ❌ ${errors.length} error(s) found:`);
+    console.error(`   ${errors.length} error(s) found:`);
     errors.forEach((error, i) => {
       console.error(`      ${i + 1}. ${error}`);
     });

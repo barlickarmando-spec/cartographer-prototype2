@@ -41,7 +41,23 @@ export function OnboardingWizard({ initialAnswers, onComplete, onProgress }: Onb
         return !!answers.expectedIndependenceAge && !!answers.userOccupation;
       case 4: return true; // All fields optional or have defaults
       case 5: return answers.disposableIncomeAllocation !== undefined;
-      case 6: return !!answers.locationSituation;
+      case 6: {
+        // Require locationSituation to be set
+        if (!answers.locationSituation) return false;
+        
+        // Require actual location selection based on situation
+        if (answers.locationSituation === 'know-exactly') {
+          return !!answers.exactLocation;
+        }
+        if (answers.locationSituation === 'currently-live-may-move') {
+          return !!answers.currentLocation;
+        }
+        if (answers.locationSituation === 'deciding-between') {
+          return !!answers.potentialLocations && answers.potentialLocations.length > 0;
+        }
+        // For 'no-idea', just having the situation is enough
+        return true;
+      }
       default: return false;
     }
   };
