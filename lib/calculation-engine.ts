@@ -779,13 +779,14 @@ function calculateMinimumAllocation(profile: UserProfile, locationData: Location
     
     // Check if this allocation achieves mortgage in reasonable time
     const yearsToMortgage = findYearWhen(testSim.snapshots, s => s.hasMortgage);
-    const lastYear = testSim.snapshots[testSim.snapshots.length - 1];
-    
-    // Consider viable if: gets mortgage within 15 years AND ends with positive DI
-    const isViable = yearsToMortgage > 0 && 
-                     yearsToMortgage <= 15 && 
-                     lastYear && 
-                     lastYear.disposableIncome >= 0;
+
+    // Consider viable if: gets mortgage within 15 years AND simulation didn't fail structurally.
+    // We do NOT check lastYear.disposableIncome here because post-mortgage DI can go negative
+    // (mortgage payments > rent) which is a structural issue unrelated to allocation percentage.
+    // Checking DI here caused the binary search to return 100% even when lower allocations worked.
+    const isViable = yearsToMortgage > 0 &&
+                     yearsToMortgage <= 15 &&
+                     !testSim.stoppedEarly;
     
     if (isViable) {
       minViable = mid;
@@ -1039,30 +1040,27 @@ function findMinimumViableKidAge(
   kidNumber: number
 ): KidViabilityResult {
   
-  // Check hard rules first
-  if (profile.hardRules.includes('debt-before-kids') && profile.studentLoanDebt > 0) {
-    return {
-      isViable: false,
-      reason: 'Must pay off student debt before having kids (hard rule)',
-    };
-  }
-  
+  // Don't short-circuit on hard rules - let the binary search find the age when
+  // hard rules ARE satisfied (e.g., after debt is paid off). The simulation already
+  // enforces hard rules year-by-year, so the search will naturally skip ages where
+  // rules block the birth and find the earliest viable age.
+
   // Binary search for minimum age
   let low = profile.currentAge;
   let high = profile.currentAge + 20; // Search up to 20 years in future
   let minViableAge = -1;
-  
+
   for (let iter = 0; iter < 15; iter++) {
     const testAge = Math.floor((low + high) / 2);
-    
+
     // Create test profile with kid at this age
     const testProfile = {
       ...profile,
       plannedKidAges: [testAge],
     };
-    
-    // Run short simulation
-    const testSim = runYearByYearSimulation(testProfile, locationData, 15);
+
+    // Run simulation long enough to cover the full search range + 3 years post-birth check
+    const testSim = runYearByYearSimulation(testProfile, locationData, 25);
     
     // Find the year when kid is born
     const kidBirthYear = testSim.snapshots.findIndex(s => s.kidBornThisYear === kidNumber);
