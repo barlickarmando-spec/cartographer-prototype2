@@ -36,18 +36,15 @@ export default function AuthenticatedLayout({
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           {/* Logo */}
-          <Link href="/profile" className="flex items-center gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-[#5BA4E5] to-[#4A93D4] rounded-lg flex items-center justify-center shadow-sm">
-                <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                </svg>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-[#5BA4E5]">Cartographer</div>
-                <div className="text-xs text-gray-500 -mt-1">Your Path to Homeownership</div>
-              </div>
-            </div>
+          <Link href="/profile" className="flex items-center shrink-0">
+            <Image
+              src="/Icons/Icons Transparent/Logo_transparent.png"
+              alt="Cartographer"
+              width={256}
+              height={64}
+              className="h-14 w-auto"
+              priority
+            />
           </Link>
 
           {/* Back to Home (when needed) */}
