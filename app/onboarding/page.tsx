@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import type { OnboardingAnswers } from "@/lib/onboarding/types";
 import { normalizeOnboardingAnswers } from "@/lib/onboarding/normalize";
@@ -88,8 +89,14 @@ export default function OnboardingPage() {
       <nav className="border-b border-slate-200 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <Link href="/" className="text-cyan-600 font-semibold hover:text-cyan-700">
-              ← Home
+            <Link href="/" className="flex items-center shrink-0">
+              <Image
+                src="/Icons/Icons Transparent/Logo_transparent.png"
+                alt="Cartographer"
+                width={200}
+                height={50}
+                className="h-10 w-auto"
+              />
             </Link>
             <span className="text-slate-600 text-sm">Onboarding</span>
           </div>
