@@ -55,6 +55,7 @@ export interface YearSnapshot {
   savingsStart: number;
   savingsEnd: number;
   savingsGrowth: number;
+  savingsNoMortgage: number; // Hypothetical savings if no house was ever purchased (for projections)
   
   // Mortgage
   hasMortgage: boolean;
@@ -330,6 +331,7 @@ function runYearByYearSimulation(
   let loanDebt = profile.studentLoanDebt;
   let savings = Math.max(0, profile.currentSavings); // Ensure non-negative
   let hasMortgage = false;
+  let savingsNoMortgage = Math.max(0, profile.currentSavings); // Hypothetical savings if no house is ever purchased
   let currentHouseholdType = profile.householdType;
   let currentNumKids = profile.numKids || 0;
   let currentNumEarners = profile.numEarners;
@@ -566,7 +568,30 @@ function runYearByYearSimulation(
     
     // Ensure savings never go negative
     savings = Math.max(MIN_SAVINGS, savings);
-    
+
+    // === TRACK NO-MORTGAGE SAVINGS (for house projections) ===
+    // House projections answer "if you saved X years without buying, what could you afford?"
+    // Before mortgage acquisition, both paths are identical.
+    // After mortgage acquisition, this path continues with rent instead of mortgage.
+    if (!hasMortgage) {
+      // Pre-mortgage: both paths are identical (both paying rent, same debt, same savings)
+      savingsNoMortgage = savings;
+    } else {
+      // Post-mortgage: compute what savings would be if still renting
+      // Debt is 0 (mortgage requires loanDebt === 0), so all EDI goes to savings
+      const rentTypeNM = getRentType(currentHouseholdType);
+      let rentCostNM = 0;
+      if (rentTypeNM === '1br') rentCostNM = locationData.rent.oneBedroomAnnual || 0;
+      else if (rentTypeNM === '2br') rentCostNM = locationData.rent.twoBedroomAnnual || 0;
+      else rentCostNM = locationData.rent.threeBedroomAnnual || 0;
+
+      const nmDI = totalIncome - (adjustedCOL + rentCostNM);
+      const nmEDI = Math.max(0, nmDI * (profile.disposableIncomeAllocation / 100));
+      const nmGrowth = savingsNoMortgage * SAVINGS_GROWTH_RATE;
+      savingsNoMortgage = savingsNoMortgage + nmGrowth + nmEDI;
+      savingsNoMortgage = Math.max(MIN_SAVINGS, savingsNoMortgage);
+    }
+
     // === CHECK MORTGAGE READINESS ===
     let mortgageAcquiredThisYear = false;
     if (!hasMortgage && loanDebt === 0) {
@@ -616,6 +641,7 @@ function runYearByYearSimulation(
       savingsStart: savingsStartYear,
       savingsEnd: savings,
       savingsGrowth: savingsGrowthThisYear,
+      savingsNoMortgage,
       hasMortgage,
       mortgageAcquiredThisYear,
       kidBornThisYear,
@@ -900,7 +926,8 @@ function calculateHouseProjections(
       continue;
     }
     
-    const savings = snapshot.savingsEnd;
+    // Use no-mortgage savings: "if you saved X years without buying, what could you afford?"
+    const savings = snapshot.savingsNoMortgage;
     const downPaymentPercent = locationData.housing.downPaymentPercent || 0.107;
     const mortgageRate = locationData.housing.mortgageRate || 0.03;
     

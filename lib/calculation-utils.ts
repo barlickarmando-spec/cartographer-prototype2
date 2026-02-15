@@ -126,13 +126,14 @@ function projectHouseAtYear(
     };
   }
   
-  const savings = snapshot.savingsEnd;
+  // Use no-mortgage savings: "if you saved X years without buying, what could you afford?"
+  const savings = snapshot.savingsNoMortgage ?? snapshot.savingsEnd;
   const downPaymentPercent = locationData.housing.downPaymentPercent;
   const mortgageRate = locationData.housing.mortgageRate;
-  
+
   // Calculate annual cost factor using actual mortgage formula
   const annualCostFactor = calculateAnnualCostFactor(mortgageRate, downPaymentPercent);
-  
+
   // === SAVINGS-BASED CALCULATION ===
   // Formula: Savings = Down Payment + First Year Costs
   // Savings = (House × downPaymentPercent) + ((House × (1 - downPaymentPercent)) × annualCostFactor)
@@ -141,19 +142,34 @@ function projectHouseAtYear(
   const maxPossibleHousePrice = savings / totalCostFactor;
   const downPaymentRequired = maxPossibleHousePrice * downPaymentPercent;
   const firstYearPaymentRequired = calculateTotalAnnualCosts(maxPossibleHousePrice, downPaymentPercent, annualCostFactor);
-  
+
   // === SUSTAINABILITY-BASED CALCULATION ===
-  // Max house price where: annual income >= (non-housing COL + annual mortgage payment)
-  // Binary search for max sustainable house price
+  // Max house price where post-mortgage DI >= 0 across ALL future years.
+  // This accounts for future kids increasing COL - a house affordable at year 5
+  // without kids must still be affordable at year 8+ when kids arrive.
+  const futureSnapshots = snapshots.filter((s: any) => s.year >= targetYear);
+  let worstCaseIncome = snapshot.totalIncome;
+  let worstCaseAdjustedCOL = snapshot.adjustedCOL;
+
+  for (const future of futureSnapshots) {
+    const futureAvailable = future.totalIncome - future.adjustedCOL;
+    const currentWorstAvailable = worstCaseIncome - worstCaseAdjustedCOL;
+    if (futureAvailable < currentWorstAvailable) {
+      worstCaseIncome = future.totalIncome;
+      worstCaseAdjustedCOL = future.adjustedCOL;
+    }
+  }
+
+  // Binary search for max sustainable price using worst-case future financials
   let sustainablePrice = 0;
   let low = 0;
   let high = maxPossibleHousePrice * 2; // Start with generous upper bound
-  
+
   for (let i = 0; i < 20; i++) { // 20 iterations for precision
     const mid = (low + high) / 2;
     const annualPayment = calculateTotalAnnualCosts(mid, downPaymentPercent, annualCostFactor);
-    const postMortgageDI = snapshot.totalIncome - (snapshot.adjustedCOL + annualPayment);
-    
+    const postMortgageDI = worstCaseIncome - (worstCaseAdjustedCOL + annualPayment);
+
     if (postMortgageDI >= 0) {
       sustainablePrice = mid;
       low = mid;
@@ -161,10 +177,10 @@ function projectHouseAtYear(
       high = mid;
     }
   }
-  
+
   const sustainableDownPayment = sustainablePrice * downPaymentPercent;
   const sustainableAnnualPayment = calculateTotalAnnualCosts(sustainablePrice, downPaymentPercent, annualCostFactor);
-  const postMortgageDisposableIncome = snapshot.totalIncome - (snapshot.adjustedCOL + sustainableAnnualPayment);
+  const postMortgageDisposableIncome = worstCaseIncome - (worstCaseAdjustedCOL + sustainableAnnualPayment);
   
   // === FINAL DETERMINATION ===
   const actualMaxPrice = Math.min(maxPossibleHousePrice, sustainablePrice);
