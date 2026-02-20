@@ -1162,34 +1162,34 @@ function calculateKidViability(
     };
   }
 
-  // If user already has kids, they're past this calculation
-  if (profile.kidsPlan === 'have-kids' && profile.numKids && profile.numKids > 0) {
-    return {
-      firstKid: { isViable: true, minimumAge: profile.currentAge },
-      secondKid: { isViable: true, minimumAge: profile.currentAge },
-      thirdKid: { isViable: true, minimumAge: profile.currentAge },
-    };
+  // If user already has kids, mark existing ones and calculate additional
+  const existingKids = (profile.kidsPlan === 'have-kids' && profile.numKids) ? profile.numKids : 0;
+  const alreadyHave: KidViabilityResult = { isViable: true, minimumAge: profile.currentAge, reason: 'already-have' };
+
+  if (existingKids >= 3) {
+    return { firstKid: alreadyHave, secondKid: alreadyHave, thirdKid: alreadyHave };
   }
 
-  // Find minimum viable age for each kid cumulatively:
-  // Kid #1 is tested alone
-  // Kid #2 includes kid #1 at its found age
-  // Kid #3 includes kids #1 and #2 at their found ages
+  // Build results: mark existing kids as already-have, calculate the rest
+  const results: KidViabilityResult[] = [];
   const previousKidAges: number[] = [];
 
-  const firstKid = findMinimumViableKidAge(profile, locationData, 1, previousKidAges);
-  if (firstKid.isViable && firstKid.minimumAge !== undefined) {
-    previousKidAges.push(firstKid.minimumAge);
+  for (let kidNum = 1; kidNum <= 3; kidNum++) {
+    if (kidNum <= existingKids) {
+      // User already has this kid — existing kids are baked into the simulation's
+      // starting currentNumKids, so no previousKidAges entry needed
+      results.push(alreadyHave);
+    } else {
+      // Calculate minimum viable age for this additional kid
+      const result = findMinimumViableKidAge(profile, locationData, kidNum, previousKidAges);
+      results.push(result);
+      if (result.isViable && result.minimumAge !== undefined) {
+        previousKidAges.push(result.minimumAge);
+      }
+    }
   }
 
-  const secondKid = findMinimumViableKidAge(profile, locationData, 2, previousKidAges);
-  if (secondKid.isViable && secondKid.minimumAge !== undefined) {
-    previousKidAges.push(secondKid.minimumAge);
-  }
-
-  const thirdKid = findMinimumViableKidAge(profile, locationData, 3, previousKidAges);
-
-  return { firstKid, secondKid, thirdKid };
+  return { firstKid: results[0], secondKid: results[1], thirdKid: results[2] };
 }
 
 function findMinimumViableKidAge(
