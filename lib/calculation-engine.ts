@@ -1148,7 +1148,7 @@ function calculateKidViability(
   secondKid: KidViabilityResult;
   thirdKid: KidViabilityResult;
 } {
-  
+
   // If user doesn't plan kids, mark as not viable
   if (profile.kidsPlan === 'no') {
     const notPlanned: KidViabilityResult = {
@@ -1161,7 +1161,7 @@ function calculateKidViability(
       thirdKid: notPlanned,
     };
   }
-  
+
   // If user already has kids, they're past this calculation
   if (profile.kidsPlan === 'have-kids' && profile.numKids && profile.numKids > 0) {
     return {
@@ -1170,90 +1170,93 @@ function calculateKidViability(
       thirdKid: { isViable: true, minimumAge: profile.currentAge },
     };
   }
-  
-  const results: KidViabilityResult[] = [];
-  
-  // Check viability for up to 3 kids
-  for (let kidNum = 1; kidNum <= 3; kidNum++) {
-    const minAge = findMinimumViableKidAge(profile, locationData, kidNum);
-    results.push(minAge);
+
+  // Find minimum viable age for each kid cumulatively:
+  // Kid #1 is tested alone
+  // Kid #2 includes kid #1 at its found age
+  // Kid #3 includes kids #1 and #2 at their found ages
+  const previousKidAges: number[] = [];
+
+  const firstKid = findMinimumViableKidAge(profile, locationData, 1, previousKidAges);
+  if (firstKid.isViable && firstKid.minimumAge !== undefined) {
+    previousKidAges.push(firstKid.minimumAge);
   }
-  
-  return {
-    firstKid: results[0],
-    secondKid: results[1],
-    thirdKid: results[2],
-  };
+
+  const secondKid = findMinimumViableKidAge(profile, locationData, 2, previousKidAges);
+  if (secondKid.isViable && secondKid.minimumAge !== undefined) {
+    previousKidAges.push(secondKid.minimumAge);
+  }
+
+  const thirdKid = findMinimumViableKidAge(profile, locationData, 3, previousKidAges);
+
+  return { firstKid, secondKid, thirdKid };
 }
 
 function findMinimumViableKidAge(
   profile: UserProfile,
   locationData: LocationData,
-  kidNumber: number
+  kidNumber: number,
+  previousKidAges: number[]
 ): KidViabilityResult {
-  
-  // Don't short-circuit on hard rules - let the binary search find the age when
-  // hard rules ARE satisfied (e.g., after debt is paid off). The simulation already
-  // enforces hard rules year-by-year, so the search will naturally skip ages where
-  // rules block the birth and find the earliest viable age.
 
-  // Binary search for minimum age
-  let low = profile.currentAge;
-  let high = profile.currentAge + 20; // Search up to 20 years in future
-  let minViableAge = -1;
+  // If previous kid wasn't viable, this one can't be either
+  if (kidNumber > 1 && previousKidAges.length < kidNumber - 1) {
+    return {
+      isViable: false,
+      reason: `Child #${kidNumber - 1} is not viable, so #${kidNumber} cannot be either`,
+    };
+  }
 
-  for (let iter = 0; iter < 15; iter++) {
-    const testAge = Math.floor((low + high) / 2);
+  // The earliest this kid can be born is after the previous kid
+  const searchStart = previousKidAges.length > 0
+    ? Math.max(profile.currentAge, previousKidAges[previousKidAges.length - 1] + 1)
+    : profile.currentAge;
+  const searchEnd = profile.currentAge + 25;
 
-    // Create test profile with kid at this age
+  // Linear search: test every year to find the earliest viable age
+  for (let testAge = searchStart; testAge <= searchEnd; testAge++) {
+    // Build cumulative kid ages: all previous kids + this kid at testAge
+    const testKidAges = [...previousKidAges, testAge];
+
     const testProfile = {
       ...profile,
-      plannedKidAges: [testAge],
+      plannedKidAges: testKidAges,
     };
 
-    // Run simulation long enough to cover the full search range + 3 years post-birth check
-    const testSim = runYearByYearSimulation(testProfile, locationData, 25);
-    
-    // Find the year when kid is born
-    const kidBirthYear = testSim.snapshots.findIndex(s => s.kidBornThisYear === kidNumber);
-    
-    if (kidBirthYear < 0) {
-      // Kid wasn't born (blocked by hard rules probably)
-      low = testAge + 1;
+    // Run simulation long enough to cover testAge + 3 years post-birth check
+    const simYears = (testAge - profile.currentAge) + 5;
+    const testSim = runYearByYearSimulation(testProfile, locationData, Math.max(simYears, 10));
+
+    // Find the year when THIS kid (kidNumber) is born
+    const kidBirthIdx = testSim.snapshots.findIndex(s => s.kidBornThisYear === kidNumber);
+
+    if (kidBirthIdx < 0) {
+      // Kid wasn't born (blocked by hard rules) — try next year
       continue;
     }
-    
+
     // Check 3 years after birth
-    const threeYearsLater = testSim.snapshots[kidBirthYear + 3];
-    
+    const threeYearsLater = testSim.snapshots[kidBirthIdx + 3];
+
     if (threeYearsLater) {
-      const isViable = 
+      const isViable =
         threeYearsLater.disposableIncome > 0 &&
         threeYearsLater.loanDebtEnd <= threeYearsLater.loanDebtStart &&
         threeYearsLater.savingsEnd > 5000;
-      
+
       if (isViable) {
-        minViableAge = testAge;
-        high = testAge - 1; // Try earlier
-      } else {
-        low = testAge + 1; // Need later
+        return {
+          isViable: true,
+          minimumAge: testAge,
+        };
       }
-    } else {
-      low = testAge + 1; // Simulation didn't run long enough
     }
   }
-  
-  if (minViableAge > 0) {
-    return {
-      isViable: true,
-      minimumAge: minViableAge,
-    };
-  } else {
-    return {
-      isViable: false,
-      reason: 'Could not find viable age within 20 years',
-    };
-  }
+
+  return {
+    isViable: false,
+    reason: 'Could not find viable age within 25 years',
+  };
 }
 
 /**
