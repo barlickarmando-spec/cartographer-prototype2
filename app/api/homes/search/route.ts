@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       searchLocation = stateCode; // Search by state code
     } else if (location.includes(',')) {
       // "Boise, ID" format
-      const parts = location.split(',').map(p => p.trim());
+      const parts = location.split(',').map((p: string) => p.trim());
       searchLocation = parts[0];
       stateCode = parts[1];
     }

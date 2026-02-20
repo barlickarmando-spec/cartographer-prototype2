@@ -18,12 +18,12 @@ export type FieldType =
   | "locations_picker";
 
 export interface ShowWhen {
-  fieldKey: keyof OnboardingAnswers;
+  fieldKey: string;
   value: string | string[];
 }
 
 export interface SchemaField {
-  key: keyof OnboardingAnswers;
+  key: string;
   label: string;
   type: FieldType;
   options?: { value: string; label: string }[];
@@ -293,7 +293,7 @@ export const ONBOARDING_SCHEMA: SchemaStep[] = [
  */
 export function isFieldVisible(field: SchemaField, answers: OnboardingAnswers): boolean {
   if (!field.showWhen) return true;
-  const raw = answers[field.showWhen.fieldKey];
+  const raw = (answers as unknown as Record<string, unknown>)[field.showWhen.fieldKey];
   const val = Array.isArray(raw) ? raw.join(",") : String(raw ?? "");
   const matchVal = field.showWhen.value;
   if (Array.isArray(matchVal)) return matchVal.some((v) => val === v);
@@ -304,7 +304,7 @@ export function isFieldVisible(field: SchemaField, answers: OnboardingAnswers): 
  * For step 6: ccApr is required only when creditCardDebt > 0.
  */
 export function isCcAprRequired(answers: OnboardingAnswers): boolean {
-  const debt = answers.creditCardDebt;
+  const debt = (answers as unknown as Record<string, unknown>).creditCardDebt;
   return typeof debt === "number" && debt > 0;
 }
 

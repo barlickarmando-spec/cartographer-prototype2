@@ -58,7 +58,7 @@ export default function TestDataPage() {
 
       {data && (
         <div className="space-y-6">
-          <h2 className="text-xl font-bold text-slate-800">{data.stateName} Data</h2>
+          <h2 className="text-xl font-bold text-slate-800">{data.displayName} Data</h2>
 
           <section>
             <h3 className="text-lg font-semibold text-slate-700 mb-2">Salary (sample)</h3>
