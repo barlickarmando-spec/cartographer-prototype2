@@ -1,10 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { CalculationResult, HouseProjection } from '@/lib/calculation-engine';
+import { CalculationResult, HouseProjection, calculateAutoApproach } from '@/lib/calculation-engine';
 import SimpleHomeCarousel from '@/components/SimpleHomeCarousel';
 import { formatCurrency, pluralize } from '@/lib/utils';
+import { normalizeOnboardingAnswers } from '@/lib/onboarding/normalize';
+import { getOnboardingAnswers } from '@/lib/storage';
+import type { OnboardingAnswers } from '@/lib/onboarding/types';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -16,26 +19,22 @@ export default function ProfilePage() {
   const [show5YearHomes, setShow5YearHomes] = useState(false);
   const [show10YearHomes, setShow10YearHomes] = useState(false);
   const [show15YearHomes, setShow15YearHomes] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
 
-  useEffect(() => {
-    // Load results from localStorage
-    const stored = localStorage.getItem('calculation-results');
-    const storedAnswers = localStorage.getItem('onboarding-answers');
-    
+  const loadResults = useCallback((stored: string | null, storedAnswers: string | null) => {
     if (!stored) {
       router.push('/onboarding');
       return;
     }
-    
+
     try {
       const results: CalculationResult[] = JSON.parse(stored);
-      
+
       if (results.length === 0) {
         router.push('/onboarding');
         return;
       }
 
-      // Sort by viability (best first)
       const sortedResults = [...results].sort((a, b) => {
         const scoreMap: Record<string, number> = {
           'very-viable-stable': 6,
@@ -45,49 +44,85 @@ export default function ProfilePage() {
           'viable-when-renting': 2,
           'no-viable-path': 1,
         };
-        const scoreA = scoreMap[a.viabilityClassification] || 0;
-        const scoreB = scoreMap[b.viabilityClassification] || 0;
-        return scoreB - scoreA;
+        return (scoreMap[b.viabilityClassification] || 0) - (scoreMap[a.viabilityClassification] || 0);
       });
 
       setAllResults(sortedResults);
-      
-      // Determine which result to show based on user's selection
-      let resultToShow = sortedResults[0]; // Default to best result
-      
+
+      let resultToShow = sortedResults[0];
+
       if (storedAnswers) {
         try {
           const answers = JSON.parse(storedAnswers);
-          
-          // If user selected "know exactly", show that specific location
           if (answers.locationSituation === 'know-exactly' && answers.exactLocation) {
             const exactMatch = sortedResults.find(r => r.location === answers.exactLocation);
-            if (exactMatch) {
-              resultToShow = exactMatch;
-            }
-          }
-          // If user selected "currently live may move", show current location
-          else if (answers.locationSituation === 'currently-live-may-move' && answers.currentLocation) {
+            if (exactMatch) resultToShow = exactMatch;
+          } else if (answers.locationSituation === 'currently-live-may-move' && answers.currentLocation) {
             const currentMatch = sortedResults.find(r => r.location === answers.currentLocation);
-            if (currentMatch) {
-              resultToShow = currentMatch;
-            }
+            if (currentMatch) resultToShow = currentMatch;
           }
-          // Otherwise show best viable result (already sorted)
         } catch (e) {
           console.error('Error parsing onboarding answers:', e);
         }
       }
-      
+
       setSelectedResult(resultToShow);
-      
     } catch (error) {
       console.error('Error loading results:', error);
       router.push('/onboarding');
     } finally {
       setLoading(false);
+      setRecalculating(false);
     }
   }, [router]);
+
+  const handleRecalculate = useCallback(() => {
+    const storedAnswers = getOnboardingAnswers<OnboardingAnswers>((d): d is OnboardingAnswers => d != null && typeof d === 'object');
+    if (!storedAnswers) {
+      router.push('/onboarding');
+      return;
+    }
+
+    setRecalculating(true);
+
+    // Use setTimeout to let the UI update before heavy computation
+    setTimeout(() => {
+      try {
+        const profile = normalizeOnboardingAnswers(storedAnswers);
+        const locations = profile.selectedLocations.length > 0
+          ? profile.selectedLocations
+          : ['Utah'];
+
+        const results = locations.map(loc => {
+          try {
+            return calculateAutoApproach(profile, loc, 30);
+          } catch (error) {
+            console.error(`Error calculating for ${loc}:`, error);
+            return null;
+          }
+        }).filter((r): r is CalculationResult => r !== null);
+
+        if (results.length > 0) {
+          localStorage.setItem('calculation-results', JSON.stringify(results));
+        }
+
+        loadResults(
+          localStorage.getItem('calculation-results'),
+          localStorage.getItem('onboarding-answers')
+        );
+      } catch (error) {
+        console.error('Recalculation error:', error);
+        setRecalculating(false);
+      }
+    }, 50);
+  }, [router, loadResults]);
+
+  useEffect(() => {
+    loadResults(
+      localStorage.getItem('calculation-results'),
+      localStorage.getItem('onboarding-answers')
+    );
+  }, [loadResults]);
 
   if (loading) {
     return (
@@ -164,6 +199,32 @@ export default function ProfilePage() {
           </p>
         </div>
       )}
+
+      {/* Recalculate Button */}
+      <div className="flex justify-end">
+        <button
+          onClick={handleRecalculate}
+          disabled={recalculating}
+          className="flex items-center gap-2 px-4 py-2 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+        >
+          {recalculating ? (
+            <>
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Recalculating...
+            </>
+          ) : (
+            <>
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Recalculate
+            </>
+          )}
+        </button>
+      </div>
 
       {/* ===== BANNER/HEADER ===== */}
       <div className="bg-white rounded-2xl shadow-sm border border-[#E5E7EB] overflow-hidden">
