@@ -24,24 +24,9 @@ const fallbackPhotos = [
   'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=1200&h=900&fit=crop&q=80',
 ];
 
-function buildZillowUrl(location: string, minPrice: number, maxPrice: number): string {
-  const slug = location
-    .replace(/,\s*/g, '-')
-    .replace(/\s+/g, '-')
-    .toLowerCase();
-
-  const searchQueryState = encodeURIComponent(
-    JSON.stringify({
-      filterState: {
-        price: { min: minPrice, max: maxPrice },
-        ah: { value: true },
-      },
-      isListVisible: true,
-      isMapVisible: true,
-    })
-  );
-
-  return `https://www.zillow.com/${slug}/?searchQueryState=${searchQueryState}`;
+function buildGoogleImageSearchUrl(location: string, priceLabel: string): string {
+  const query = encodeURIComponent(`${location} home for sale ${priceLabel}`);
+  return `https://www.google.com/search?q=${query}&tbm=isch`;
 }
 
 function formatPrice(price: number): string {
@@ -63,7 +48,8 @@ export default function SimpleHomeCarousel({
 
   const minPrice = Math.round(targetPrice - priceRange);
   const maxPrice = Math.round(targetPrice + priceRange);
-  const zillowSearchUrl = buildZillowUrl(location, minPrice, maxPrice);
+  const priceLabel = formatPrice(targetPrice);
+  const googleSearchUrl = buildGoogleImageSearchUrl(location, priceLabel);
 
   const fetchImages = useCallback(async () => {
     setLoading(true);
@@ -135,7 +121,7 @@ export default function SimpleHomeCarousel({
 
       {/* Main Carousel Image */}
       <a
-        href={current.contextLink || zillowSearchUrl}
+        href={current.contextLink || googleSearchUrl}
         target="_blank"
         rel="noopener noreferrer"
         className="block relative aspect-[4/3] rounded-2xl overflow-hidden group cursor-pointer shadow-xl"
@@ -157,7 +143,7 @@ export default function SimpleHomeCarousel({
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
           </svg>
-          {usingFallback ? 'View on Zillow' : 'View Source'}
+          {usingFallback ? 'Search Images' : 'View Source'}
         </div>
 
         {/* Price badge */}
@@ -250,13 +236,13 @@ export default function SimpleHomeCarousel({
           </div>
           <div className="flex-1">
             <h4 className="font-bold text-[#2C3E50] text-lg mb-2">
-              Browse real listings in {location}
+              Browse homes in {location}
             </h4>
             <p className="text-sm text-[#6B7280] mb-4">
-              See actual homes for sale in <strong>{location}</strong> in the {formatPrice(minPrice)} - {formatPrice(maxPrice)} range on Zillow.
+              Search for homes in <strong>{location}</strong> in the {formatPrice(minPrice)} - {formatPrice(maxPrice)} range on Google Images.
             </p>
             <a
-              href={zillowSearchUrl}
+              href={googleSearchUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-[#5BA4E5] to-[#4A93D4] text-white rounded-xl hover:from-[#4A93D4] hover:to-[#3982C3] transition-all transform hover:scale-105 font-bold text-lg shadow-xl"
@@ -264,7 +250,7 @@ export default function SimpleHomeCarousel({
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
-              Search on Zillow
+              Search on Google
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
