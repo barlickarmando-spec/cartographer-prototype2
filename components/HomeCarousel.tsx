@@ -45,7 +45,7 @@ export default function HomeCarousel({
     try {
       console.log('Fetching real homes for:', location, minPrice, maxPrice);
 
-      const response = await fetch('/api/homes/search', {
+      const response = await fetch('/api/zillow/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -60,9 +60,25 @@ export default function HomeCarousel({
       const data = await response.json();
 
       if (data.success && data.homes && data.homes.length > 0) {
-        setHomes(data.homes);
+        // Map API response fields to our Home interface
+        const mappedHomes = data.homes.map((h: any) => ({
+          id: h.zpid || h.id || String(Math.random()),
+          address: h.address || '',
+          city: h.city || '',
+          state: h.state || '',
+          zipcode: h.zipcode || '',
+          price: h.price || 0,
+          bedrooms: h.bedrooms || 0,
+          bathrooms: h.bathrooms || 0,
+          sqft: h.livingArea || h.sqft || 0,
+          homeType: h.homeType || 'House',
+          photoUrl: h.imgSrc || '',
+          listingUrl: h.detailUrl || '',
+          status: h.listingStatus || 'For Sale',
+        }));
+        setHomes(mappedHomes);
         setUseStockImages(false);
-        console.log(`Loaded ${data.homes.length} real homes`);
+        console.log(`Loaded ${mappedHomes.length} real homes`);
       } else {
         console.log('No real homes found, using stock images');
         setUseStockImages(true);
@@ -79,13 +95,22 @@ export default function HomeCarousel({
     fetchHomes();
   }, [fetchHomes]);
 
-  // Format location for Zillow URL
-  const formattedLocation = location.toLowerCase()
-    .replace(/,?\s+/g, '-')
-    .replace(/[^a-z0-9-]/g, '');
-  
-  // Build Zillow search URL with exact filters
-  const zillowUrl = `https://www.zillow.com/homes/${formattedLocation}_rb/?searchQueryState=%7B%22pagination%22%3A%7B%7D%2C%22isMapVisible%22%3Afalse%2C%22filterState%22%3A%7B%22price%22%3A%7B%22min%22%3A${minPrice}%2C%22max%22%3A${maxPrice}%7D%2C%22beds%22%3A%7B%22min%22%3A2%7D%7D%2C%22isListVisible%22%3Atrue%7D`;
+  // Build Zillow search URL with location embedded in searchQueryState
+  // usersSearchTerm tells Zillow exactly which location to search
+  const searchQueryState = {
+    pagination: {},
+    usersSearchTerm: location,
+    mapBounds: {},
+    regionSelection: [],
+    isMapVisible: true,
+    filterState: {
+      price: { min: minPrice, max: maxPrice },
+      beds: { min: 2 }
+    },
+    isListVisible: true
+  };
+  const encodedSearchState = encodeURIComponent(JSON.stringify(searchQueryState));
+  const zillowUrl = `https://www.zillow.com/homes/${encodeURIComponent(location)}_rb/?searchQueryState=${encodedSearchState}`;
 
   // Stock home images with Unsplash (fallback when API fails)
   const stockHomes = [
