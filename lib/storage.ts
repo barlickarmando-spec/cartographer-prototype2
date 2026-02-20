@@ -5,8 +5,9 @@
 
 const KEY_ONBOARDING_ANSWERS = "onboardingAnswers";
 const KEY_USER_PROFILE = "userProfile";
+const KEY_SAVED_LOCATIONS = "savedLocations";
 
-export { KEY_ONBOARDING_ANSWERS, KEY_USER_PROFILE };
+export { KEY_ONBOARDING_ANSWERS, KEY_USER_PROFILE, KEY_SAVED_LOCATIONS };
 
 function safeGetItem(key: string): string | null {
   if (typeof window === "undefined") return null;
@@ -89,6 +90,31 @@ export function setUserProfile(value: unknown): boolean {
   try {
     const json = JSON.stringify(value);
     return safeSetItem(KEY_USER_PROFILE, json);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get saved locations list from localStorage.
+ */
+export function getSavedLocations(): string[] {
+  const raw = safeGetItem(KEY_SAVED_LOCATIONS);
+  if (!raw) return [];
+  try {
+    const data = JSON.parse(raw);
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Save locations list to localStorage.
+ */
+export function setSavedLocations(locations: string[]): boolean {
+  try {
+    return safeSetItem(KEY_SAVED_LOCATIONS, JSON.stringify(locations));
   } catch {
     return false;
   }
