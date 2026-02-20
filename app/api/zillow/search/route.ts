@@ -42,26 +42,32 @@ export async function POST(request: NextRequest) {
       stateCode = location.trim();
     }
 
-    // Build Realty in US API URL
-    const url = new URL('https://realty-in-us.p.rapidapi.com/properties/v2/list-for-sale');
-    
+    // Build Realty in US API v3 request (POST with JSON body)
+    const apiUrl = 'https://realty-in-us.p.rapidapi.com/properties/v3/list';
+
+    const apiBody: Record<string, any> = {
+      limit: 20,
+      offset: 0,
+      status: ['for_sale'],
+      sort: { direction: 'desc', field: 'list_date' },
+      state_code: stateCode,
+      price: { min: minPrice, max: maxPrice },
+    };
+
     if (city) {
-      url.searchParams.append('city', city);
+      apiBody.city = city;
     }
-    url.searchParams.append('state_code', stateCode);
-    url.searchParams.append('price_min', minPrice.toString());
-    url.searchParams.append('price_max', maxPrice.toString());
-    url.searchParams.append('limit', '20');
-    url.searchParams.append('offset', '0');
 
-    console.log('📡 Calling Realty in US API:', url.toString());
+    console.log('📡 Calling Realty in US API v3:', apiUrl, JSON.stringify(apiBody));
 
-    const response = await fetch(url.toString(), {
-      method: 'GET',
+    const response = await fetch(apiUrl, {
+      method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         'X-RapidAPI-Key': rapidApiKey,
         'X-RapidAPI-Host': 'realty-in-us.p.rapidapi.com'
-      }
+      },
+      body: JSON.stringify(apiBody),
     });
 
     console.log('📥 API Response Status:', response.status);
