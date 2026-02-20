@@ -46,10 +46,19 @@ export async function GET(request: NextRequest) {
     const response = await fetch(url.toString());
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Google API error:', response.status, errorText);
+      let errorDetail = `Google API returned ${response.status}`;
+      try {
+        const errJson = await response.json();
+        const googleMsg = errJson?.error?.message || '';
+        const googleReason = errJson?.error?.errors?.[0]?.reason || '';
+        errorDetail = `Google API ${response.status}: ${googleMsg} (${googleReason})`;
+        console.error('Google API error:', errorDetail);
+      } catch {
+        const errorText = await response.text();
+        console.error('Google API error:', response.status, errorText);
+      }
       return NextResponse.json(
-        { success: false, error: `Google API returned ${response.status}` },
+        { success: false, error: errorDetail },
         { status: 502 }
       );
     }
