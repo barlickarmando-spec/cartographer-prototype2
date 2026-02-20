@@ -25,7 +25,9 @@ export function normalizeOnboardingAnswers(answers: OnboardingAnswers): UserProf
   
   // === Household ===
   const relationshipStatus = answers.relationshipStatus;
-  const numEarners: 1 | 2 = relationshipStatus === 'linked' && answers.partnerOccupation ? 2 : 1;
+  // If linked (married/financially linked), assume 2 earners.
+  // Partner income comes from either their specified occupation or income doubling rule.
+  const numEarners: 1 | 2 = relationshipStatus === 'linked' ? 2 : 1;
   const numKids = answers.kidsPlan === 'have-kids' ? (answers.numKids || 0) : 0;
   
   const householdType = determineHouseholdType(relationshipStatus, numEarners, numKids);
@@ -127,6 +129,8 @@ export function normalizeOnboardingAnswers(answers: OnboardingAnswers): UserProf
     expectedIndependenceAge,
     householdType,
     relationshipStatus,
+    relationshipPlans: answers.relationshipPlans,
+    plannedRelationshipAge: answers.plannedRelationshipAge,
     numEarners,
     numKids,
     kidsPlan,

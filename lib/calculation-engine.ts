@@ -418,7 +418,7 @@ function runYearByYearSimulation(
       if (profile.partnerOccupation) {
         partnerIncome = getSalary(locationData.name, profile.partnerOccupation, profile.partnerSalary);
         debugNotes.push(`Partner income from occupation: $${partnerIncome}`);
-      } else if (profile.usePartnerIncomeDoubling || relationshipStartedThisYear) {
+      } else if (profile.usePartnerIncomeDoubling || relationshipStarted) {
         // Income doubling rule
         partnerIncome = userIncome;
         debugNotes.push(`Partner income doubled: $${partnerIncome}`);
@@ -678,7 +678,7 @@ function runYearByYearSimulation(
     // === EARLY EXIT CONDITIONS ===
     
     // Success condition: Main goals achieved
-    if (hasMortgage && loanDebt === 0 && year > 10) {
+    if (hasMortgage && loanDebt === 0 && year >= 15) {
       console.log(`Success! Mortgage acquired and debt-free by year ${year}`);
       return {
         snapshots,
