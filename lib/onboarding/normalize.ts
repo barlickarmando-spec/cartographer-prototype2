@@ -35,12 +35,21 @@ export function normalizeOnboardingAnswers(answers: OnboardingAnswers): UserProf
   // === Life Planning ===
   const kidsPlan = answers.kidsPlan;
   const plannedKidAges: number[] = [];
-  
-  if (answers.firstKidAge) {
-    plannedKidAges.push(answers.firstKidAge);
+
+  if (kidsPlan === 'yes' || kidsPlan === 'unsure') {
+    if (answers.firstKidAge) {
+      plannedKidAges.push(answers.firstKidAge);
+    }
+    if (answers.secondKidAge && answers.secondKidAge > (answers.firstKidAge || 0)) {
+      plannedKidAges.push(answers.secondKidAge);
+    }
+    if (answers.thirdKidAge && answers.thirdKidAge > (answers.secondKidAge || 0)) {
+      plannedKidAges.push(answers.thirdKidAge);
+    }
   }
-  
-  if (answers.plannedNextKidAge) {
+
+  // Existing path: user already has kids and plans more
+  if (kidsPlan === 'have-kids' && answers.plannedNextKidAge) {
     plannedKidAges.push(answers.plannedNextKidAge);
   }
   

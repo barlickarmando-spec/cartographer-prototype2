@@ -368,20 +368,80 @@ function Step2HouseholdType({ answers, updateAnswer }: StepProps) {
           {/* Kid age inputs - if planning kids */}
           {(answers.kidsPlan === 'yes' || answers.kidsPlan === 'unsure') && (
             <div className="mt-4 space-y-3">
+              {/* 1st Kid */}
               <div>
                 <label className="block text-sm font-medium text-[#2C3E50] mb-2">
-                  Expected age for first kid (optional)
+                  Expected age for 1st kid (optional)
                 </label>
                 <input
                   type="number"
                   min="18"
                   max="100"
                   value={answers.firstKidAge || ''}
-                  onChange={(e) => updateAnswer('firstKidAge', parseInt(e.target.value) || undefined)}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value) || undefined;
+                    updateAnswer('firstKidAge', val);
+                    if (!val) {
+                      updateAnswer('secondKidAge', undefined);
+                      updateAnswer('thirdKidAge', undefined);
+                    }
+                  }}
                   className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
                   placeholder="Leave blank for default (age 32)"
                 />
               </div>
+
+              {/* 2nd Kid - shown after 1st kid age is entered */}
+              {answers.firstKidAge && (
+                <div>
+                  <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+                    Expected age for 2nd kid (optional)
+                  </label>
+                  <input
+                    type="number"
+                    min={answers.firstKidAge + 1}
+                    max="100"
+                    value={answers.secondKidAge || ''}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || undefined;
+                      updateAnswer('secondKidAge', val);
+                      if (!val) {
+                        updateAnswer('thirdKidAge', undefined);
+                      }
+                    }}
+                    className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+                    placeholder={`Leave blank if not planning a 2nd (must be after age ${answers.firstKidAge})`}
+                  />
+                  {answers.secondKidAge !== undefined && answers.secondKidAge <= answers.firstKidAge && (
+                    <p className="text-xs text-red-500 mt-1">
+                      2nd kid must be after 1st kid (age {answers.firstKidAge})
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* 3rd Kid - shown after valid 2nd kid age */}
+              {answers.secondKidAge && answers.secondKidAge > (answers.firstKidAge || 0) && (
+                <div>
+                  <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+                    Expected age for 3rd kid (optional)
+                  </label>
+                  <input
+                    type="number"
+                    min={answers.secondKidAge + 1}
+                    max="100"
+                    value={answers.thirdKidAge || ''}
+                    onChange={(e) => updateAnswer('thirdKidAge', parseInt(e.target.value) || undefined)}
+                    className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+                    placeholder={`Leave blank if not planning a 3rd (must be after age ${answers.secondKidAge})`}
+                  />
+                  {answers.thirdKidAge !== undefined && answers.thirdKidAge <= answers.secondKidAge && (
+                    <p className="text-xs text-red-500 mt-1">
+                      3rd kid must be after 2nd kid (age {answers.secondKidAge})
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
