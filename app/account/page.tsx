@@ -5,6 +5,9 @@ import { getCurrentUserId } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { LogoutButton } from "./LogoutButton";
 
+// This page uses Prisma + cookies at runtime, skip static pre-rendering
+export const dynamic = "force-dynamic";
+
 export default async function AccountPage() {
   const userId = await getCurrentUserId();
   if (!userId) redirect("/login");
