@@ -977,11 +977,12 @@ function calculateHouseProjections(
     const firstYearPaymentRequired = calculateTotalAnnualCosts(maxPossibleHousePrice, downPaymentPercent, annualCostFactor);
     
     // === SUSTAINABILITY-BASED CALCULATION ===
-    // Max house price where post-mortgage DI >= 0 across ALL future years.
-    // This accounts for future kids increasing COL - a house affordable at year 5
-    // without kids must still be affordable at year 8+ when kids arrive.
+    // Max house price where annual mortgage fits within the ALLOCATED portion of DI
+    // across ALL future years. This accounts for future kids increasing COL - a house
+    // affordable at year 5 without kids must still be affordable at year 8+ when kids arrive.
+    const allocationPercent = profile.disposableIncomeAllocation / 100;
 
-    // Find the worst-case future year: lowest (income - nonHousingCOL) from this year onward
+    // Find the worst-case future year: lowest allocated DI from this year onward
     const futureSnapshots = simulation.filter(s => s.year >= targetYear);
     let worstCaseIncome = snapshot.totalIncome;
     let worstCaseAdjustedCOL = snapshot.adjustedCOL;
@@ -995,7 +996,11 @@ function calculateHouseProjections(
       }
     }
 
-    // Binary search for max sustainable price using worst-case future financials
+    // The max annual payment is the allocated portion of worst-case DI
+    const worstCaseDI = worstCaseIncome - worstCaseAdjustedCOL;
+    const maxAnnualPayment = Math.max(0, worstCaseDI * allocationPercent);
+
+    // Binary search for max sustainable price using worst-case allocated DI
     let sustainablePrice = 0;
     let low = 0;
     let high = maxPossibleHousePrice * 2; // Search up to 2x savings-based max
@@ -1003,9 +1008,8 @@ function calculateHouseProjections(
     for (let i = 0; i < 20; i++) {
       const mid = (low + high) / 2;
       const annualPayment = calculateTotalAnnualCosts(mid, downPaymentPercent, annualCostFactor);
-      const postMortgageDI = worstCaseIncome - (worstCaseAdjustedCOL + annualPayment);
 
-      if (postMortgageDI >= 0) {
+      if (annualPayment <= maxAnnualPayment) {
         sustainablePrice = mid;
         low = mid;
       } else {
@@ -1015,7 +1019,7 @@ function calculateHouseProjections(
 
     const sustainableDownPayment = sustainablePrice * downPaymentPercent;
     const sustainableAnnualPayment = calculateTotalAnnualCosts(sustainablePrice, downPaymentPercent, annualCostFactor);
-    const postMortgageDisposableIncome = worstCaseIncome - (worstCaseAdjustedCOL + sustainableAnnualPayment);
+    const postMortgageDisposableIncome = worstCaseDI - sustainableAnnualPayment;
     
     // === FINAL VALUES ===
     const actualMaxPrice = Math.min(maxPossibleHousePrice, sustainablePrice);
