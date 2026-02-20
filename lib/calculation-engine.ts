@@ -99,6 +99,7 @@ export interface CalculationResult {
     fiveYears: HouseProjection | null;
     tenYears: HouseProjection | null;
     fifteenYears: HouseProjection | null;
+    maxAffordable: HouseProjection | null;
   };
   
   // Kid viability
@@ -930,6 +931,7 @@ function calculateHouseProjections(
   fiveYears: HouseProjection | null;
   tenYears: HouseProjection | null;
   fifteenYears: HouseProjection | null;
+  maxAffordable: HouseProjection | null;
 } {
   const targets = [3, 5, 10, 15];
   const projections: any = {
@@ -937,6 +939,7 @@ function calculateHouseProjections(
     fiveYears: null,
     tenYears: null,
     fifteenYears: null,
+    maxAffordable: null,
   };
   
   for (const targetYear of targets) {
@@ -1041,7 +1044,82 @@ function calculateHouseProjections(
       canAfford,
     };
   }
-  
+
+  // === MAX AFFORDABLE PROJECTION ===
+  // The sustainability ceiling: the absolute max house price your income can ever support,
+  // regardless of how long you save. Uses the worst-case (income - adjustedCOL) across
+  // ALL simulation years to find the income-based cap.
+  if (simulation.length > 0 && locationData.housing) {
+    const downPaymentPercent = locationData.housing.downPaymentPercent || 0.107;
+    const mortgageRate = locationData.housing.mortgageRate || 0.065;
+    const annualCostFactor = calculateAnnualCostFactor(mortgageRate, downPaymentPercent);
+    const allocationPercent = profile.disposableIncomeAllocation / 100;
+
+    // Find worst-case (income - adjustedCOL) across entire simulation
+    let worstCaseIncome = simulation[0].totalIncome;
+    let worstCaseAdjustedCOL = simulation[0].adjustedCOL;
+    for (const snap of simulation) {
+      const available = snap.totalIncome - snap.adjustedCOL;
+      const currentWorst = worstCaseIncome - worstCaseAdjustedCOL;
+      if (available < currentWorst) {
+        worstCaseIncome = snap.totalIncome;
+        worstCaseAdjustedCOL = snap.adjustedCOL;
+      }
+    }
+
+    const worstCaseDI = worstCaseIncome - worstCaseAdjustedCOL;
+    const maxAnnualPayment = Math.max(0, worstCaseDI * allocationPercent);
+
+    // Binary search for max sustainable price
+    let sustainablePrice = 0;
+    let low = 0;
+    let high = 10_000_000; // Search up to $10M
+    for (let i = 0; i < 25; i++) {
+      const mid = (low + high) / 2;
+      const annualPayment = calculateTotalAnnualCosts(mid, downPaymentPercent, annualCostFactor);
+      if (annualPayment <= maxAnnualPayment) {
+        sustainablePrice = mid;
+        low = mid;
+      } else {
+        high = mid;
+      }
+    }
+
+    // Find when savings first meet this sustainability cap's threshold
+    const totalCostFactor = downPaymentPercent + ((1 - downPaymentPercent) * annualCostFactor);
+    const savingsNeeded = sustainablePrice * totalCostFactor;
+    const capReachedSnapshot = simulation.find(s => s.savingsNoMortgage >= savingsNeeded);
+
+    // Use the last simulation year as reference for savings
+    const lastSnapshot = simulation[simulation.length - 1];
+    const refSnapshot = capReachedSnapshot || lastSnapshot;
+    const maxSavings = refSnapshot.savingsNoMortgage;
+
+    // Savings-based max at the reference year
+    const maxPossibleHousePrice = maxSavings / totalCostFactor;
+    const actualMax = Math.min(maxPossibleHousePrice, sustainablePrice);
+
+    const sustainableDP = sustainablePrice * downPaymentPercent;
+    const sustainableAP = calculateTotalAnnualCosts(sustainablePrice, downPaymentPercent, annualCostFactor);
+    const postMortgageDI = worstCaseDI - sustainableAP;
+    const canAfford = maxSavings >= (sustainableDP + sustainableAP);
+
+    projections.maxAffordable = {
+      year: refSnapshot.year,
+      age: refSnapshot.age,
+      totalSavings: Math.round(maxSavings),
+      maxPossibleHousePrice: Math.round(maxPossibleHousePrice),
+      downPaymentRequired: Math.round(actualMax * downPaymentPercent),
+      firstYearPaymentRequired: Math.round(calculateTotalAnnualCosts(actualMax, downPaymentPercent, annualCostFactor)),
+      maxSustainableHousePrice: Math.round(sustainablePrice),
+      sustainableDownPayment: Math.round(sustainableDP),
+      sustainableAnnualPayment: Math.round(sustainableAP),
+      postMortgageDisposableIncome: Math.round(postMortgageDI),
+      sustainabilityLimited: sustainablePrice < maxPossibleHousePrice,
+      canAfford,
+    };
+  }
+
   return projections;
 }
 
@@ -1319,6 +1397,7 @@ function createErrorResult(
       fiveYears: null,
       tenYears: null,
       fifteenYears: null,
+      maxAffordable: null,
     },
     kidViability: {
       firstKid: { isViable: false, reason: 'Calculation failed' },

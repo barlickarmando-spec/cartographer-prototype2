@@ -19,6 +19,8 @@ export default function ProfilePage() {
   const [show5YearHomes, setShow5YearHomes] = useState(false);
   const [show10YearHomes, setShow10YearHomes] = useState(false);
   const [show15YearHomes, setShow15YearHomes] = useState(false);
+  const [showMaxHomes, setShowMaxHomes] = useState(false);
+  const [showYearByYear, setShowYearByYear] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
 
   const loadResults = useCallback((stored: string | null, storedAnswers: string | null) => {
@@ -618,7 +620,147 @@ export default function ProfilePage() {
                 onToggle={() => setShow15YearHomes(!show15YearHomes)}
               />
             )}
+
+            {/* Max Affordable (Sustainability Ceiling) */}
+            {result.houseProjections.maxAffordable && (
+              <div className="relative">
+                <div className="absolute -top-3 left-4 z-10">
+                  <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm">
+                    INCOME CEILING
+                  </span>
+                </div>
+                <HouseProjectionCard
+                  title="Max Affordable (Sustainability Cap)"
+                  projection={result.houseProjections.maxAffordable}
+                  location={result.location}
+                  showHomes={showMaxHomes}
+                  onToggle={() => setShowMaxHomes(!showMaxHomes)}
+                />
+              </div>
+            )}
           </div>
+
+          {/* Show Your Work - Year-by-Year Breakdown */}
+          {result.yearByYear.length > 0 && (
+            <div className="mt-6">
+              <button
+                onClick={() => setShowYearByYear(!showYearByYear)}
+                className="w-full flex items-center justify-between px-6 py-4 bg-[#F8FAFB] border border-[#E5E7EB] rounded-xl hover:bg-[#EFF6FF] transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <svg className="w-5 h-5 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  <span className="font-semibold text-[#2C3E50]">Show Your Work - Year-by-Year Breakdown</span>
+                </div>
+                <svg
+                  className={`w-5 h-5 text-[#6B7280] transition-transform ${showYearByYear ? 'rotate-180' : ''}`}
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showYearByYear && (
+                <div className="mt-3 bg-white border border-[#E5E7EB] rounded-xl overflow-hidden">
+                  <div className="px-6 py-4 bg-[#F8FAFB] border-b border-[#E5E7EB]">
+                    <p className="text-sm text-[#6B7280]">
+                      This table shows the complete year-by-year simulation. &quot;No-Mtg Savings&quot; is used for house projections (what you&apos;d have if you kept saving without buying).
+                    </p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-[#F8FAFB] border-b border-[#E5E7EB]">
+                          <th className="px-3 py-2 text-left font-semibold text-[#2C3E50] sticky left-0 bg-[#F8FAFB] z-10">Year</th>
+                          <th className="px-3 py-2 text-left font-semibold text-[#2C3E50]">Age</th>
+                          <th className="px-3 py-2 text-left font-semibold text-[#2C3E50]">Event</th>
+                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Income</th>
+                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Adj COL</th>
+                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Housing</th>
+                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">DI</th>
+                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">EDI (70%)</th>
+                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Loan Debt</th>
+                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">CC Paid</th>
+                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Savings</th>
+                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">No-Mtg Savings</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {result.yearByYear.map((snap, i) => {
+                          const event = snap.mortgageAcquiredThisYear ? 'Mortgage' :
+                            snap.kidBornThisYear > 0 ? `Kid #${snap.kidBornThisYear}` :
+                            snap.relationshipStartedThisYear ? 'Relationship' :
+                            (snap.loanDebtEnd === 0 && (i > 0 && result.yearByYear[i-1].loanDebtEnd > 0)) ? 'Debt-free' :
+                            '';
+                          const isHighlight = snap.year === 3 || snap.year === 5 || snap.year === 10 || snap.year === 15;
+                          return (
+                            <tr
+                              key={snap.year}
+                              className={`border-b border-[#F3F4F6] ${isHighlight ? 'bg-blue-50/50' : i % 2 === 0 ? 'bg-white' : 'bg-[#FAFBFC]'} ${event ? 'font-medium' : ''}`}
+                            >
+                              <td className={`px-3 py-2 sticky left-0 z-10 ${isHighlight ? 'bg-blue-50/50' : i % 2 === 0 ? 'bg-white' : 'bg-[#FAFBFC]'}`}>
+                                {snap.year}
+                              </td>
+                              <td className="px-3 py-2">{snap.age}</td>
+                              <td className="px-3 py-2">
+                                {event && (
+                                  <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    event === 'Mortgage' ? 'bg-green-100 text-green-700' :
+                                    event.startsWith('Kid') ? 'bg-purple-100 text-purple-700' :
+                                    event === 'Debt-free' ? 'bg-blue-100 text-blue-700' :
+                                    'bg-gray-100 text-gray-700'
+                                  }`}>
+                                    {event}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-right">${snap.totalIncome.toLocaleString()}</td>
+                              <td className="px-3 py-2 text-right">${snap.adjustedCOL.toLocaleString()}</td>
+                              <td className="px-3 py-2 text-right">
+                                <span className={snap.hasMortgage ? 'text-green-600' : ''}>
+                                  ${snap.housingCost.toLocaleString()}
+                                </span>
+                              </td>
+                              <td className={`px-3 py-2 text-right ${snap.disposableIncome < 0 ? 'text-red-600' : ''}`}>
+                                ${snap.disposableIncome.toLocaleString()}
+                              </td>
+                              <td className="px-3 py-2 text-right">${Math.round(snap.effectiveDisposableIncome).toLocaleString()}</td>
+                              <td className={`px-3 py-2 text-right ${snap.loanDebtEnd > 0 ? 'text-red-500' : 'text-green-600'}`}>
+                                ${Math.round(snap.loanDebtEnd).toLocaleString()}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                {snap.ccDebtPayment > 0 ? `$${snap.ccDebtPayment.toLocaleString()}` : ''}
+                              </td>
+                              <td className="px-3 py-2 text-right font-medium">${Math.round(snap.savingsEnd).toLocaleString()}</td>
+                              <td className="px-3 py-2 text-right text-[#5BA4E5] font-medium">${Math.round(snap.savingsNoMortgage).toLocaleString()}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Formula explanation */}
+                  <div className="px-6 py-4 bg-[#F8FAFB] border-t border-[#E5E7EB] space-y-2">
+                    <h4 className="font-semibold text-[#2C3E50] text-sm">How it works:</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-[#6B7280]">
+                      <div>
+                        <p><strong>DI</strong> = Income - (Adj COL + Housing)</p>
+                        <p><strong>EDI</strong> = DI x Allocation %</p>
+                        <p><strong>Priority Stack:</strong> CC Debt &rarr; Student Loans &rarr; Savings</p>
+                      </div>
+                      <div>
+                        <p><strong>Savings Growth:</strong> 3% annual on existing balance</p>
+                        <p><strong>Mortgage Threshold:</strong> Down Payment + 1st Year Payment</p>
+                        <p><strong>Sustainability Cap:</strong> Max house where annual cost &le; allocated worst-case DI</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
