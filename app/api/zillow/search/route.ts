@@ -1,5 +1,5 @@
 // app/api/zillow/search/route.ts
-// Configured for US Property Data API (us-real-estate.p.rapidapi.com)
+// Configured for Realty in US API (realty-in-us.p.rapidapi.com)
 
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { location, minPrice, maxPrice } = body;
 
-    console.log('US Property Data - Searching:', location, minPrice, '-', maxPrice);
+    console.log('Realty in US - Searching:', location, minPrice, '-', maxPrice);
 
     if (!location || !minPrice || !maxPrice) {
       return NextResponse.json(
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Parse location for US Property Data API
+    // Parse location for Realty in US API
     // Supports: "City, State" or "State" or "State Code"
     let city = '';
     let stateCode = '';
@@ -42,8 +42,8 @@ export async function POST(request: NextRequest) {
       stateCode = location.trim();
     }
 
-    // Build US Property Data API URL
-    const url = new URL('https://us-real-estate.p.rapidapi.com/v2/for-sale');
+    // Build Realty in US API URL
+    const url = new URL('https://realty-in-us.p.rapidapi.com/properties/v2/list-for-sale');
     
     if (city) {
       url.searchParams.append('city', city);
@@ -54,13 +54,13 @@ export async function POST(request: NextRequest) {
     url.searchParams.append('limit', '20');
     url.searchParams.append('offset', '0');
 
-    console.log('📡 Calling US Property Data API:', url.toString());
+    console.log('📡 Calling Realty in US API:', url.toString());
 
     const response = await fetch(url.toString(), {
       method: 'GET',
       headers: {
         'X-RapidAPI-Key': rapidApiKey,
-        'X-RapidAPI-Host': 'us-real-estate.p.rapidapi.com'
+        'X-RapidAPI-Host': 'realty-in-us.p.rapidapi.com'
       }
     });
 
@@ -73,13 +73,15 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await response.json();
-    console.log('Got data from US Property Data');
+    console.log('Got data from Realty in US');
 
-    // Extract homes from US Property Data response
+    // Extract homes from Realty in US response
     let properties = [];
     
     if (data.data?.home_search?.results) {
       properties = data.data.home_search.results;
+    } else if (data.properties) {
+      properties = data.properties;
     } else if (data.results) {
       properties = data.results;
     } else if (Array.isArray(data)) {
@@ -139,7 +141,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('💥 US Property Data API Error:', error);
+    console.error('💥 Realty in US API Error:', error);
     return NextResponse.json(
       { 
         success: false, 
@@ -156,6 +158,6 @@ export async function GET() {
     status: 'ready',
     message: 'POST to this endpoint with { location, minPrice, maxPrice }',
     apiKeyConfigured: !!process.env.RAPIDAPI_KEY,
-    api: 'us-real-estate.p.rapidapi.com'
+    api: 'realty-in-us.p.rapidapi.com'
   });
 }
