@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { CalculationResult, HouseProjection, calculateAutoApproach } from '@/lib/calculation-engine';
-import HomeCarousel from '@/components/HomeCarousel';
+import SimpleHomeCarousel from '@/components/SimpleHomeCarousel';
 import { formatCurrency, pluralize } from '@/lib/utils';
 import { normalizeOnboardingAnswers } from '@/lib/onboarding/normalize';
 import { getOnboardingAnswers } from '@/lib/storage';
@@ -870,7 +870,7 @@ function HouseProjectionCard({ title, projection, location, showHomes, onToggle 
 
         {showHomes && (
           <div className="px-6 pb-6">
-            <HomeCarousel
+            <SimpleHomeCarousel
               location={location}
               targetPrice={projection.maxSustainableHousePrice}
               priceRange={50000}
