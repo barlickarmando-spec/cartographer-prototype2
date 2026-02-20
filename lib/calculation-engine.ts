@@ -351,6 +351,20 @@ function runYearByYearSimulation(
       ? (profile.currentAge + 5) 
       : undefined);
   
+  // Pre-calculate mortgage costs using proper mortgage formula (not pre-calculated location data)
+  // This ensures TotalCOL = nonHousingCOL + housingCost with proper mortgage math
+  const medianHomePrice = locationData.housing.medianHomeValue || 0;
+  const downPaymentPct = locationData.housing.downPaymentPercent || 0.107;
+  const mortgageRateVal = locationData.housing.mortgageRate || 0.065;
+  const annualCostFac = calculateAnnualCostFactor(mortgageRateVal, downPaymentPct);
+  const medianDownPayment = medianHomePrice * downPaymentPct;
+  const medianAnnualPayment = calculateTotalAnnualCosts(medianHomePrice, downPaymentPct, annualCostFac);
+
+  // State for chosen house after mortgage acquisition
+  // housePriceChosen and its annual payment are set at acquisition time
+  let chosenHousePrice = 0;
+  let calculatedAnnualMortgagePayment = 0;
+
   console.log('Starting simulation with:', {
     currentAge,
     loanDebt,
@@ -358,6 +372,9 @@ function runYearByYearSimulation(
     householdType: currentHouseholdType,
     numKids: currentNumKids,
     numEarners: currentNumEarners,
+    medianHomePrice: Math.round(medianHomePrice),
+    formulaDownPayment: Math.round(medianDownPayment),
+    formulaAnnualPayment: Math.round(medianAnnualPayment),
   });
   
   for (let year = 1; year <= years; year++) {
@@ -423,17 +440,21 @@ function runYearByYearSimulation(
     const colKey = getAdjustedCOLKey(currentHouseholdType);
     const adjustedCOL = locationData.adjustedCOL[colKey] || 0;
     
-    // Housing cost (rent or mortgage)
+    // Housing cost: rent BEFORE mortgage, calculated mortgage payment AFTER
+    // HARD LOCK: housingCost is ALWAYS rent OR mortgage, NEVER both
+    // HARD LOCK: After mortgageActive=true, rent must NEVER be included again
+    const bedroomSize = getRentType(currentHouseholdType);
     let housingCost = 0;
     if (hasMortgage) {
-      housingCost = locationData.housing.annualMortgagePayment || 0;
-      debugNotes.push(`Mortgage payment: $${housingCost}`);
+      // Use the dynamically calculated mortgage payment for the chosen house
+      housingCost = calculatedAnnualMortgagePayment;
+      debugNotes.push(`Mortgage payment: $${Math.round(housingCost)} (on $${Math.round(chosenHousePrice)} home)`);
     } else {
-      const rentType = getRentType(currentHouseholdType);
-      if (rentType === '1br') housingCost = locationData.rent.oneBedroomAnnual || 0;
-      else if (rentType === '2br') housingCost = locationData.rent.twoBedroomAnnual || 0;
+      // Rent based on bedroom size for current household type
+      if (bedroomSize === '1br') housingCost = locationData.rent.oneBedroomAnnual || 0;
+      else if (bedroomSize === '2br') housingCost = locationData.rent.twoBedroomAnnual || 0;
       else housingCost = locationData.rent.threeBedroomAnnual || 0;
-      debugNotes.push(`Rent (${rentType}): $${housingCost}`);
+      debugNotes.push(`Rent (${bedroomSize}): $${housingCost}`);
     }
     
     const totalCOL = adjustedCOL + housingCost;
@@ -552,20 +573,18 @@ function runYearByYearSimulation(
     }
     
     // PRIORITY 3: Savings
+    // Per algorithm: savings = savings * (1 + savingsGrowthRate) + remainingEDI
+    // Growth applies ALWAYS (even if no new contribution), then add remaining EDI
     const savingsStartYear = savings;
-    if (remainingEDI > 0) {
-      savingsContribution = remainingEDI;
-      
-      // Apply 3% growth to existing savings
-      const savingsGrowth = savings * SAVINGS_GROWTH_RATE;
-      savings = savings + savingsGrowth + savingsContribution;
-      
-      debugNotes.push(
-        `Savings: $${savingsStartYear.toFixed(0)} + $${savingsGrowth.toFixed(0)} growth + ` +
-        `$${savingsContribution.toFixed(0)} contribution = $${savings.toFixed(0)}`
-      );
-    }
-    
+    savingsContribution = Math.max(0, remainingEDI);
+    const savingsGrowth = savings * SAVINGS_GROWTH_RATE;
+    savings = savings + savingsGrowth + savingsContribution;
+
+    debugNotes.push(
+      `Savings: $${savingsStartYear.toFixed(0)} + $${savingsGrowth.toFixed(0)} growth + ` +
+      `$${savingsContribution.toFixed(0)} contribution = $${savings.toFixed(0)}`
+    );
+
     // Ensure savings never go negative
     savings = Math.max(MIN_SAVINGS, savings);
 
@@ -593,23 +612,30 @@ function runYearByYearSimulation(
     }
 
     // === CHECK MORTGAGE READINESS ===
+    // Mortgage acquisition: when savings >= downPayment + firstYearPayment (formula-calculated)
+    // housePriceChosen = median home price for this location
+    // After this point, rent must NEVER be used again
     let mortgageAcquiredThisYear = false;
     if (!hasMortgage && loanDebt === 0) {
       const canGetMortgage = checkMortgageHardRules(profile.hardRules, loanDebt);
-      
-      if (canGetMortgage && locationData.housing) {
-        const downPayment = locationData.housing.downPaymentValue || 0;
-        const firstYearPayment = locationData.housing.annualMortgagePayment || 0;
-        const mortgageThreshold = downPayment + firstYearPayment;
-        
+
+      if (canGetMortgage && medianHomePrice > 0) {
+        // Use formula-calculated mortgage costs (not pre-calculated location data values)
+        // required = downPaymentPercent * housePriceChosen + annualMortgagePayment(housePriceChosen)
+        const mortgageThreshold = medianDownPayment + medianAnnualPayment;
+
         if (savings >= mortgageThreshold && mortgageThreshold > 0) {
           hasMortgage = true;
           mortgageAcquiredThisYear = true;
+          chosenHousePrice = medianHomePrice;
+          calculatedAnnualMortgagePayment = medianAnnualPayment;
           savings -= mortgageThreshold;
-          savings = Math.max(MIN_SAVINGS, savings); // Ensure non-negative
+          savings = Math.max(MIN_SAVINGS, savings);
           debugNotes.push(
-            `MORTGAGE ACQUIRED! Paid $${downPayment} down + $${firstYearPayment} first year, ` +
-            `new savings: $${savings.toFixed(0)}`
+            `MORTGAGE ACQUIRED! House: $${Math.round(chosenHousePrice)}, ` +
+            `Down payment: $${Math.round(medianDownPayment)} (${(downPaymentPct * 100).toFixed(1)}%), ` +
+            `Annual payment: $${Math.round(medianAnnualPayment)}, ` +
+            `Remaining savings: $${Math.round(savings)}`
           );
         }
       }
@@ -929,7 +955,7 @@ function calculateHouseProjections(
     // Use no-mortgage savings: "if you saved X years without buying, what could you afford?"
     const savings = snapshot.savingsNoMortgage;
     const downPaymentPercent = locationData.housing.downPaymentPercent || 0.107;
-    const mortgageRate = locationData.housing.mortgageRate || 0.03;
+    const mortgageRate = locationData.housing.mortgageRate || 0.065;
     
     // Sanity check
     if (downPaymentPercent <= 0 || downPaymentPercent > 1) {
