@@ -66,6 +66,8 @@ export interface OnboardingAnswers {
   plannedRelationshipAge?: number; // If planning relationship
   kidsPlan: KidsPlan;
   firstKidAge?: number; // If planning kids
+  secondKidAge?: number; // If planning 2nd kid (optional)
+  thirdKidAge?: number; // If planning 3rd kid (optional)
   numKids?: number; // If already have kids
   planMoreKids?: boolean; // If already have kids (boolean not string)
   plannedNextKidAge?: number; // If planning more kids

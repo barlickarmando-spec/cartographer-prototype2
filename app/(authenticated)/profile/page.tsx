@@ -19,6 +19,8 @@ export default function ProfilePage() {
   const [show5YearHomes, setShow5YearHomes] = useState(false);
   const [show10YearHomes, setShow10YearHomes] = useState(false);
   const [show15YearHomes, setShow15YearHomes] = useState(false);
+  const [showMaxHomes, setShowMaxHomes] = useState(false);
+  const [showYearByYear, setShowYearByYear] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
 
   const loadResults = useCallback((stored: string | null, storedAnswers: string | null) => {
@@ -465,107 +467,230 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* FAMILY PLANNING SECTION - Simplified */}
-        {result.kidViability && (
-          <div className="px-8 py-6 bg-white border-t border-[#E5E7EB]">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
-                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-gray-900">Minimum Viable Age for Kids</h3>
-                <p className="text-sm text-gray-600">When you can afford each child while staying on track</p>
-              </div>
-            </div>
+        {/* FAMILY PLANNING SECTION - Vertical Timeline */}
+        {result.kidViability && result.kidViability.firstKid.reason !== 'User does not plan to have kids' && (() => {
+          const currentAge = result.yearByYear[0]?.age ?? 0;
+          const currentYear = new Date().getFullYear();
+          const kv = result.kidViability;
 
-            {result.kidViability.firstKid.isViable ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* 1st Kid */}
-                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-6 border-2 border-purple-200">
-                  <p className="text-sm font-medium text-purple-700 mb-2">1st Child</p>
-                  <div className="flex items-baseline gap-2">
-                    <p className="text-5xl font-bold text-purple-900">
-                      {result.kidViability.firstKid.minimumAge}
-                    </p>
-                    <p className="text-lg text-purple-700">years old</p>
-                  </div>
-                  <p className="text-sm text-purple-600 mt-2">
-                    In {pluralize(result.kidViability.firstKid.minimumAge! - result.yearByYear[0]?.age, 'year')}
-                  </p>
-                </div>
+          const kids = [
+            { key: 'first', label: '1st Child', viability: kv.firstKid, color: 'purple' as const, dotSize: 'w-6 h-6', ageText: 'text-4xl', padding: 'p-5' },
+            { key: 'second', label: '2nd Child', viability: kv.secondKid, color: 'blue' as const, dotSize: 'w-5 h-5', ageText: 'text-3xl', padding: 'p-4' },
+            { key: 'third', label: '3rd Child', viability: kv.thirdKid, color: 'indigo' as const, dotSize: 'w-4 h-4', ageText: 'text-3xl', padding: 'p-4' },
+          ];
+          const allAlreadyHave = kids.every(k => k.viability.reason === 'already-have');
+          const firstCalculatedKid = kids.find(k => k.viability.reason !== 'already-have');
+          const hasAnyViableOrExisting = kids.some(k => k.viability.isViable);
 
-                {/* 2nd Kid */}
-                <div className={`bg-gradient-to-br rounded-xl p-6 border-2 ${
-                  result.kidViability.secondKid.isViable 
-                    ? 'from-blue-50 to-blue-100 border-blue-200' 
-                    : 'from-gray-50 to-gray-100 border-gray-200'
-                }`}>
-                  <p className={`text-sm font-medium mb-2 ${
-                    result.kidViability.secondKid.isViable ? 'text-blue-700' : 'text-gray-500'
-                  }`}>2nd Child</p>
-                  {result.kidViability.secondKid.isViable ? (
-                    <>
-                      <div className="flex items-baseline gap-2">
-                        <p className="text-5xl font-bold text-blue-900">
-                          {result.kidViability.secondKid.minimumAge}
-                        </p>
-                        <p className="text-lg text-blue-700">years old</p>
-                      </div>
-                      <p className="text-sm text-blue-600 mt-2">
-                        In {pluralize(result.kidViability.secondKid.minimumAge! - result.yearByYear[0]?.age, 'year')}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-sm text-gray-600">Not viable</p>
-                  )}
-                </div>
+          const colorMap = {
+            purple: { dot: 'bg-purple-500', bg: 'from-purple-50 to-white', border: 'border-purple-200', label: 'text-purple-600', age: 'text-purple-900', text: 'text-purple-700', chipBorder: 'border-purple-100' },
+            blue: { dot: 'bg-blue-500', bg: 'from-blue-50 to-white', border: 'border-blue-200', label: 'text-blue-600', age: 'text-blue-900', text: 'text-blue-700', chipBorder: 'border-blue-100' },
+            indigo: { dot: 'bg-indigo-500', bg: 'from-indigo-50 to-white', border: 'border-indigo-200', label: 'text-indigo-600', age: 'text-indigo-900', text: 'text-indigo-700', chipBorder: 'border-indigo-100' },
+          };
 
-                {/* 3rd Kid */}
-                <div className={`bg-gradient-to-br rounded-xl p-6 border-2 ${
-                  result.kidViability.thirdKid.isViable 
-                    ? 'from-indigo-50 to-indigo-100 border-indigo-200' 
-                    : 'from-gray-50 to-gray-100 border-gray-200'
-                }`}>
-                  <p className={`text-sm font-medium mb-2 ${
-                    result.kidViability.thirdKid.isViable ? 'text-indigo-700' : 'text-gray-500'
-                  }`}>3rd Child</p>
-                  {result.kidViability.thirdKid.isViable ? (
-                    <>
-                      <div className="flex items-baseline gap-2">
-                        <p className="text-5xl font-bold text-indigo-900">
-                          {result.kidViability.thirdKid.minimumAge}
-                        </p>
-                        <p className="text-lg text-indigo-700">years old</p>
-                      </div>
-                      <p className="text-sm text-indigo-600 mt-2">
-                        In {pluralize(result.kidViability.thirdKid.minimumAge! - result.yearByYear[0]?.age, 'year')}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-sm text-gray-600">Not viable</p>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="bg-yellow-50 rounded-lg p-6 border-2 border-yellow-200">
-                <div className="flex items-start gap-3">
-                  <svg className="w-6 h-6 text-yellow-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          return (
+            <div className="px-8 py-6 bg-white border-t border-[#E5E7EB]">
+              {/* Section Header */}
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
-                  <div>
-                    <h4 className="font-semibold text-gray-900 mb-2">Family Planning Not Currently Viable</h4>
-                    <p className="text-sm text-gray-700">
-                      {result.kidViability.firstKid.reason || 
-                        `Based on current projections, having children in ${result.location} would make homeownership significantly more difficult.`}
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Minimum Viable Age for Kids</h3>
+                  <p className="text-sm text-gray-600">When you can afford each child while staying on track</p>
+                </div>
+              </div>
+
+              {allAlreadyHave ? (
+                /* All 3 kids already exist */
+                <div className="bg-green-50 rounded-xl p-5 border border-green-200">
+                  <div className="flex items-center gap-3">
+                    <svg className="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p className="text-sm text-green-800">
+                      You already have 3+ children &mdash; family costs are factored into your financial projections.
                     </p>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              ) : !hasAnyViableOrExisting ? (
+                /* None viable at all - enhanced warning */
+                <div className="bg-amber-50 rounded-xl p-6 border border-amber-200">
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-900 mb-1">Family Planning Not Currently Viable</h4>
+                      <p className="text-sm text-gray-700 mb-4">
+                        {kv.firstKid.reason ||
+                          `Based on current projections, having children in ${result.location} would make homeownership significantly more difficult.`}
+                      </p>
+                      <div className="bg-white rounded-lg p-3 border border-amber-100">
+                        <p className="text-xs font-medium text-gray-600 mb-2">What we checked</p>
+                        <ul className="space-y-1 text-xs text-gray-500">
+                          <li className="flex items-center gap-2">
+                            <span className="w-1 h-1 bg-gray-400 rounded-full flex-shrink-0" />
+                            Positive disposable income for 3 years after birth
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <span className="w-1 h-1 bg-gray-400 rounded-full flex-shrink-0" />
+                            Debt not growing during that period
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <span className="w-1 h-1 bg-gray-400 rounded-full flex-shrink-0" />
+                            Savings above $5,000 safety net
+                          </li>
+                        </ul>
+                        <p className="text-xs text-gray-400 mt-2">
+                          Tested every year from now through age {currentAge + 25}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* Timeline layout - mix of already-have, viable, and not-viable */
+                <div className="relative pl-8">
+                  {/* Vertical spine */}
+                  <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gradient-to-b from-purple-300 via-blue-300 to-indigo-300" />
+
+                  <div className="space-y-5">
+                    {kids.map((kid, idx) => {
+                      const v = kid.viability;
+                      const prevKid = idx > 0 ? kids[idx - 1] : null;
+                      const c = colorMap[kid.color];
+
+                      // Gap indicator: only between two calculated (non-already-have) viable kids
+                      const gap = (v.minimumAge && v.reason !== 'already-have' && prevKid?.viability.minimumAge && prevKid.viability.reason !== 'already-have')
+                        ? v.minimumAge - prevKid.viability.minimumAge
+                        : null;
+
+                      // Already-have state
+                      if (v.reason === 'already-have') {
+                        return (
+                          <div key={kid.key} className="relative">
+                            <div className={`absolute -left-8 top-3 ${kid.dotSize} bg-green-500 rounded-full border-4 border-white shadow-sm z-10`} />
+                            <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+                              <div className="flex items-center gap-2">
+                                <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                <span className="text-xs font-semibold uppercase tracking-wider text-green-700">{kid.label}</span>
+                                <span className="text-xs text-green-600 ml-auto">Already here</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // Not-viable state
+                      if (!v.isViable) {
+                        return (
+                          <div key={kid.key} className="relative">
+                            <div className={`absolute -left-8 top-3 ${kid.dotSize} bg-white rounded-full border-2 border-gray-300 z-10`} />
+                            <div className="bg-gray-50 rounded-xl p-4 border border-dashed border-gray-300">
+                              <div className="flex items-start gap-3">
+                                <svg className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <div>
+                                  <p className="text-sm font-medium text-gray-500 mb-1">{kid.label} &mdash; Not currently viable</p>
+                                  <p className="text-xs text-gray-400">
+                                    {v.reason || 'Could not find a financially sustainable age within the projection window'}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // Viable state - full card
+                      const kidAge = v.minimumAge!;
+                      const yearsFromNow = kidAge - currentAge;
+                      const calendarYear = currentYear + yearsFromNow;
+                      const isFirstCalculated = !prevKid || prevKid.viability.reason === 'already-have';
+
+                      return (
+                        <div key={kid.key} className="relative">
+                          <div className={`absolute -left-8 top-4 ${kid.dotSize} ${c.dot} rounded-full border-4 border-white shadow-sm z-10`} />
+
+                          {gap !== null && gap > 0 && (
+                            <div className="mb-2 flex items-center gap-2 text-xs text-gray-400">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span>{pluralize(gap, 'year')} gap from previous child</span>
+                            </div>
+                          )}
+
+                          <div className={`bg-gradient-to-br ${c.bg} rounded-xl ${kid.padding} border ${c.border} shadow-sm`}>
+                            <div className="flex items-center justify-between mb-3">
+                              <span className={`text-xs font-semibold uppercase tracking-wider ${c.label}`}>{kid.label}</span>
+                              {(idx === 0 || isFirstCalculated) && (
+                                <span className={`text-xs font-medium bg-white ${c.label} px-2.5 py-0.5 rounded-full border ${c.chipBorder}`}>
+                                  Earliest viable
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-baseline gap-3 mb-4">
+                              <span className={`${kid.ageText} font-bold ${c.age}`}>{kidAge}</span>
+                              <span className={`text-sm ${c.text}`}>years old</span>
+                              <span className={`text-sm ${c.label} ml-auto`}>
+                                {yearsFromNow <= 0 ? 'Now' : `In ${pluralize(yearsFromNow, 'year')}`}
+                              </span>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              <div className={`flex items-center gap-1.5 bg-white rounded-lg px-3 py-1.5 border ${c.chipBorder} text-xs`}>
+                                <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                <span className="text-gray-600">{calendarYear}</span>
+                              </div>
+
+                              {result.ageMortgageAcquired > 0 && result.ageMortgageAcquired <= kidAge && (
+                                <div className="flex items-center gap-1.5 bg-white rounded-lg px-3 py-1.5 border border-green-100 text-xs">
+                                  <svg className="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                  </svg>
+                                  <span className="text-green-700">Homeowner by then</span>
+                                </div>
+                              )}
+                              {result.ageMortgageAcquired > 0 && result.ageMortgageAcquired > kidAge && (
+                                <div className="flex items-center gap-1.5 bg-white rounded-lg px-3 py-1.5 border border-amber-100 text-xs">
+                                  <svg className="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                  </svg>
+                                  <span className="text-amber-700">{pluralize(result.ageMortgageAcquired - kidAge, 'year')} before homeownership</span>
+                                </div>
+                              )}
+
+                              {result.ageDebtFree > 0 && result.ageDebtFree <= kidAge && (
+                                <div className="flex items-center gap-1.5 bg-white rounded-lg px-3 py-1.5 border border-green-100 text-xs">
+                                  <svg className="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  <span className="text-green-700">Debt-free by then</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* BOTTOM SECTION - House Projections */}
         <div className="px-8 py-6">
@@ -618,7 +743,147 @@ export default function ProfilePage() {
                 onToggle={() => setShow15YearHomes(!show15YearHomes)}
               />
             )}
+
+            {/* Max Affordable (Sustainability Ceiling) */}
+            {result.houseProjections.maxAffordable && (
+              <div className="relative">
+                <div className="absolute -top-3 left-4 z-10">
+                  <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm">
+                    INCOME CEILING
+                  </span>
+                </div>
+                <HouseProjectionCard
+                  title="Max Affordable (Sustainability Cap)"
+                  projection={result.houseProjections.maxAffordable}
+                  location={result.location}
+                  showHomes={showMaxHomes}
+                  onToggle={() => setShowMaxHomes(!showMaxHomes)}
+                />
+              </div>
+            )}
           </div>
+
+          {/* Show Your Work - Year-by-Year Breakdown */}
+          {result.yearByYear.length > 0 && (
+            <div className="mt-6">
+              <button
+                onClick={() => setShowYearByYear(!showYearByYear)}
+                className="w-full flex items-center justify-between px-6 py-4 bg-[#F8FAFB] border border-[#E5E7EB] rounded-xl hover:bg-[#EFF6FF] transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <svg className="w-5 h-5 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  <span className="font-semibold text-[#2C3E50]">Show Your Work - Year-by-Year Breakdown</span>
+                </div>
+                <svg
+                  className={`w-5 h-5 text-[#6B7280] transition-transform ${showYearByYear ? 'rotate-180' : ''}`}
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showYearByYear && (
+                <div className="mt-3 bg-white border border-[#E5E7EB] rounded-xl overflow-hidden">
+                  <div className="px-6 py-4 bg-[#F8FAFB] border-b border-[#E5E7EB]">
+                    <p className="text-sm text-[#6B7280]">
+                      This table shows the complete year-by-year simulation. &quot;No-Mtg Savings&quot; is used for house projections (what you&apos;d have if you kept saving without buying).
+                    </p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-[#F8FAFB] border-b border-[#E5E7EB]">
+                          <th className="px-3 py-2 text-left font-semibold text-[#2C3E50] sticky left-0 bg-[#F8FAFB] z-10">Year</th>
+                          <th className="px-3 py-2 text-left font-semibold text-[#2C3E50]">Age</th>
+                          <th className="px-3 py-2 text-left font-semibold text-[#2C3E50]">Event</th>
+                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Income</th>
+                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Adj COL</th>
+                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Housing</th>
+                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">DI</th>
+                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">EDI (70%)</th>
+                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Loan Debt</th>
+                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">CC Paid</th>
+                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Savings</th>
+                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">No-Mtg Savings</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {result.yearByYear.map((snap, i) => {
+                          const event = snap.mortgageAcquiredThisYear ? 'Mortgage' :
+                            snap.kidBornThisYear > 0 ? `Kid #${snap.kidBornThisYear}` :
+                            snap.relationshipStartedThisYear ? 'Relationship' :
+                            (snap.loanDebtEnd === 0 && (i > 0 && result.yearByYear[i-1].loanDebtEnd > 0)) ? 'Debt-free' :
+                            '';
+                          const isHighlight = snap.year === 3 || snap.year === 5 || snap.year === 10 || snap.year === 15;
+                          return (
+                            <tr
+                              key={snap.year}
+                              className={`border-b border-[#F3F4F6] ${isHighlight ? 'bg-blue-50/50' : i % 2 === 0 ? 'bg-white' : 'bg-[#FAFBFC]'} ${event ? 'font-medium' : ''}`}
+                            >
+                              <td className={`px-3 py-2 sticky left-0 z-10 ${isHighlight ? 'bg-blue-50/50' : i % 2 === 0 ? 'bg-white' : 'bg-[#FAFBFC]'}`}>
+                                {snap.year}
+                              </td>
+                              <td className="px-3 py-2">{snap.age}</td>
+                              <td className="px-3 py-2">
+                                {event && (
+                                  <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    event === 'Mortgage' ? 'bg-green-100 text-green-700' :
+                                    event.startsWith('Kid') ? 'bg-purple-100 text-purple-700' :
+                                    event === 'Debt-free' ? 'bg-blue-100 text-blue-700' :
+                                    'bg-gray-100 text-gray-700'
+                                  }`}>
+                                    {event}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-right">${snap.totalIncome.toLocaleString()}</td>
+                              <td className="px-3 py-2 text-right">${snap.adjustedCOL.toLocaleString()}</td>
+                              <td className="px-3 py-2 text-right">
+                                <span className={snap.hasMortgage ? 'text-green-600' : ''}>
+                                  ${snap.housingCost.toLocaleString()}
+                                </span>
+                              </td>
+                              <td className={`px-3 py-2 text-right ${snap.disposableIncome < 0 ? 'text-red-600' : ''}`}>
+                                ${snap.disposableIncome.toLocaleString()}
+                              </td>
+                              <td className="px-3 py-2 text-right">${Math.round(snap.effectiveDisposableIncome).toLocaleString()}</td>
+                              <td className={`px-3 py-2 text-right ${snap.loanDebtEnd > 0 ? 'text-red-500' : 'text-green-600'}`}>
+                                ${Math.round(snap.loanDebtEnd).toLocaleString()}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                {snap.ccDebtPayment > 0 ? `$${snap.ccDebtPayment.toLocaleString()}` : ''}
+                              </td>
+                              <td className="px-3 py-2 text-right font-medium">${Math.round(snap.savingsEnd).toLocaleString()}</td>
+                              <td className="px-3 py-2 text-right text-[#5BA4E5] font-medium">${Math.round(snap.savingsNoMortgage).toLocaleString()}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Formula explanation */}
+                  <div className="px-6 py-4 bg-[#F8FAFB] border-t border-[#E5E7EB] space-y-2">
+                    <h4 className="font-semibold text-[#2C3E50] text-sm">How it works:</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-[#6B7280]">
+                      <div>
+                        <p><strong>DI</strong> = Income - (Adj COL + Housing)</p>
+                        <p><strong>EDI</strong> = DI x Allocation %</p>
+                        <p><strong>Priority Stack:</strong> CC Debt &rarr; Student Loans &rarr; Savings</p>
+                      </div>
+                      <div>
+                        <p><strong>Savings Growth:</strong> 3% annual on existing balance</p>
+                        <p><strong>Mortgage Threshold:</strong> Down Payment + 1st Year Payment</p>
+                        <p><strong>Sustainability Cap:</strong> Max house where annual cost &le; allocated worst-case DI</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

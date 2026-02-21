@@ -99,6 +99,7 @@ export interface CalculationResult {
     fiveYears: HouseProjection | null;
     tenYears: HouseProjection | null;
     fifteenYears: HouseProjection | null;
+    maxAffordable: HouseProjection | null;
   };
   
   // Kid viability
@@ -930,6 +931,7 @@ function calculateHouseProjections(
   fiveYears: HouseProjection | null;
   tenYears: HouseProjection | null;
   fifteenYears: HouseProjection | null;
+  maxAffordable: HouseProjection | null;
 } {
   const targets = [3, 5, 10, 15];
   const projections: any = {
@@ -937,6 +939,7 @@ function calculateHouseProjections(
     fiveYears: null,
     tenYears: null,
     fifteenYears: null,
+    maxAffordable: null,
   };
   
   for (const targetYear of targets) {
@@ -1041,7 +1044,82 @@ function calculateHouseProjections(
       canAfford,
     };
   }
-  
+
+  // === MAX AFFORDABLE PROJECTION ===
+  // The sustainability ceiling: the absolute max house price your income can ever support,
+  // regardless of how long you save. Uses the worst-case (income - adjustedCOL) across
+  // ALL simulation years to find the income-based cap.
+  if (simulation.length > 0 && locationData.housing) {
+    const downPaymentPercent = locationData.housing.downPaymentPercent || 0.107;
+    const mortgageRate = locationData.housing.mortgageRate || 0.065;
+    const annualCostFactor = calculateAnnualCostFactor(mortgageRate, downPaymentPercent);
+    const allocationPercent = profile.disposableIncomeAllocation / 100;
+
+    // Find worst-case (income - adjustedCOL) across entire simulation
+    let worstCaseIncome = simulation[0].totalIncome;
+    let worstCaseAdjustedCOL = simulation[0].adjustedCOL;
+    for (const snap of simulation) {
+      const available = snap.totalIncome - snap.adjustedCOL;
+      const currentWorst = worstCaseIncome - worstCaseAdjustedCOL;
+      if (available < currentWorst) {
+        worstCaseIncome = snap.totalIncome;
+        worstCaseAdjustedCOL = snap.adjustedCOL;
+      }
+    }
+
+    const worstCaseDI = worstCaseIncome - worstCaseAdjustedCOL;
+    const maxAnnualPayment = Math.max(0, worstCaseDI * allocationPercent);
+
+    // Binary search for max sustainable price
+    let sustainablePrice = 0;
+    let low = 0;
+    let high = 10_000_000; // Search up to $10M
+    for (let i = 0; i < 25; i++) {
+      const mid = (low + high) / 2;
+      const annualPayment = calculateTotalAnnualCosts(mid, downPaymentPercent, annualCostFactor);
+      if (annualPayment <= maxAnnualPayment) {
+        sustainablePrice = mid;
+        low = mid;
+      } else {
+        high = mid;
+      }
+    }
+
+    // Find when savings first meet this sustainability cap's threshold
+    const totalCostFactor = downPaymentPercent + ((1 - downPaymentPercent) * annualCostFactor);
+    const savingsNeeded = sustainablePrice * totalCostFactor;
+    const capReachedSnapshot = simulation.find(s => s.savingsNoMortgage >= savingsNeeded);
+
+    // Use the last simulation year as reference for savings
+    const lastSnapshot = simulation[simulation.length - 1];
+    const refSnapshot = capReachedSnapshot || lastSnapshot;
+    const maxSavings = refSnapshot.savingsNoMortgage;
+
+    // Savings-based max at the reference year
+    const maxPossibleHousePrice = maxSavings / totalCostFactor;
+    const actualMax = Math.min(maxPossibleHousePrice, sustainablePrice);
+
+    const sustainableDP = sustainablePrice * downPaymentPercent;
+    const sustainableAP = calculateTotalAnnualCosts(sustainablePrice, downPaymentPercent, annualCostFactor);
+    const postMortgageDI = worstCaseDI - sustainableAP;
+    const canAfford = maxSavings >= (sustainableDP + sustainableAP);
+
+    projections.maxAffordable = {
+      year: refSnapshot.year,
+      age: refSnapshot.age,
+      totalSavings: Math.round(maxSavings),
+      maxPossibleHousePrice: Math.round(maxPossibleHousePrice),
+      downPaymentRequired: Math.round(actualMax * downPaymentPercent),
+      firstYearPaymentRequired: Math.round(calculateTotalAnnualCosts(actualMax, downPaymentPercent, annualCostFactor)),
+      maxSustainableHousePrice: Math.round(sustainablePrice),
+      sustainableDownPayment: Math.round(sustainableDP),
+      sustainableAnnualPayment: Math.round(sustainableAP),
+      postMortgageDisposableIncome: Math.round(postMortgageDI),
+      sustainabilityLimited: sustainablePrice < maxPossibleHousePrice,
+      canAfford,
+    };
+  }
+
   return projections;
 }
 
@@ -1070,7 +1148,7 @@ function calculateKidViability(
   secondKid: KidViabilityResult;
   thirdKid: KidViabilityResult;
 } {
-  
+
   // If user doesn't plan kids, mark as not viable
   if (profile.kidsPlan === 'no') {
     const notPlanned: KidViabilityResult = {
@@ -1083,99 +1161,102 @@ function calculateKidViability(
       thirdKid: notPlanned,
     };
   }
-  
-  // If user already has kids, they're past this calculation
-  if (profile.kidsPlan === 'have-kids' && profile.numKids && profile.numKids > 0) {
-    return {
-      firstKid: { isViable: true, minimumAge: profile.currentAge },
-      secondKid: { isViable: true, minimumAge: profile.currentAge },
-      thirdKid: { isViable: true, minimumAge: profile.currentAge },
-    };
+
+  // If user already has kids, mark existing ones and calculate additional
+  const existingKids = (profile.kidsPlan === 'have-kids' && profile.numKids) ? profile.numKids : 0;
+  const alreadyHave: KidViabilityResult = { isViable: true, minimumAge: profile.currentAge, reason: 'already-have' };
+
+  if (existingKids >= 3) {
+    return { firstKid: alreadyHave, secondKid: alreadyHave, thirdKid: alreadyHave };
   }
-  
+
+  // Build results: mark existing kids as already-have, calculate the rest
   const results: KidViabilityResult[] = [];
-  
-  // Check viability for up to 3 kids
+  const previousKidAges: number[] = [];
+
   for (let kidNum = 1; kidNum <= 3; kidNum++) {
-    const minAge = findMinimumViableKidAge(profile, locationData, kidNum);
-    results.push(minAge);
+    if (kidNum <= existingKids) {
+      // User already has this kid — existing kids are baked into the simulation's
+      // starting currentNumKids, so no previousKidAges entry needed
+      results.push(alreadyHave);
+    } else {
+      // Calculate minimum viable age for this additional kid
+      const result = findMinimumViableKidAge(profile, locationData, kidNum, previousKidAges);
+      results.push(result);
+      if (result.isViable && result.minimumAge !== undefined) {
+        previousKidAges.push(result.minimumAge);
+      }
+    }
   }
-  
-  return {
-    firstKid: results[0],
-    secondKid: results[1],
-    thirdKid: results[2],
-  };
+
+  return { firstKid: results[0], secondKid: results[1], thirdKid: results[2] };
 }
 
 function findMinimumViableKidAge(
   profile: UserProfile,
   locationData: LocationData,
-  kidNumber: number
+  kidNumber: number,
+  previousKidAges: number[]
 ): KidViabilityResult {
-  
-  // Don't short-circuit on hard rules - let the binary search find the age when
-  // hard rules ARE satisfied (e.g., after debt is paid off). The simulation already
-  // enforces hard rules year-by-year, so the search will naturally skip ages where
-  // rules block the birth and find the earliest viable age.
 
-  // Binary search for minimum age
-  let low = profile.currentAge;
-  let high = profile.currentAge + 20; // Search up to 20 years in future
-  let minViableAge = -1;
+  // If previous kid wasn't viable, this one can't be either
+  if (kidNumber > 1 && previousKidAges.length < kidNumber - 1) {
+    return {
+      isViable: false,
+      reason: `Child #${kidNumber - 1} is not viable, so #${kidNumber} cannot be either`,
+    };
+  }
 
-  for (let iter = 0; iter < 15; iter++) {
-    const testAge = Math.floor((low + high) / 2);
+  // The earliest this kid can be born is after the previous kid
+  const searchStart = previousKidAges.length > 0
+    ? Math.max(profile.currentAge, previousKidAges[previousKidAges.length - 1] + 1)
+    : profile.currentAge;
+  const searchEnd = profile.currentAge + 25;
 
-    // Create test profile with kid at this age
+  // Linear search: test every year to find the earliest viable age
+  for (let testAge = searchStart; testAge <= searchEnd; testAge++) {
+    // Build cumulative kid ages: all previous kids + this kid at testAge
+    const testKidAges = [...previousKidAges, testAge];
+
     const testProfile = {
       ...profile,
-      plannedKidAges: [testAge],
+      plannedKidAges: testKidAges,
     };
 
-    // Run simulation long enough to cover the full search range + 3 years post-birth check
-    const testSim = runYearByYearSimulation(testProfile, locationData, 25);
-    
-    // Find the year when kid is born
-    const kidBirthYear = testSim.snapshots.findIndex(s => s.kidBornThisYear === kidNumber);
-    
-    if (kidBirthYear < 0) {
-      // Kid wasn't born (blocked by hard rules probably)
-      low = testAge + 1;
+    // Run simulation long enough to cover testAge + 3 years post-birth check
+    const simYears = (testAge - profile.currentAge) + 5;
+    const testSim = runYearByYearSimulation(testProfile, locationData, Math.max(simYears, 10));
+
+    // Find the year when THIS kid (kidNumber) is born
+    const kidBirthIdx = testSim.snapshots.findIndex(s => s.kidBornThisYear === kidNumber);
+
+    if (kidBirthIdx < 0) {
+      // Kid wasn't born (blocked by hard rules) — try next year
       continue;
     }
-    
+
     // Check 3 years after birth
-    const threeYearsLater = testSim.snapshots[kidBirthYear + 3];
-    
+    const threeYearsLater = testSim.snapshots[kidBirthIdx + 3];
+
     if (threeYearsLater) {
-      const isViable = 
+      const isViable =
         threeYearsLater.disposableIncome > 0 &&
         threeYearsLater.loanDebtEnd <= threeYearsLater.loanDebtStart &&
         threeYearsLater.savingsEnd > 5000;
-      
+
       if (isViable) {
-        minViableAge = testAge;
-        high = testAge - 1; // Try earlier
-      } else {
-        low = testAge + 1; // Need later
+        return {
+          isViable: true,
+          minimumAge: testAge,
+        };
       }
-    } else {
-      low = testAge + 1; // Simulation didn't run long enough
     }
   }
-  
-  if (minViableAge > 0) {
-    return {
-      isViable: true,
-      minimumAge: minViableAge,
-    };
-  } else {
-    return {
-      isViable: false,
-      reason: 'Could not find viable age within 20 years',
-    };
-  }
+
+  return {
+    isViable: false,
+    reason: 'Could not find viable age within 25 years',
+  };
 }
 
 /**
@@ -1319,6 +1400,7 @@ function createErrorResult(
       fiveYears: null,
       tenYears: null,
       fifteenYears: null,
+      maxAffordable: null,
     },
     kidViability: {
       firstKid: { isViable: false, reason: 'Calculation failed' },

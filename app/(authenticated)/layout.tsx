@@ -22,7 +22,7 @@ export default function AuthenticatedLayout({
   const navItems = [
     { href: '/profile', label: 'Your Profile', icon: 'briefcase' },
     { href: '/debt-payoff', label: 'Debt Payoff', icon: 'calculator' },
-    { href: '/best-locations', label: 'Best Locations', icon: 'location' },
+    { href: '/my-locations', label: 'My Locations', icon: 'location' },
     { href: '/rent-vs-buy', label: 'Rent vs Buy', icon: 'house' },
     { href: '/home-affordability', label: 'Home Affordability', icon: 'dollar' },
     { href: '/job-finder', label: 'Job Finder', icon: 'chart' },
