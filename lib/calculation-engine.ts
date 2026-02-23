@@ -764,8 +764,9 @@ function classifyViability(
   }
   
   // Check if user's allocation is BELOW minimum required
-  // This means they need to allocate MORE to improve their timeline
-  if (userAllocation < minRequiredAllocation - 3) {
+  // But only if increasing allocation could actually help (minRequired < 100)
+  // If minRequired is 100 and mortgage is still unreachable, it's truly unviable
+  if (userAllocation < minRequiredAllocation - 3 && minRequiredAllocation < 100) {
     // User is significantly below minimum - needs to increase allocation
     return 'viable-higher-allocation';
   }
