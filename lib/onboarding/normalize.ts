@@ -124,10 +124,8 @@ export function normalizeOnboardingAnswers(answers: OnboardingAnswers): UserProf
     selectedLocations.push(answers.currentLocation);
   }
   
-  // If no locations selected, default to "Utah" (or any default you prefer)
-  if (selectedLocations.length === 0) {
-    selectedLocations.push('Utah');
-  }
+  // If no locations selected (e.g. "no idea"), leave empty.
+  // The onboarding page will calculate all locations and pick the best fits.
   
   const currentLocation = answers.currentLocation;
   

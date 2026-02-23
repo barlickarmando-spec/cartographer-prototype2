@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { CalculationResult, HouseProjection, calculateAutoApproach } from '@/lib/calculation-engine';
 import SimpleHomeCarousel from '@/components/SimpleHomeCarousel';
 import { formatCurrency, pluralize } from '@/lib/utils';
 import { normalizeOnboardingAnswers } from '@/lib/onboarding/normalize';
 import { getOnboardingAnswers } from '@/lib/storage';
+import { searchLocations, getAllLocationOptions } from '@/lib/locations';
 import type { OnboardingAnswers } from '@/lib/onboarding/types';
 
 export default function ProfilePage() {
@@ -22,6 +23,10 @@ export default function ProfilePage() {
   const [showMaxHomes, setShowMaxHomes] = useState(false);
   const [showYearByYear, setShowYearByYear] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
+  const [locationSearch, setLocationSearch] = useState('');
+  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+  const [locationSearchLoading, setLocationSearchLoading] = useState(false);
+  const locationDropdownRef = useRef<HTMLDivElement>(null);
 
   const loadResults = useCallback((stored: string | null, storedAnswers: string | null) => {
     if (!stored) {
@@ -93,7 +98,7 @@ export default function ProfilePage() {
         const profile = normalizeOnboardingAnswers(storedAnswers);
         const locations = profile.selectedLocations.length > 0
           ? profile.selectedLocations
-          : ['Utah'];
+          : getAllLocationOptions().filter(o => o.type === 'state').map(o => o.label);
 
         const results = locations.map(loc => {
           try {
@@ -125,6 +130,56 @@ export default function ProfilePage() {
       localStorage.getItem('onboarding-answers')
     );
   }, [loadResults]);
+
+  // Close location dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (locationDropdownRef.current && !locationDropdownRef.current.contains(e.target as Node)) {
+        setShowLocationDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Handle selecting a new location from search
+  const handleSelectLocation = useCallback((locationLabel: string) => {
+    setShowLocationDropdown(false);
+    setLocationSearch('');
+
+    // Check if already calculated
+    const existing = allResults.find(r => r.location === locationLabel);
+    if (existing) {
+      setSelectedResult(existing);
+      return;
+    }
+
+    // Calculate on-the-fly
+    const storedAnswers = getOnboardingAnswers<OnboardingAnswers>((d): d is OnboardingAnswers => d != null && typeof d === 'object');
+    if (!storedAnswers) return;
+
+    setLocationSearchLoading(true);
+    setTimeout(() => {
+      try {
+        const profile = normalizeOnboardingAnswers(storedAnswers);
+        const result = calculateAutoApproach(profile, locationLabel, 30);
+        if (result) {
+          const updated = [...allResults, result];
+          setAllResults(updated);
+          setSelectedResult(result);
+          localStorage.setItem('calculation-results', JSON.stringify(updated));
+        }
+      } catch (error) {
+        console.error('Error calculating new location:', error);
+      }
+      setLocationSearchLoading(false);
+    }, 10);
+  }, [allResults]);
+
+  // Get search matches for location dropdown
+  const locationSearchMatches = locationSearch.trim().length >= 1
+    ? searchLocations(locationSearch, 8)
+    : [];
 
   if (loading) {
     return (
@@ -174,33 +229,112 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-6">
-      {/* Location Selector (if multiple results) */}
-      {allResults.length > 1 && (
-        <div className="bg-white rounded-lg border border-[#E5E7EB] p-4">
-          <label className="block text-sm font-medium text-[#2C3E50] mb-2">
-            Viewing results for:
-          </label>
-          <select
-            value={result.location}
-            onChange={(e) => {
-              const newResult = allResults.find(r => r.location === e.target.value);
-              if (newResult) {
-                setSelectedResult(newResult);
-              }
-            }}
-            className="w-full md:w-auto px-4 py-2 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none"
-          >
-            {allResults.map((r) => (
-              <option key={r.location} value={r.location}>
-                {r.location} - {getViabilityLabel(r.viabilityClassification).label}
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-[#9CA3AF] mt-2">
-            Showing {allResults.findIndex(r => r.location === result.location) + 1} of {allResults.length} locations
-          </p>
+      {/* Location Selector - always shown with searchable dropdown */}
+      <div className="bg-white rounded-lg border border-[#E5E7EB] p-4">
+        <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+          Viewing results for:
+        </label>
+        <div ref={locationDropdownRef} className="relative">
+          <div className="relative">
+            <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+            </svg>
+            <input
+              type="text"
+              value={showLocationDropdown ? locationSearch : result.location}
+              onChange={(e) => {
+                setLocationSearch(e.target.value);
+                setShowLocationDropdown(true);
+              }}
+              onFocus={() => {
+                setLocationSearch('');
+                setShowLocationDropdown(true);
+              }}
+              placeholder="Search any state or city..."
+              className="w-full md:w-96 pl-10 pr-4 py-2 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none text-sm"
+            />
+            {locationSearchLoading && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#5BA4E5]"></div>
+              </div>
+            )}
+          </div>
+
+          {showLocationDropdown && (
+            <div className="absolute z-20 w-full md:w-96 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-72 overflow-y-auto">
+              {/* Already-calculated locations */}
+              {allResults.length > 1 && locationSearch.trim().length === 0 && (
+                <div>
+                  <div className="px-3 py-1.5 text-xs font-medium text-gray-400 uppercase tracking-wide bg-gray-50">
+                    Your Locations
+                  </div>
+                  {allResults.map(r => (
+                    <button
+                      key={r.location}
+                      onClick={() => { setSelectedResult(r); setShowLocationDropdown(false); setLocationSearch(''); }}
+                      className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
+                        r.location === result.location ? 'bg-[#EFF6FF] text-[#5BA4E5]' : 'hover:bg-gray-50 text-gray-700'
+                      }`}
+                    >
+                      <span>{r.location}</span>
+                      <span
+                        className="text-xs px-1.5 py-0.5 rounded-full font-medium"
+                        style={{ backgroundColor: getViabilityLabel(r.viabilityClassification).bgColor, color: getViabilityLabel(r.viabilityClassification).color }}
+                      >
+                        {getViabilityLabel(r.viabilityClassification).label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Search results */}
+              {locationSearch.trim().length >= 1 && (
+                <div>
+                  {locationSearchMatches.length > 0 ? (
+                    locationSearchMatches.map(match => {
+                      const alreadyCalc = allResults.find(r => r.location === match.label);
+                      return (
+                        <button
+                          key={match.label}
+                          onClick={() => handleSelectLocation(match.label)}
+                          className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                          </svg>
+                          <span className="text-gray-700">{match.label}</span>
+                          {alreadyCalc && (
+                            <span
+                              className="ml-auto text-xs px-1.5 py-0.5 rounded-full font-medium"
+                              style={{ backgroundColor: getViabilityLabel(alreadyCalc.viabilityClassification).bgColor, color: getViabilityLabel(alreadyCalc.viabilityClassification).color }}
+                            >
+                              {getViabilityLabel(alreadyCalc.viabilityClassification).label}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="px-4 py-3 text-sm text-gray-400">No matching locations</div>
+                  )}
+                </div>
+              )}
+
+              {/* Prompt when empty */}
+              {locationSearch.trim().length === 0 && allResults.length <= 1 && (
+                <div className="px-4 py-3 text-sm text-gray-400">Type to search any state or city...</div>
+              )}
+            </div>
+          )}
         </div>
-      )}
+        <p className="text-xs text-[#9CA3AF] mt-2">
+          {allResults.length > 1
+            ? `${allResults.length} locations calculated — search to add more`
+            : 'Search to explore any state or city'}
+        </p>
+      </div>
 
       {/* Recalculate Button */}
       <div className="flex justify-end">

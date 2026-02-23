@@ -114,7 +114,11 @@ export function getSavedLocations(): string[] {
  */
 export function setSavedLocations(locations: string[]): boolean {
   try {
-    return safeSetItem(KEY_SAVED_LOCATIONS, JSON.stringify(locations));
+    const result = safeSetItem(KEY_SAVED_LOCATIONS, JSON.stringify(locations));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('savedLocationsChanged'));
+    }
+    return result;
   } catch {
     return false;
   }

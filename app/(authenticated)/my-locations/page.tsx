@@ -353,6 +353,7 @@ export default function MyLocationsPage() {
   const [allCalculatedResults, setAllCalculatedResults] = useState<CalculationResult[]>([]);
   const [allCalcLoading, setAllCalcLoading] = useState(false);
   const [visibleOtherCount, setVisibleOtherCount] = useState(6);
+  const [visibleDefaultCount, setVisibleDefaultCount] = useState(6);
 
   // UI state
   const [loading, setLoading] = useState(true);
@@ -497,6 +498,7 @@ export default function MyLocationsPage() {
   // Reset pagination when sort or show mode changes
   useEffect(() => {
     setVisibleOtherCount(6);
+    setVisibleDefaultCount(6);
   }, [sortMode, showMode]);
 
   // ===== CLOSE DROPDOWNS ON OUTSIDE CLICK =====
@@ -531,7 +533,7 @@ export default function MyLocationsPage() {
 
   const handleSelectSearchResult = useCallback((locationLabel: string) => {
     setShowSearchDropdown(false);
-    setSearchQuery(locationLabel);
+    setSearchQuery('');
 
     const alreadyExists = userResults.find(r => r.location === locationLabel)
       || suggestedResults.find(r => r.location === locationLabel)
@@ -545,19 +547,15 @@ export default function MyLocationsPage() {
     }
 
     if (!profile) return;
-    setSearchLoading(true);
-    setTimeout(() => {
-      try {
-        const result = calculateAutoApproach(profile, locationLabel, 30);
-        if (result) {
-          searchCacheRef.current.set(locationLabel, result);
-          setSearchResultsList(prev => [result, ...prev.filter(r => r.location !== locationLabel)]);
-        }
-      } catch (error) {
-        console.error('Error calculating search result:', error);
+    try {
+      const result = calculateAutoApproach(profile, locationLabel, 30);
+      if (result) {
+        searchCacheRef.current.set(locationLabel, result);
+        setSearchResultsList(prev => [result, ...prev.filter(r => r.location !== locationLabel)]);
       }
-      setSearchLoading(false);
-    }, 50);
+    } catch (error) {
+      console.error('Error calculating search result:', error);
+    }
   }, [profile, userResults, suggestedResults, searchResultsList]);
 
   // ===== SAVE/UNSAVE TOGGLE =====
@@ -806,6 +804,16 @@ export default function MyLocationsPage() {
       r => !userLocationNames.has(r.location) && !suggestedLocationNames.has(r.location)
     );
 
+    // Combine all non-search, non-current results for paginated display
+    const allSectionResults = [...otherUserResults, ...suggestedResults].reduce<CalculationResult[]>((acc, r) => {
+      if (!acc.find(existing => existing.location === r.location) && r.location !== currentLocation) {
+        acc.push(r);
+      }
+      return acc;
+    }, []);
+    const visibleSectionResults = allSectionResults.slice(0, visibleDefaultCount);
+    const hasMoreDefault = visibleDefaultCount < allSectionResults.length;
+
     return (
       <div className="space-y-10">
         {/* Search Results */}
@@ -843,8 +851,8 @@ export default function MyLocationsPage() {
           </section>
         )}
 
-        {/* Your Locations */}
-        {otherUserResults.length > 0 && (
+        {/* Your Locations (paginated) */}
+        {allSectionResults.length > 0 && (
           <section>
             <div className="flex items-center gap-2 mb-4">
               <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] flex items-center justify-center">
@@ -853,36 +861,36 @@ export default function MyLocationsPage() {
                 </svg>
               </div>
               <h2 className="text-base font-semibold text-gray-800">Your Locations</h2>
+              <span className="text-xs text-gray-400 ml-1">({allSectionResults.length})</span>
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {otherUserResults.map(renderCard)}
-            </div>
+            {suggestionsLoading ? (
+              <div className="flex items-center gap-3 py-12 justify-center">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#5BA4E5]"></div>
+                <span className="text-gray-500 text-sm">Finding the best locations for you...</span>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {visibleSectionResults.map(renderCard)}
+                </div>
+                {hasMoreDefault && (
+                  <div className="flex justify-center mt-6">
+                    <button
+                      onClick={() => setVisibleDefaultCount(prev => prev + 6)}
+                      className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] hover:border-[#5BA4E5]/30 transition-all"
+                    >
+                      See More
+                      <span className="text-xs text-gray-400">({allSectionResults.length - visibleDefaultCount} remaining)</span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </section>
         )}
-
-        {/* Suggested For You */}
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] flex items-center justify-center">
-              <svg className="w-4 h-4 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
-              </svg>
-            </div>
-            <h2 className="text-base font-semibold text-gray-800">Suggested For You</h2>
-          </div>
-          {suggestionsLoading ? (
-            <div className="flex items-center gap-3 py-12 justify-center">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#5BA4E5]"></div>
-              <span className="text-gray-500 text-sm">Finding the best locations for you...</span>
-            </div>
-          ) : suggestedResults.length > 0 ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {suggestedResults.map(renderCard)}
-            </div>
-          ) : (
-            <p className="text-gray-400 text-sm py-4">No additional suggestions available.</p>
-          )}
-        </section>
       </div>
     );
   };

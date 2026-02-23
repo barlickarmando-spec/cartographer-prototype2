@@ -7,7 +7,8 @@ import Image from "next/image";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import type { OnboardingAnswers } from "@/lib/onboarding/types";
 import { normalizeOnboardingAnswers } from "@/lib/onboarding/normalize";
-import { getOnboardingAnswers, setOnboardingAnswers, setUserProfile } from "@/lib/storage";
+import { getOnboardingAnswers, setOnboardingAnswers, setUserProfile, setSavedLocations } from "@/lib/storage";
+import { getAllLocationOptions } from "@/lib/locations";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -37,39 +38,40 @@ export default function OnboardingPage() {
       setOnboardingAnswers(answers);
       setUserProfile(profile);
       
-      // Run calculations for selected locations
-      const locations = profile.selectedLocations.length > 0 
-        ? profile.selectedLocations 
-        : ['Utah']; // Default to Utah if no locations selected
-      
-      console.log('📍 Running calculations for locations:', locations);
-      console.log('👤 User profile:', {
-        age: profile.currentAge,
-        occupation: profile.userOccupation,
-        relationship: profile.relationshipStatus,
-        debt: profile.studentLoanDebt,
-        allocation: profile.disposableIncomeAllocation,
-      });
-      
+      const { calculateAutoApproach } = require('@/lib/calculation-engine');
+
+      // Determine which locations to calculate
+      let locations: string[];
+      const isNoIdea = profile.selectedLocations.length === 0;
+
+      if (isNoIdea) {
+        // "No idea" - calculate ALL states to find the best fits
+        locations = getAllLocationOptions()
+          .filter(o => o.type === 'state')
+          .map(o => o.label);
+        // No saved locations for "no idea" users
+        setSavedLocations([]);
+      } else {
+        locations = profile.selectedLocations;
+        // Auto-save explicitly selected locations as favorites
+        setSavedLocations([...locations]);
+      }
+
       const results = locations.map(loc => {
         try {
-          console.log(`Calculating for ${loc}...`);
-          const { calculateAutoApproach } = require('@/lib/calculation-engine');
           const result = calculateAutoApproach(profile, loc, 30);
-          console.log(`Calculation complete for ${loc}`);
           return result;
         } catch (error) {
           console.error(`Error calculating for ${loc}:`, error);
           return null;
         }
       }).filter(r => r !== null);
-      
+
       // Save results
       if (results.length > 0) {
         localStorage.setItem('calculation-results', JSON.stringify(results));
-        console.log(`💾 Saved ${results.length} calculation result(s)`);
       }
-      
+
       // Navigate to profile
       router.push('/profile');
     },
