@@ -14,7 +14,30 @@ import { searchLocations, getAllLocationOptions } from '@/lib/locations';
 
 // ===== TYPES =====
 
-type FilterMode = 'all' | 'saved' | 'most-recommended' | 'most-affordable';
+type SortMode = 'default' | 'saved' | 'most-viable' | 'most-affordable' | 'most-recommended' | 'greatest-value' | 'quality-of-life' | 'fastest-home-ownership' | 'highest-projected-home-value' | 'fastest-debt-free' | 'most-viable-raising-kids';
+type ShowMode = 'all' | 'saved' | 'other';
+
+// ===== CONSTANTS =====
+
+const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: 'default', label: 'Default' },
+  { value: 'saved', label: 'Saved' },
+  { value: 'most-viable', label: 'Most Viable' },
+  { value: 'most-affordable', label: 'Most Affordable' },
+  { value: 'most-recommended', label: 'Most Recommended' },
+  { value: 'greatest-value', label: 'Greatest Value (QoL / Affordability)' },
+  { value: 'quality-of-life', label: 'Quality of Life' },
+  { value: 'fastest-home-ownership', label: 'Fastest Time to Home Ownership' },
+  { value: 'highest-projected-home-value', label: 'Highest Projected Home Value' },
+  { value: 'fastest-debt-free', label: 'Fastest Time to Debt Free' },
+  { value: 'most-viable-raising-kids', label: 'Most Viable for Raising Kids' },
+];
+
+const SHOW_OPTIONS: { value: ShowMode; label: string }[] = [
+  { value: 'all', label: 'All Locations' },
+  { value: 'saved', label: 'Your Locations' },
+  { value: 'other', label: 'Other Locations' },
+];
 
 // ===== HELPERS =====
 
@@ -62,6 +85,63 @@ function sortByViability(a: CalculationResult, b: CalculationResult): number {
   const aYears = a.yearsToMortgage > 0 ? a.yearsToMortgage : 999;
   const bYears = b.yearsToMortgage > 0 ? b.yearsToMortgage : 999;
   return aYears - bYears;
+}
+
+function applySortMode(results: CalculationResult[], mode: SortMode, colKey: string): CalculationResult[] {
+  switch (mode) {
+    case 'most-viable':
+    case 'most-recommended':
+      return [...results].sort(sortByViability);
+    case 'most-affordable':
+      return [...results].sort((a, b) => {
+        const aCOL = (a.locationData.adjustedCOL as Record<string, number>)[colKey] || 0;
+        const bCOL = (b.locationData.adjustedCOL as Record<string, number>)[colKey] || 0;
+        return aCOL - bCOL;
+      });
+    case 'greatest-value':
+      return [...results].sort((a, b) => {
+        const aQoL = a.yearByYear[0]?.disposableIncome ?? 0;
+        const bQoL = b.yearByYear[0]?.disposableIncome ?? 0;
+        const aCOL = (a.locationData.adjustedCOL as Record<string, number>)[colKey] || 1;
+        const bCOL = (b.locationData.adjustedCOL as Record<string, number>)[colKey] || 1;
+        return (bQoL / bCOL) - (aQoL / aCOL);
+      });
+    case 'quality-of-life':
+      return [...results].sort((a, b) => {
+        return (b.yearByYear[0]?.disposableIncome ?? 0) - (a.yearByYear[0]?.disposableIncome ?? 0);
+      });
+    case 'fastest-home-ownership':
+      return [...results].sort((a, b) => {
+        const aYears = a.yearsToMortgage > 0 ? a.yearsToMortgage : 999;
+        const bYears = b.yearsToMortgage > 0 ? b.yearsToMortgage : 999;
+        return aYears - bYears;
+      });
+    case 'highest-projected-home-value': {
+      const getMaxHome = (r: CalculationResult) => {
+        const proj = r.houseProjections.maxAffordable || r.houseProjections.fifteenYears || r.houseProjections.tenYears || r.houseProjections.fiveYears || r.houseProjections.threeYears;
+        return proj?.canAfford ? proj.maxSustainableHousePrice : 0;
+      };
+      return [...results].sort((a, b) => getMaxHome(b) - getMaxHome(a));
+    }
+    case 'fastest-debt-free':
+      return [...results].sort((a, b) => {
+        const aYears = a.yearsToDebtFree > 0 ? a.yearsToDebtFree : 999;
+        const bYears = b.yearsToDebtFree > 0 ? b.yearsToDebtFree : 999;
+        return aYears - bYears;
+      });
+    case 'most-viable-raising-kids':
+      return [...results].sort((a, b) => {
+        const aScore = (VIABILITY_SCORE[a.viabilityClassification] || 0) * 2
+          + (a.yearByYear[0]?.disposableIncome ?? 0) / 10000
+          + (a.yearsToMortgage > 0 ? (30 - a.yearsToMortgage) / 30 : 0);
+        const bScore = (VIABILITY_SCORE[b.viabilityClassification] || 0) * 2
+          + (b.yearByYear[0]?.disposableIncome ?? 0) / 10000
+          + (b.yearsToMortgage > 0 ? (30 - b.yearsToMortgage) / 30 : 0);
+        return bScore - aScore;
+      });
+    default:
+      return results;
+  }
 }
 
 // ===== LOCATION CARD COMPONENT =====
@@ -273,12 +353,17 @@ export default function MyLocationsPage() {
   const [loading, setLoading] = useState(true);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [filter, setFilter] = useState<FilterMode>('all');
+  const [sortMode, setSortMode] = useState<SortMode>('default');
+  const [showMode, setShowMode] = useState<ShowMode>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchDropdown, setSearchDropdown] = useState<{ label: string; rawName: string }[]>([]);
-  const [showDropdown, setShowDropdown] = useState(false);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+  const [showDropdownOpen, setShowDropdownOpen] = useState(false);
 
   const searchRef = useRef<HTMLDivElement>(null);
+  const sortDropdownRef = useRef<HTMLDivElement>(null);
+  const showDropdownRef = useRef<HTMLDivElement>(null);
   const searchCacheRef = useRef<Map<string, CalculationResult>>(new Map());
 
   // ===== LOAD DATA =====
@@ -363,11 +448,17 @@ export default function MyLocationsPage() {
     }, 50);
   }, [profile, userResults]);
 
-  // ===== CLOSE DROPDOWN ON OUTSIDE CLICK =====
+  // ===== CLOSE DROPDOWNS ON OUTSIDE CLICK =====
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
-        setShowDropdown(false);
+        setShowSearchDropdown(false);
+      }
+      if (sortDropdownRef.current && !sortDropdownRef.current.contains(e.target as Node)) {
+        setSortDropdownOpen(false);
+      }
+      if (showDropdownRef.current && !showDropdownRef.current.contains(e.target as Node)) {
+        setShowDropdownOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -379,16 +470,16 @@ export default function MyLocationsPage() {
     setSearchQuery(query);
     if (query.trim().length < 2) {
       setSearchDropdown([]);
-      setShowDropdown(false);
+      setShowSearchDropdown(false);
       return;
     }
     const matches = searchLocations(query, 8);
     setSearchDropdown(matches.map(m => ({ label: m.label, rawName: m.rawName })));
-    setShowDropdown(matches.length > 0);
+    setShowSearchDropdown(matches.length > 0);
   }, []);
 
   const handleSelectSearchResult = useCallback((locationLabel: string) => {
-    setShowDropdown(false);
+    setShowSearchDropdown(false);
     setSearchQuery(locationLabel);
 
     const alreadyExists = userResults.find(r => r.location === locationLabel)
@@ -436,38 +527,54 @@ export default function MyLocationsPage() {
     return acc;
   }, []);
 
-  let filteredResults: CalculationResult[];
-
-  switch (filter) {
+  // Step 1: Apply show filter
+  let visibleResults: CalculationResult[];
+  switch (showMode) {
     case 'saved':
-      filteredResults = deduped.filter(r => savedLocationNames.includes(r.location));
+      visibleResults = deduped.filter(r => savedLocationNames.includes(r.location));
       break;
-    case 'most-recommended':
-      filteredResults = [...deduped].sort(sortByViability);
-      break;
-    case 'most-affordable':
-      filteredResults = [...deduped].sort((a, b) => {
-        const aCOL = (a.locationData.adjustedCOL as Record<string, number>)[colKey] || 0;
-        const bCOL = (b.locationData.adjustedCOL as Record<string, number>)[colKey] || 0;
-        return aCOL - bCOL;
-      });
+    case 'other':
+      visibleResults = deduped.filter(r => !savedLocationNames.includes(r.location));
       break;
     default:
-      filteredResults = deduped;
+      visibleResults = deduped;
   }
 
-  // Pin current location first for 'all' and 'saved'
-  if (filter === 'all' || filter === 'saved') {
-    const currentIdx = filteredResults.findIndex(r => r.location === currentLocation);
+  // Step 2: Apply sort mode
+  let finalResults: CalculationResult[];
+  if (sortMode === 'saved') {
+    finalResults = visibleResults.filter(r => savedLocationNames.includes(r.location));
+  } else if (sortMode === 'default') {
+    finalResults = visibleResults;
+  } else {
+    finalResults = applySortMode(visibleResults, sortMode, colKey);
+  }
+
+  // For default + all: pin current location first
+  if (sortMode === 'default' && showMode === 'all') {
+    const currentIdx = finalResults.findIndex(r => r.location === currentLocation);
     if (currentIdx > 0) {
-      const [current] = filteredResults.splice(currentIdx, 1);
-      filteredResults.unshift(current);
+      const [current] = finalResults.splice(currentIdx, 1);
+      finalResults.unshift(current);
     }
   }
 
-  // Section splits
+  // Determine if we should show grouped (saved vs other) sections
+  const isActiveSortMode = sortMode !== 'default' && sortMode !== 'saved';
+  const shouldShowGrouped = isActiveSortMode && showMode === 'all';
+
+  // Grouped section splits
+  const savedSorted = finalResults.filter(r => savedLocationNames.includes(r.location));
+  const otherSorted = finalResults.filter(r => !savedLocationNames.includes(r.location));
+
+  // Section splits for default view
   const userLocationNames = new Set(userResults.map(r => r.location));
   const suggestedLocationNames = new Set(suggestedResults.map(r => r.location));
+
+  // Button active states
+  const isAllActive = sortMode === 'default' && showMode === 'all';
+  const isSavedActive = sortMode === 'saved';
+  const isRecommendedActive = sortMode === 'most-recommended';
 
   // ===== RENDER =====
 
@@ -482,45 +589,6 @@ export default function MyLocationsPage() {
     );
   }
 
-  const filterButtons: { mode: FilterMode; label: string; icon: React.ReactNode }[] = [
-    {
-      mode: 'all',
-      label: 'All Locations',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-        </svg>
-      ),
-    },
-    {
-      mode: 'saved',
-      label: `Saved${savedLocationNames.length > 0 ? ` (${savedLocationNames.length})` : ''}`,
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
-        </svg>
-      ),
-    },
-    {
-      mode: 'most-recommended',
-      label: 'Most Recommended',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
-        </svg>
-      ),
-    },
-    {
-      mode: 'most-affordable',
-      label: 'Most Affordable',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      ),
-    },
-  ];
-
   const renderCard = (result: CalculationResult) => (
     <LocationCard
       key={result.location}
@@ -533,24 +601,79 @@ export default function MyLocationsPage() {
     />
   );
 
-  // Flat grid for filtered views
+  const renderEmptyState = (message: string) => (
+    <div className="col-span-full text-center py-16">
+      <div className="w-16 h-16 rounded-full bg-[#EFF6FF] flex items-center justify-center mx-auto mb-4">
+        <svg className="w-8 h-8 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+        </svg>
+      </div>
+      <p className="text-gray-500 text-sm">{message}</p>
+    </div>
+  );
+
+  // Flat grid for filtered/sorted views
   const renderFlatGrid = () => (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {filteredResults.length === 0 ? (
-        <div className="col-span-full text-center py-16">
-          <div className="w-16 h-16 rounded-full bg-[#EFF6FF] flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+      {finalResults.length === 0
+        ? renderEmptyState(
+            sortMode === 'saved' || showMode === 'saved'
+              ? 'No saved locations yet. Click the heart on any location to save it.'
+              : showMode === 'other'
+              ? 'No other locations to show.'
+              : 'No locations to show.'
+          )
+        : finalResults.map(renderCard)}
+    </div>
+  );
+
+  // Grouped view: saved section + other section (used when a sort is active)
+  const renderGroupedGrid = () => (
+    <div className="space-y-10">
+      {/* Your Saved Locations */}
+      <section>
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-8 h-8 rounded-lg bg-[#FEE2E2] flex items-center justify-center">
+            <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
             </svg>
           </div>
-          <p className="text-gray-500 text-sm">
-            {filter === 'saved' ? 'No saved locations yet. Click the heart on any location to save it.' : 'No locations to show.'}
-          </p>
+          <h2 className="text-base font-semibold text-gray-800">Your Saved Locations</h2>
+          <span className="text-xs text-gray-400 ml-1">({savedSorted.length})</span>
         </div>
-      ) : (
-        filteredResults.map(renderCard)
-      )}
+        {savedSorted.length > 0 ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {savedSorted.map(renderCard)}
+          </div>
+        ) : (
+          <div className="text-center py-8 bg-[#F8FAFB] rounded-xl border border-dashed border-gray-200">
+            <p className="text-gray-400 text-sm">No saved locations yet. Click the heart on any location to save it.</p>
+          </div>
+        )}
+      </section>
+
+      {/* Other Locations */}
+      <section>
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] flex items-center justify-center">
+            <svg className="w-4 h-4 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
+            </svg>
+          </div>
+          <h2 className="text-base font-semibold text-gray-800">Other Locations</h2>
+          <span className="text-xs text-gray-400 ml-1">({otherSorted.length})</span>
+        </div>
+        {otherSorted.length > 0 ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {otherSorted.map(renderCard)}
+          </div>
+        ) : (
+          <div className="text-center py-8 bg-[#F8FAFB] rounded-xl border border-dashed border-gray-200">
+            <p className="text-gray-400 text-sm">No other locations to show.</p>
+          </div>
+        )}
+      </section>
     </div>
   );
 
@@ -643,6 +766,9 @@ export default function MyLocationsPage() {
     );
   };
 
+  const currentSortLabel = SORT_OPTIONS.find(o => o.value === sortMode)?.label || 'Default';
+  const currentShowLabel = SHOW_OPTIONS.find(o => o.value === showMode)?.label || 'All Locations';
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -654,22 +780,149 @@ export default function MyLocationsPage() {
       {/* Filter Bar + Search */}
       <div className="bg-white rounded-2xl border border-gray-200 p-4">
         <div className="flex flex-col gap-4">
-          {/* Filter Pills */}
+          {/* Top Row: Quick Buttons + Dropdown Filters */}
           <div className="flex flex-wrap items-center gap-2">
-            {filterButtons.map(btn => (
+            {/* All Locations Button */}
+            <button
+              onClick={() => { setSortMode('default'); setShowMode('all'); }}
+              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                isAllActive
+                  ? 'bg-[#5BA4E5] text-white shadow-sm'
+                  : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border border-gray-200'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+              </svg>
+              All Locations
+            </button>
+
+            {/* Saved Button */}
+            <button
+              onClick={() => { setSortMode('saved'); setShowMode('all'); }}
+              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                isSavedActive
+                  ? 'bg-[#5BA4E5] text-white shadow-sm'
+                  : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border border-gray-200'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+              </svg>
+              Saved{savedLocationNames.length > 0 ? ` (${savedLocationNames.length})` : ''}
+            </button>
+
+            {/* Most Recommended Button */}
+            <button
+              onClick={() => { setSortMode('most-recommended'); setShowMode('all'); }}
+              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                isRecommendedActive
+                  ? 'bg-[#5BA4E5] text-white shadow-sm'
+                  : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border border-gray-200'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+              </svg>
+              Most Recommended
+            </button>
+
+            {/* Divider */}
+            <div className="hidden sm:block w-px h-8 bg-gray-200 mx-1"></div>
+
+            {/* Sort By Dropdown */}
+            <div ref={sortDropdownRef} className="relative">
               <button
-                key={btn.mode}
-                onClick={() => setFilter(btn.mode)}
-                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                  filter === btn.mode
-                    ? 'bg-[#5BA4E5] text-white shadow-sm'
-                    : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border border-gray-200'
+                onClick={() => { setSortDropdownOpen(!sortDropdownOpen); setShowDropdownOpen(false); }}
+                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
+                  sortMode !== 'default'
+                    ? 'bg-[#EFF6FF] text-[#5BA4E5] border-[#5BA4E5]/30'
+                    : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border-gray-200'
                 }`}
               >
-                {btn.icon}
-                {btn.label}
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 7.5L7.5 3m0 0L12 7.5M7.5 3v13.5m13.5-3L16.5 18m0 0L12 13.5m4.5 4.5V4.5" />
+                </svg>
+                <span className="hidden sm:inline">Sort:</span> {currentSortLabel}
+                <svg className={`w-3.5 h-3.5 transition-transform ${sortDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                </svg>
               </button>
-            ))}
+
+              {sortDropdownOpen && (
+                <div className="absolute z-20 right-0 sm:left-0 mt-1 w-72 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                  {SORT_OPTIONS.map(option => (
+                    <button
+                      key={option.value}
+                      onClick={() => {
+                        setSortMode(option.value);
+                        setSortDropdownOpen(false);
+                        if (option.value === 'default') setShowMode('all');
+                      }}
+                      className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between ${
+                        sortMode === option.value
+                          ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium'
+                          : 'text-gray-700 hover:bg-[#F8FAFB]'
+                      }`}
+                    >
+                      {option.label}
+                      {sortMode === option.value && (
+                        <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Show Dropdown */}
+            <div ref={showDropdownRef} className="relative">
+              <button
+                onClick={() => { setShowDropdownOpen(!showDropdownOpen); setSortDropdownOpen(false); }}
+                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
+                  showMode !== 'all'
+                    ? 'bg-[#EFF6FF] text-[#5BA4E5] border-[#5BA4E5]/30'
+                    : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border-gray-200'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span className="hidden sm:inline">Show:</span> {currentShowLabel}
+                <svg className={`w-3.5 h-3.5 transition-transform ${showDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                </svg>
+              </button>
+
+              {showDropdownOpen && (
+                <div className="absolute z-20 right-0 mt-1 w-52 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                  {SHOW_OPTIONS.map(option => (
+                    <button
+                      key={option.value}
+                      onClick={() => {
+                        setShowMode(option.value);
+                        setShowDropdownOpen(false);
+                      }}
+                      className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between ${
+                        showMode === option.value
+                          ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium'
+                          : 'text-gray-700 hover:bg-[#F8FAFB]'
+                      }`}
+                    >
+                      {option.label}
+                      {showMode === option.value && (
+                        <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Search Bar */}
@@ -682,7 +935,7 @@ export default function MyLocationsPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => handleSearchInput(e.target.value)}
-                onFocus={() => { if (searchDropdown.length > 0) setShowDropdown(true); }}
+                onFocus={() => { if (searchDropdown.length > 0) setShowSearchDropdown(true); }}
                 placeholder="Search any location..."
                 className="w-full pl-11 pr-4 py-2.5 bg-[#F8FAFB] border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#5BA4E5]/30 focus:border-[#5BA4E5] focus:bg-white outline-none transition-all"
               />
@@ -693,8 +946,8 @@ export default function MyLocationsPage() {
               )}
             </div>
 
-            {/* Dropdown */}
-            {showDropdown && searchDropdown.length > 0 && (
+            {/* Search Dropdown */}
+            {showSearchDropdown && searchDropdown.length > 0 && (
               <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
                 {searchDropdown.map(item => (
                   <button
@@ -719,7 +972,11 @@ export default function MyLocationsPage() {
       </div>
 
       {/* Results */}
-      {filter === 'all' ? renderSections() : renderFlatGrid()}
+      {sortMode === 'default' && showMode === 'all'
+        ? renderSections()
+        : shouldShowGrouped
+        ? renderGroupedGrid()
+        : renderFlatGrid()}
     </div>
   );
 }
