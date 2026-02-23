@@ -111,19 +111,23 @@ export function normalizeOnboardingAnswers(answers: OnboardingAnswers): UserProf
   // === Location ===
   const locationSituation = answers.locationSituation;
   const selectedLocations: string[] = [];
-  
-  if (answers.exactLocation) {
-    selectedLocations.push(answers.exactLocation);
+
+  // Only collect locations if the user actually chose a location situation
+  // (skip for "no-idea" — residual fields may be left from switching options)
+  if (locationSituation !== 'no-idea') {
+    if (answers.exactLocation) {
+      selectedLocations.push(answers.exactLocation);
+    }
+
+    if (answers.potentialLocations && answers.potentialLocations.length > 0) {
+      selectedLocations.push(...answers.potentialLocations);
+    }
+
+    if (answers.currentLocation && !selectedLocations.includes(answers.currentLocation)) {
+      selectedLocations.push(answers.currentLocation);
+    }
   }
-  
-  if (answers.potentialLocations && answers.potentialLocations.length > 0) {
-    selectedLocations.push(...answers.potentialLocations);
-  }
-  
-  if (answers.currentLocation && !selectedLocations.includes(answers.currentLocation)) {
-    selectedLocations.push(answers.currentLocation);
-  }
-  
+
   // If no locations selected (e.g. "no idea"), leave empty.
   // The onboarding page will calculate all locations and pick the best fits.
   

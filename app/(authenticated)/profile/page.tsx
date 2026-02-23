@@ -56,11 +56,14 @@ export default function ProfilePage() {
 
       setAllResults(sortedResults);
 
+      // Default to the most viable location (sortedResults[0])
       let resultToShow = sortedResults[0];
 
       if (storedAnswers) {
         try {
           const answers = JSON.parse(storedAnswers);
+          // Only override default for users who specified a location preference
+          // (not "no-idea" users — they should see the best fit)
           if (answers.locationSituation === 'know-exactly' && answers.exactLocation) {
             const exactMatch = sortedResults.find(r => r.location === answers.exactLocation);
             if (exactMatch) resultToShow = exactMatch;
@@ -68,6 +71,7 @@ export default function ProfilePage() {
             const currentMatch = sortedResults.find(r => r.location === answers.currentLocation);
             if (currentMatch) resultToShow = currentMatch;
           }
+          // "no-idea" and "deciding-between" both fall through to sortedResults[0] (best fit)
         } catch (e) {
           console.error('Error parsing onboarding answers:', e);
         }
