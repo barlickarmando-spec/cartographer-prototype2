@@ -616,13 +616,18 @@ export default function MyLocationsPage() {
     finalResults = applySortMode(visibleResults, sortMode, colKey);
   }
 
-  // For default + all: pin current location first
-  if (sortMode === 'default' && showMode === 'all') {
+  // For default + all (non-browse): pin current location first
+  if (sortMode === 'default' && showMode === 'all' && !browseAll) {
     const currentIdx = finalResults.findIndex(r => r.location === currentLocation);
     if (currentIdx > 0) {
       const [current] = finalResults.splice(currentIdx, 1);
       finalResults.unshift(current);
     }
+  }
+
+  // Browse mode: exclude saved locations so you discover new ones
+  if (browseAll && showMode === 'all') {
+    finalResults = finalResults.filter(r => !savedLocationNames.includes(r.location));
   }
 
   // Always show flat list when 'all' is selected (no saved/other grouping)
