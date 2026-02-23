@@ -227,7 +227,8 @@ function buildLocationData(
     },
     
     housing: {
-      medianHomeValue: affordabilityData['Typical Home Value (Single Family Normal)'] || 
+      medianHomeValue: affordabilityData['Typical Home Value (Single Family Normal)'] ||
+                       affordabilityData['Typical Home Value (Single Family)'] ||
                        housingData['Typical Home Value (Single Family Normal)'] || 0,
       smallHomeValue: affordabilityData['Typical Home Value (Small)'] || 
                       housingData['Typical Home Value (Small)'] || 0,
