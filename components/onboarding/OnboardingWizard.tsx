@@ -43,8 +43,8 @@ export function OnboardingWizard({ initialAnswers, onComplete, onProgress }: Onb
         }
         return !!answers.kidsPlan;
       }
-      case 3: 
-        if (answers.currentSituation === 'graduated-independent' || answers.currentSituation === 'no-college' || answers.currentSituation === 'other') {
+      case 3:
+        if (answers.currentSituation === 'graduated-independent' || answers.currentSituation === 'student-independent' || answers.currentSituation === 'no-college' || answers.currentSituation === 'other') {
           return !!answers.currentAge && !!answers.userOccupation;
         }
         return !!answers.expectedIndependenceAge && !!answers.userOccupation;
@@ -399,7 +399,7 @@ function Step2HouseholdType({ answers, updateAnswer }: StepProps) {
                   </label>
                   <input
                     type="number"
-                    min={answers.firstKidAge + 1}
+                    min={answers.firstKidAge}
                     max="100"
                     value={answers.secondKidAge || ''}
                     onChange={(e) => {
@@ -410,34 +410,34 @@ function Step2HouseholdType({ answers, updateAnswer }: StepProps) {
                       }
                     }}
                     className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
-                    placeholder={`Leave blank if not planning a 2nd (must be after age ${answers.firstKidAge})`}
+                    placeholder={`Leave blank if not planning a 2nd (at or after age ${answers.firstKidAge})`}
                   />
-                  {answers.secondKidAge !== undefined && answers.secondKidAge <= answers.firstKidAge && (
+                  {answers.secondKidAge !== undefined && answers.secondKidAge < answers.firstKidAge && (
                     <p className="text-xs text-red-500 mt-1">
-                      2nd kid must be after 1st kid (age {answers.firstKidAge})
+                      2nd kid must be at or after 1st kid (age {answers.firstKidAge})
                     </p>
                   )}
                 </div>
               )}
 
               {/* 3rd Kid - shown after valid 2nd kid age */}
-              {answers.secondKidAge && answers.secondKidAge > (answers.firstKidAge || 0) && (
+              {answers.secondKidAge && answers.secondKidAge >= (answers.firstKidAge || 0) && (
                 <div>
                   <label className="block text-sm font-medium text-[#2C3E50] mb-2">
                     Expected age for 3rd kid (optional)
                   </label>
                   <input
                     type="number"
-                    min={answers.secondKidAge + 1}
+                    min={answers.secondKidAge}
                     max="100"
                     value={answers.thirdKidAge || ''}
                     onChange={(e) => updateAnswer('thirdKidAge', parseInt(e.target.value) || undefined)}
                     className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
-                    placeholder={`Leave blank if not planning a 3rd (must be after age ${answers.secondKidAge})`}
+                    placeholder={`Leave blank if not planning a 3rd (at or after age ${answers.secondKidAge})`}
                   />
-                  {answers.thirdKidAge !== undefined && answers.thirdKidAge <= answers.secondKidAge && (
+                  {answers.thirdKidAge !== undefined && answers.thirdKidAge < answers.secondKidAge && (
                     <p className="text-xs text-red-500 mt-1">
-                      3rd kid must be after 2nd kid (age {answers.secondKidAge})
+                      3rd kid must be at or after 2nd kid (age {answers.secondKidAge})
                     </p>
                   )}
                 </div>
@@ -571,8 +571,6 @@ function Step2HouseholdType({ answers, updateAnswer }: StepProps) {
 // ===== FIXED STEP 3: AGE & OCCUPATION =====
 function Step3AgeOccupation({ answers, updateAnswer }: StepProps) {
   const [occupations] = useState(getOccupationList());
-  const [showUserSalaryOverride, setShowUserSalaryOverride] = useState(false);
-  const [showPartnerSalaryOverride, setShowPartnerSalaryOverride] = useState(false);
   
   const needsExpectedAge = answers.currentSituation === 'student-soon-independent' || 
                            answers.currentSituation === 'younger-student';
@@ -626,45 +624,11 @@ function Step3AgeOccupation({ answers, updateAnswer }: StepProps) {
             ))}
           </select>
 
-          {/* Toggle for salary override */}
-          {answers.userOccupation && !showUserSalaryOverride && (
-            <button
-              onClick={() => setShowUserSalaryOverride(true)}
-              className="mt-2 text-sm text-[#5BA4E5] hover:text-[#4A93D4] font-medium"
-            >
-              + Manually override salary
-            </button>
-          )}
-
-          {/* User Salary Override - conditionally shown */}
-          {showUserSalaryOverride && (
-            <div className="mt-3 p-4 bg-[#F8FAFB] rounded-lg border border-[#E5E7EB]">
-              <div className="flex justify-between items-center mb-2">
-                <label className="block text-sm font-medium text-[#2C3E50]">
-                  Manual salary override
-                </label>
-                <button
-                  onClick={() => {
-                    setShowUserSalaryOverride(false);
-                    updateAnswer('userSalary', undefined);
-                  }}
-                  className="text-xs text-[#9CA3AF] hover:text-[#6B7280]"
-                >
-                  Remove override
-                </button>
-              </div>
-              <div className="relative">
-                <span className="absolute left-3 top-2.5 text-[#6B7280]">$</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={answers.userSalary || ''}
-                  onChange={(e) => updateAnswer('userSalary', parseInt(e.target.value) || undefined)}
-                  className="w-full pl-7 pr-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-1 focus:ring-[#5BA4E5] outline-none transition-all"
-                  placeholder="Enter annual salary"
-                />
-              </div>
-            </div>
+          {/* Salary note */}
+          {answers.userOccupation && (
+            <p className="mt-2 text-xs text-[#9CA3AF]">
+              Salary is automatically adjusted per location based on regional data for this occupation.
+            </p>
           )}
         </div>
 
@@ -686,45 +650,11 @@ function Step3AgeOccupation({ answers, updateAnswer }: StepProps) {
                 ))}
               </select>
 
-              {/* Toggle for partner salary override */}
-              {answers.partnerOccupation && !showPartnerSalaryOverride && (
-                <button
-                  onClick={() => setShowPartnerSalaryOverride(true)}
-                  className="mt-2 text-sm text-[#5BA4E5] hover:text-[#4A93D4] font-medium"
-                >
-                  + Manually override partner salary
-                </button>
-              )}
-
-              {/* Partner Salary Override - conditionally shown */}
-              {showPartnerSalaryOverride && (
-                <div className="mt-3 p-4 bg-[#F8FAFB] rounded-lg border border-[#E5E7EB]">
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block text-sm font-medium text-[#2C3E50]">
-                      Partner&apos;s manual salary override
-                    </label>
-                    <button
-                      onClick={() => {
-                        setShowPartnerSalaryOverride(false);
-                        updateAnswer('partnerSalary', undefined);
-                      }}
-                      className="text-xs text-[#9CA3AF] hover:text-[#6B7280]"
-                    >
-                      Remove override
-                    </button>
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[#6B7280]">$</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={answers.partnerSalary || ''}
-                      onChange={(e) => updateAnswer('partnerSalary', parseInt(e.target.value) || undefined)}
-                      className="w-full pl-7 pr-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-1 focus:ring-[#5BA4E5] outline-none transition-all"
-                      placeholder="Enter annual salary"
-                    />
-                  </div>
-                </div>
+              {/* Partner salary note */}
+              {answers.partnerOccupation && (
+                <p className="mt-2 text-xs text-[#9CA3AF]">
+                  Partner salary is automatically adjusted per location based on regional data.
+                </p>
               )}
             </div>
           </>
@@ -856,7 +786,7 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
                     if (hasCCDebt) {
                       updateAnswer('additionalDebts', debts.filter(d => d.type !== 'cc-debt'));
                     } else {
-                      updateAnswer('additionalDebts', [...debts, { type: 'cc-debt', totalDebt: 0, interestRate: 0.216, ccRefreshMonths: 36 }]);
+                      updateAnswer('additionalDebts', [...debts, { type: 'cc-debt', totalDebt: 0, interestRate: 0.216, ccRefreshMonths: 12 }]);
                     }
                   }}
                   className="text-sm text-[#5BA4E5] hover:text-[#4A93D4] font-medium"
@@ -868,7 +798,7 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
               {answers.additionalDebts?.find(d => d.type === 'cc-debt') && (
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs text-[#6B7280] mb-1">Total amount</label>
+                    <label className="block text-xs text-[#6B7280] mb-1">Average annual credit card debt</label>
                     <div className="relative">
                       <span className="absolute left-3 top-2.5 text-[#6B7280] text-sm">$</span>
                       <input
@@ -877,7 +807,7 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
                         value={answers.additionalDebts.find(d => d.type === 'cc-debt')?.totalDebt || ''}
                         onChange={(e) => {
                           const debts = answers.additionalDebts || [];
-                          const updated = debts.map(d => 
+                          const updated = debts.map(d =>
                             d.type === 'cc-debt' ? { ...d, totalDebt: Number(e.target.value) || 0 } : d
                           );
                           updateAnswer('additionalDebts', updated);
@@ -898,31 +828,13 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
                       value={answers.additionalDebts.find(d => d.type === 'cc-debt')?.interestRate ? (answers.additionalDebts.find(d => d.type === 'cc-debt')?.interestRate || 0) * 100 : ''}
                       onChange={(e) => {
                         const debts = answers.additionalDebts || [];
-                        const updated = debts.map(d => 
+                        const updated = debts.map(d =>
                           d.type === 'cc-debt' ? { ...d, interestRate: (Number(e.target.value) || 0) / 100 } : d
                         );
                         updateAnswer('additionalDebts', updated);
                       }}
                       className="w-full px-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-1 focus:ring-[#5BA4E5] outline-none transition-all text-sm"
                       placeholder="21.6"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs text-[#6B7280] mb-1">Refresh rate (months)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={answers.additionalDebts.find(d => d.type === 'cc-debt')?.ccRefreshMonths || ''}
-                      onChange={(e) => {
-                        const debts = answers.additionalDebts || [];
-                        const updated = debts.map(d => 
-                          d.type === 'cc-debt' ? { ...d, ccRefreshMonths: Number(e.target.value) || 36 } : d
-                        );
-                        updateAnswer('additionalDebts', updated);
-                      }}
-                      className="w-full px-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-1 focus:ring-[#5BA4E5] outline-none transition-all text-sm"
-                      placeholder="36"
                     />
                   </div>
                 </div>
@@ -1276,6 +1188,7 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
                 : 'What places are you deciding between?'}
             </label>
             
+            <div className="relative">
             <input
               type="text"
               placeholder="Search states and cities..."
@@ -1283,11 +1196,11 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
               onChange={(e) => setSearchTerm(e.target.value)}
               onFocus={() => setIsSearchFocused(true)}
               onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-              className="w-full px-4 py-3 mb-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+              className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
             />
-            
+
             {isSearchFocused && (
-            <div className="max-h-80 overflow-y-auto border border-[#E5E7EB] rounded-lg p-4 bg-white">
+            <div className="absolute z-20 w-full mt-1 max-h-80 overflow-y-auto border border-[#E5E7EB] rounded-lg p-4 bg-white shadow-lg">
               {/* States */}
               {states.length > 0 && (
                 <div className="mb-4">
@@ -1325,6 +1238,7 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
                                   updateAnswer('potentialLocations', current.filter(s => s !== loc.displayName));
                                 } else {
                                   updateAnswer('potentialLocations', [...current, loc.displayName]);
+                                  setSearchTerm('');
                                 }
                               }}
                               className="sr-only"
@@ -1380,6 +1294,7 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
                                   updateAnswer('potentialLocations', current.filter(s => s !== loc.displayName));
                                 } else {
                                   updateAnswer('potentialLocations', [...current, loc.displayName]);
+                                  setSearchTerm('');
                                 }
                               }}
                               className="sr-only"
@@ -1406,7 +1321,8 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
               )}
             </div>
             )}
-            
+            </div>
+
             {answers.potentialLocations && answers.potentialLocations.length > 0 && (
               <div className="mt-3 flex items-center gap-3 text-sm">
                 <p className="text-[#6B7280]">
