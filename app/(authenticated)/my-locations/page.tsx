@@ -624,8 +624,8 @@ export default function MyLocationsPage() {
     }
   }
 
-  // Determine if we should show grouped (saved vs other) sections
-  const shouldShowGrouped = isActiveSortMode && showMode === 'all';
+  // Always show flat list when 'all' is selected (no saved/other grouping)
+  const shouldShowGrouped = false;
 
   // Grouped section splits: saved = hearted locations, other = everything else from full dataset
   const savedSorted = finalResults.filter(r => savedLocationNames.includes(r.location));
@@ -679,9 +679,8 @@ export default function MyLocationsPage() {
 
   // Flat grid for filtered/sorted views (with pagination for large datasets)
   const renderFlatGrid = () => {
-    const isLargeDataset = isActiveSortMode && finalResults.length > 6;
-    const visibleItems = isLargeDataset ? finalResults.slice(0, visibleOtherCount) : finalResults;
-    const hasMore = isLargeDataset && visibleOtherCount < finalResults.length;
+    const visibleItems = finalResults.length > 6 ? finalResults.slice(0, visibleOtherCount) : finalResults;
+    const hasMore = visibleOtherCount < finalResults.length;
 
     return (
       <div>
