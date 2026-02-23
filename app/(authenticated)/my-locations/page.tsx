@@ -349,6 +349,11 @@ export default function MyLocationsPage() {
   const [colKey, setColKey] = useState('onePerson');
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
+  // All-locations calculation (for full-dataset sorting)
+  const [allCalculatedResults, setAllCalculatedResults] = useState<CalculationResult[]>([]);
+  const [allCalcLoading, setAllCalcLoading] = useState(false);
+  const [visibleOtherCount, setVisibleOtherCount] = useState(6);
+
   // UI state
   const [loading, setLoading] = useState(true);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
@@ -448,6 +453,52 @@ export default function MyLocationsPage() {
     }, 50);
   }, [profile, userResults]);
 
+  // ===== CALCULATE ALL LOCATIONS (for full-dataset sorting) =====
+  useEffect(() => {
+    // Only calculate when an active sort is selected and we haven't already calculated
+    const needsFullCalc = sortMode !== 'default' && sortMode !== 'saved';
+    if (!needsFullCalc || allCalculatedResults.length > 0 || !profile) return;
+
+    setAllCalcLoading(true);
+
+    // Use setTimeout to avoid blocking the UI thread
+    setTimeout(() => {
+      try {
+        const allOptions = getAllLocationOptions();
+        const results: CalculationResult[] = [];
+
+        for (const loc of allOptions) {
+          // Skip if already cached
+          const cached = searchCacheRef.current.get(loc.label);
+          if (cached) {
+            results.push(cached);
+            continue;
+          }
+
+          try {
+            const result = calculateAutoApproach(profile, loc.label, 30);
+            if (result) {
+              results.push(result);
+              searchCacheRef.current.set(loc.label, result);
+            }
+          } catch {
+            // skip failed calculations
+          }
+        }
+
+        setAllCalculatedResults(results);
+      } catch (error) {
+        console.error('Error calculating all locations:', error);
+      }
+      setAllCalcLoading(false);
+    }, 50);
+  }, [sortMode, allCalculatedResults.length, profile]);
+
+  // Reset pagination when sort or show mode changes
+  useEffect(() => {
+    setVisibleOtherCount(6);
+  }, [sortMode, showMode]);
+
   // ===== CLOSE DROPDOWNS ON OUTSIDE CLICK =====
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -521,23 +572,39 @@ export default function MyLocationsPage() {
   }, []);
 
   // ===== FILTER + SORT =====
-  const allCombinedResults = [...userResults, ...suggestedResults, ...searchResultsList];
-  const deduped = allCombinedResults.reduce<CalculationResult[]>((acc, r) => {
+
+  // Combine user-selected locations (onboarding + suggestions + search)
+  const userCombinedResults = [...userResults, ...suggestedResults, ...searchResultsList];
+  const userDeduped = userCombinedResults.reduce<CalculationResult[]>((acc, r) => {
     if (!acc.find(existing => existing.location === r.location)) acc.push(r);
     return acc;
   }, []);
+
+  // Full dataset: merge allCalculatedResults with user results (allCalc takes priority for coverage)
+  const fullDataset = allCalculatedResults.length > 0
+    ? allCalculatedResults.reduce<CalculationResult[]>((acc, r) => {
+        if (!acc.find(existing => existing.location === r.location)) acc.push(r);
+        return acc;
+      }, [...userDeduped])
+    : userDeduped;
+
+  // Determine active sort mode
+  const isActiveSortMode = sortMode !== 'default' && sortMode !== 'saved';
+
+  // For active sorts, use the full dataset; for default/saved, use user-selected only
+  const baseResults = isActiveSortMode ? fullDataset : userDeduped;
 
   // Step 1: Apply show filter
   let visibleResults: CalculationResult[];
   switch (showMode) {
     case 'saved':
-      visibleResults = deduped.filter(r => savedLocationNames.includes(r.location));
+      visibleResults = baseResults.filter(r => savedLocationNames.includes(r.location));
       break;
     case 'other':
-      visibleResults = deduped.filter(r => !savedLocationNames.includes(r.location));
+      visibleResults = baseResults.filter(r => !savedLocationNames.includes(r.location));
       break;
     default:
-      visibleResults = deduped;
+      visibleResults = baseResults;
   }
 
   // Step 2: Apply sort mode
@@ -560,10 +627,9 @@ export default function MyLocationsPage() {
   }
 
   // Determine if we should show grouped (saved vs other) sections
-  const isActiveSortMode = sortMode !== 'default' && sortMode !== 'saved';
   const shouldShowGrouped = isActiveSortMode && showMode === 'all';
 
-  // Grouped section splits
+  // Grouped section splits: saved = hearted locations, other = everything else from full dataset
   const savedSorted = finalResults.filter(r => savedLocationNames.includes(r.location));
   const otherSorted = finalResults.filter(r => !savedLocationNames.includes(r.location));
 
@@ -613,69 +679,124 @@ export default function MyLocationsPage() {
     </div>
   );
 
-  // Flat grid for filtered/sorted views
-  const renderFlatGrid = () => (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {finalResults.length === 0
-        ? renderEmptyState(
-            sortMode === 'saved' || showMode === 'saved'
-              ? 'No saved locations yet. Click the heart on any location to save it.'
-              : showMode === 'other'
-              ? 'No other locations to show.'
-              : 'No locations to show.'
-          )
-        : finalResults.map(renderCard)}
-    </div>
-  );
+  // Flat grid for filtered/sorted views (with pagination for large datasets)
+  const renderFlatGrid = () => {
+    const isLargeDataset = isActiveSortMode && finalResults.length > 6;
+    const visibleItems = isLargeDataset ? finalResults.slice(0, visibleOtherCount) : finalResults;
+    const hasMore = isLargeDataset && visibleOtherCount < finalResults.length;
+
+    return (
+      <div>
+        {allCalcLoading ? (
+          <div className="flex items-center gap-3 py-16 justify-center">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#5BA4E5]"></div>
+            <span className="text-gray-500 text-sm">Calculating all locations...</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {visibleItems.length === 0
+              ? renderEmptyState(
+                  sortMode === 'saved' || showMode === 'saved'
+                    ? 'No saved locations yet. Click the heart on any location to save it.'
+                    : showMode === 'other'
+                    ? 'No other locations to show.'
+                    : 'No locations to show.'
+                )
+              : visibleItems.map(renderCard)}
+          </div>
+        )}
+        {hasMore && (
+          <div className="flex justify-center mt-6">
+            <button
+              onClick={() => setVisibleOtherCount(prev => prev + 6)}
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] hover:border-[#5BA4E5]/30 transition-all"
+            >
+              See More
+              <span className="text-xs text-gray-400">({finalResults.length - visibleOtherCount} remaining)</span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Grouped view: saved section + other section (used when a sort is active)
-  const renderGroupedGrid = () => (
-    <div className="space-y-10">
-      {/* Your Saved Locations */}
-      <section>
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-8 h-8 rounded-lg bg-[#FEE2E2] flex items-center justify-center">
-            <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-            </svg>
-          </div>
-          <h2 className="text-base font-semibold text-gray-800">Your Saved Locations</h2>
-          <span className="text-xs text-gray-400 ml-1">({savedSorted.length})</span>
-        </div>
-        {savedSorted.length > 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {savedSorted.map(renderCard)}
-          </div>
-        ) : (
-          <div className="text-center py-8 bg-[#F8FAFB] rounded-xl border border-dashed border-gray-200">
-            <p className="text-gray-400 text-sm">No saved locations yet. Click the heart on any location to save it.</p>
-          </div>
-        )}
-      </section>
+  const renderGroupedGrid = () => {
+    const visibleOther = otherSorted.slice(0, visibleOtherCount);
+    const hasMoreOther = visibleOtherCount < otherSorted.length;
 
-      {/* Other Locations */}
-      <section>
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] flex items-center justify-center">
-            <svg className="w-4 h-4 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
-            </svg>
+    return (
+      <div className="space-y-10">
+        {/* Your Saved Locations */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-[#FEE2E2] flex items-center justify-center">
+              <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+              </svg>
+            </div>
+            <h2 className="text-base font-semibold text-gray-800">Your Saved Locations</h2>
+            <span className="text-xs text-gray-400 ml-1">({savedSorted.length})</span>
           </div>
-          <h2 className="text-base font-semibold text-gray-800">Other Locations</h2>
-          <span className="text-xs text-gray-400 ml-1">({otherSorted.length})</span>
-        </div>
-        {otherSorted.length > 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {otherSorted.map(renderCard)}
+          {savedSorted.length > 0 ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {savedSorted.map(renderCard)}
+            </div>
+          ) : (
+            <div className="text-center py-8 bg-[#F8FAFB] rounded-xl border border-dashed border-gray-200">
+              <p className="text-gray-400 text-sm">No saved locations yet. Click the heart on any location to save it.</p>
+            </div>
+          )}
+        </section>
+
+        {/* Other Locations */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] flex items-center justify-center">
+              <svg className="w-4 h-4 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
+              </svg>
+            </div>
+            <h2 className="text-base font-semibold text-gray-800">Other Locations</h2>
+            <span className="text-xs text-gray-400 ml-1">({otherSorted.length})</span>
           </div>
-        ) : (
-          <div className="text-center py-8 bg-[#F8FAFB] rounded-xl border border-dashed border-gray-200">
-            <p className="text-gray-400 text-sm">No other locations to show.</p>
-          </div>
-        )}
-      </section>
-    </div>
-  );
+          {allCalcLoading ? (
+            <div className="flex items-center gap-3 py-12 justify-center">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#5BA4E5]"></div>
+              <span className="text-gray-500 text-sm">Calculating all locations...</span>
+            </div>
+          ) : visibleOther.length > 0 ? (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {visibleOther.map(renderCard)}
+              </div>
+              {hasMoreOther && (
+                <div className="flex justify-center mt-6">
+                  <button
+                    onClick={() => setVisibleOtherCount(prev => prev + 6)}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] hover:border-[#5BA4E5]/30 transition-all"
+                  >
+                    See More
+                    <span className="text-xs text-gray-400">({otherSorted.length - visibleOtherCount} remaining)</span>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-center py-8 bg-[#F8FAFB] rounded-xl border border-dashed border-gray-200">
+              <p className="text-gray-400 text-sm">No other locations to show.</p>
+            </div>
+          )}
+        </section>
+      </div>
+    );
+  };
 
   // Sectioned view for 'all' mode
   const renderSections = () => {
