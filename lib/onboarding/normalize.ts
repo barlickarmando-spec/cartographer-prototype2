@@ -35,12 +35,21 @@ export function normalizeOnboardingAnswers(answers: OnboardingAnswers): UserProf
   // === Life Planning ===
   const kidsPlan = answers.kidsPlan;
   const plannedKidAges: number[] = [];
-  
-  if (answers.firstKidAge) {
-    plannedKidAges.push(answers.firstKidAge);
+
+  if (kidsPlan === 'yes' || kidsPlan === 'unsure') {
+    if (answers.firstKidAge) {
+      plannedKidAges.push(answers.firstKidAge);
+    }
+    if (answers.secondKidAge && answers.secondKidAge > (answers.firstKidAge || 0)) {
+      plannedKidAges.push(answers.secondKidAge);
+    }
+    if (answers.thirdKidAge && answers.thirdKidAge > (answers.secondKidAge || 0)) {
+      plannedKidAges.push(answers.thirdKidAge);
+    }
   }
-  
-  if (answers.plannedNextKidAge) {
+
+  // Existing path: user already has kids and plans more
+  if (kidsPlan === 'have-kids' && answers.plannedNextKidAge) {
     plannedKidAges.push(answers.plannedNextKidAge);
   }
   
@@ -102,23 +111,25 @@ export function normalizeOnboardingAnswers(answers: OnboardingAnswers): UserProf
   // === Location ===
   const locationSituation = answers.locationSituation;
   const selectedLocations: string[] = [];
-  
-  if (answers.exactLocation) {
-    selectedLocations.push(answers.exactLocation);
+
+  // Only collect locations if the user actually chose a location situation
+  // (skip for "no-idea" — residual fields may be left from switching options)
+  if (locationSituation !== 'no-idea') {
+    if (answers.exactLocation) {
+      selectedLocations.push(answers.exactLocation);
+    }
+
+    if (answers.potentialLocations && answers.potentialLocations.length > 0) {
+      selectedLocations.push(...answers.potentialLocations);
+    }
+
+    if (answers.currentLocation && !selectedLocations.includes(answers.currentLocation)) {
+      selectedLocations.push(answers.currentLocation);
+    }
   }
-  
-  if (answers.potentialLocations && answers.potentialLocations.length > 0) {
-    selectedLocations.push(...answers.potentialLocations);
-  }
-  
-  if (answers.currentLocation && !selectedLocations.includes(answers.currentLocation)) {
-    selectedLocations.push(answers.currentLocation);
-  }
-  
-  // If no locations selected, default to "Utah" (or any default you prefer)
-  if (selectedLocations.length === 0) {
-    selectedLocations.push('Utah');
-  }
+
+  // If no locations selected (e.g. "no idea"), leave empty.
+  // The onboarding page will calculate all locations and pick the best fits.
   
   const currentLocation = answers.currentLocation;
   
