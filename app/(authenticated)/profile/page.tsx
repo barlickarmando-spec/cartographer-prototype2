@@ -379,7 +379,7 @@ export default function ProfilePage() {
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
               <p className="text-white/70 text-sm mb-1">Time to Homeownership</p>
               <p className="text-2xl font-bold">
-                {result.yearsToMortgage > 0 ? `${result.yearsToMortgage} years` : 'N/A'}
+                {result.yearsToMortgage > 0 ? pluralize(result.yearsToMortgage, 'year') : 'N/A'}
               </p>
               {result.ageMortgageAcquired > 0 && (
                 <p className="text-white/60 text-xs mt-1">At age {result.ageMortgageAcquired}</p>
@@ -404,7 +404,7 @@ export default function ProfilePage() {
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
               <p className="text-white/70 text-sm mb-1">Time to Debt-Free</p>
               <p className="text-2xl font-bold">
-                {result.yearsToDebtFree > 0 ? `${result.yearsToDebtFree} years` : 'No debt'}
+                {result.yearsToDebtFree > 0 ? pluralize(result.yearsToDebtFree, 'year') : 'No debt'}
               </p>
               {result.ageDebtFree > 0 && (
                 <p className="text-white/60 text-xs mt-1">At age {result.ageDebtFree}</p>

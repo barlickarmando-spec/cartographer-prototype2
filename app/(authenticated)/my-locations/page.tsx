@@ -15,8 +15,6 @@ import { searchLocations, getAllLocationOptions } from '@/lib/locations';
 // ===== TYPES =====
 
 type SortMode = 'default' | 'saved' | 'most-viable' | 'most-affordable' | 'most-recommended' | 'greatest-value' | 'quality-of-life' | 'fastest-home-ownership' | 'highest-projected-home-value' | 'fastest-debt-free' | 'most-viable-raising-kids';
-type ShowMode = 'all' | 'saved' | 'other';
-
 // ===== CONSTANTS =====
 
 const SORT_OPTIONS: { value: SortMode; label: string }[] = [
@@ -33,10 +31,72 @@ const SORT_OPTIONS: { value: SortMode; label: string }[] = [
   { value: 'most-viable-raising-kids', label: 'Most Viable for Raising Kids' },
 ];
 
-const SHOW_OPTIONS: { value: ShowMode; label: string }[] = [
-  { value: 'all', label: 'All Locations' },
-  { value: 'saved', label: 'Your Locations' },
-  { value: 'other', label: 'Other Locations' },
+// ===== LOCATION FILTER DATA =====
+
+const REGIONS: Record<string, string[]> = {
+  'South': ['Florida', 'Georgia', 'Alabama', 'North Carolina', 'South Carolina', 'Tennessee', 'Kentucky', 'Louisiana', 'Arkansas', 'Mississippi', 'Oklahoma', 'Texas'],
+  'Southwest': ['California', 'Nevada', 'Utah', 'Colorado', 'New Mexico', 'Arizona', 'Wyoming'],
+  'Pacific Northwest': ['Washington', 'Oregon', 'Idaho', 'Montana'],
+  'West Coast': ['Oregon', 'California', 'Washington'],
+  'North East': ['Maine', 'New Hampshire', 'Massachusetts', 'Vermont', 'New York', 'Rhode Island', 'Connecticut', 'New Jersey', 'Pennsylvania', 'Delaware'],
+  'Mid Atlantic': ['Maryland', 'Virginia', 'Delaware', 'District of Columbia', 'West Virginia', 'New York', 'New Jersey', 'Pennsylvania'],
+  'Middle America': ['Oklahoma', 'Kansas', 'Nebraska', 'North Dakota', 'South Dakota', 'Wyoming', 'Arkansas', 'Missouri', 'Iowa'],
+  'Midwest': ['Ohio', 'Illinois', 'Iowa', 'Indiana', 'Michigan', 'Minnesota', 'Wisconsin', 'Missouri', 'North Dakota', 'South Dakota'],
+  'East Coast': ['Maine', 'New Hampshire', 'Massachusetts', 'Rhode Island', 'Connecticut', 'New York', 'New Jersey', 'Delaware', 'Maryland', 'Virginia', 'North Carolina', 'South Carolina', 'Georgia', 'Florida'],
+  'Continental United States': [], // special: all except Alaska & Hawaii
+  'Non-Continental United States': ['Alaska', 'Hawaii'],
+};
+
+const WEATHER_CATEGORIES: Record<string, { states: string[]; cities: string[] }> = {
+  'Extreme Heat (No Snow)': { states: ['Florida', 'Hawaii'], cities: [] },
+  'Strong Heat': { states: ['Arizona', 'Nevada', 'New Mexico'], cities: ['Anaheim', 'Los Angeles', 'San Diego', 'El Paso'] },
+  'Relative Heat': { states: ['Texas', 'Georgia', 'Alabama', 'Mississippi', 'Louisiana', 'South Carolina', 'Arkansas', 'Oklahoma', 'District of Columbia'], cities: ['Fresno'] },
+  'Average': { states: ['Missouri', 'Kentucky', 'Kansas', 'Tennessee', 'North Carolina', 'Maryland', 'Virginia', 'Delaware', 'New Jersey', 'Pennsylvania', 'Ohio'], cities: ['San Jose', 'San Francisco'] },
+  'Cold': { states: ['Colorado', 'Utah', 'Idaho', 'Oregon', 'Washington', 'Illinois', 'Indiana', 'New York', 'Connecticut', 'Rhode Island', 'Massachusetts', 'West Virginia'], cities: [] },
+  'Extreme Cold': { states: ['Alaska', 'Minnesota', 'Wisconsin', 'Michigan', 'North Dakota', 'South Dakota', 'Montana', 'Wyoming', 'Vermont', 'New Hampshire', 'Maine'], cities: [] },
+};
+
+const ALL_STATES = [
+  'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut',
+  'Delaware', 'District of Columbia', 'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois',
+  'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 'Massachusetts',
+  'Michigan', 'Minnesota', 'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada',
+  'New Hampshire', 'New Jersey', 'New Mexico', 'New York', 'North Carolina', 'North Dakota',
+  'Ohio', 'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina',
+  'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington',
+  'West Virginia', 'Wisconsin', 'Wyoming',
+];
+
+type FilterSection = { header: string; items: { value: string; label: string }[] };
+
+const FILTER_SECTIONS: FilterSection[] = [
+  {
+    header: 'Show',
+    items: [
+      { value: 'all', label: 'All Locations' },
+      { value: 'saved', label: 'Your Locations' },
+      { value: 'other', label: 'Other Locations' },
+    ],
+  },
+  {
+    header: 'Type',
+    items: [
+      { value: 'type:states', label: 'States' },
+      { value: 'type:cities', label: 'Cities' },
+    ],
+  },
+  {
+    header: 'Regions',
+    items: Object.keys(REGIONS).map(r => ({ value: `region:${r}`, label: r })),
+  },
+  {
+    header: 'Weather',
+    items: Object.keys(WEATHER_CATEGORIES).map(w => ({ value: `weather:${w}`, label: w })),
+  },
+  {
+    header: 'States',
+    items: ALL_STATES.map(s => ({ value: `state:${s}`, label: s })),
+  },
 ];
 
 // ===== HELPERS =====
@@ -77,6 +137,76 @@ function getQualityOfLifeLabel(di: number): { label: string; color: string; bgCo
   if (di >= 5000) return { label: 'Good', color: '#0891B2', bgColor: '#CFFAFE' };
   if (di >= 0) return { label: 'Fair', color: '#D97706', bgColor: '#FEF3C7' };
   return { label: 'Challenging', color: '#DC2626', bgColor: '#FEE2E2' };
+}
+
+// ===== LOCATION FILTER HELPERS =====
+
+function getLocationState(locationName: string): string {
+  // Cities have format "City, State" — extract the state
+  const commaIdx = locationName.lastIndexOf(', ');
+  if (commaIdx >= 0) return locationName.substring(commaIdx + 2);
+  // States/territories are the name itself
+  return locationName;
+}
+
+function isCity(locationName: string): boolean {
+  return locationName.includes(', ');
+}
+
+function matchesLocationFilter(locationName: string, filter: string): boolean {
+  if (filter === 'all' || filter === 'saved' || filter === 'other') return true;
+
+  if (filter === 'type:states') {
+    return !isCity(locationName) || locationName === 'District of Columbia';
+  }
+  if (filter === 'type:cities') {
+    return isCity(locationName) || locationName === 'District of Columbia';
+  }
+
+  if (filter.startsWith('region:')) {
+    const regionName = filter.substring(7);
+    if (regionName === 'Continental United States') {
+      const state = getLocationState(locationName);
+      return state !== 'Alaska' && state !== 'Hawaii';
+    }
+    const regionStates = REGIONS[regionName];
+    if (!regionStates) return false;
+    const state = getLocationState(locationName);
+    return regionStates.includes(state);
+  }
+
+  if (filter.startsWith('weather:')) {
+    const weatherName = filter.substring(8);
+    const category = WEATHER_CATEGORIES[weatherName];
+    if (!category) return false;
+    const state = getLocationState(locationName);
+    if (category.states.includes(state)) return true;
+    if (isCity(locationName)) {
+      const cityName = locationName.split(', ')[0];
+      if (category.cities.includes(cityName)) return true;
+    }
+    return false;
+  }
+
+  if (filter.startsWith('state:')) {
+    const stateName = filter.substring(6);
+    const state = getLocationState(locationName);
+    return state === stateName || locationName === stateName;
+  }
+
+  return true;
+}
+
+function getFilterLabel(filter: string): string {
+  for (const section of FILTER_SECTIONS) {
+    const item = section.items.find(i => i.value === filter);
+    if (item) return item.label;
+  }
+  return 'All Locations';
+}
+
+function isGeographicFilter(filter: string): boolean {
+  return filter.startsWith('type:') || filter.startsWith('region:') || filter.startsWith('weather:') || filter.startsWith('state:');
 }
 
 function sortByViability(a: CalculationResult, b: CalculationResult): number {
@@ -360,7 +490,7 @@ export default function MyLocationsPage() {
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>('default');
-  const [showMode, setShowMode] = useState<ShowMode>('all');
+  const [showMode, setShowMode] = useState('all');
   const [browseAll, setBrowseAll] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchDropdown, setSearchDropdown] = useState<{ label: string; rawName: string }[]>([]);
@@ -457,8 +587,8 @@ export default function MyLocationsPage() {
 
   // ===== CALCULATE ALL LOCATIONS (for full-dataset sorting or browse) =====
   useEffect(() => {
-    // Calculate when an active sort is selected or browse mode is on
-    const needsFullCalc = browseAll || (sortMode !== 'default' && sortMode !== 'saved');
+    // Calculate when an active sort is selected, browse mode is on, or geographic filter is active
+    const needsFullCalc = browseAll || (sortMode !== 'default' && sortMode !== 'saved') || isGeographicFilter(showMode);
     if (!needsFullCalc || allCalculatedResults.length > 0 || !profile) return;
 
     setAllCalcLoading(true);
@@ -494,7 +624,7 @@ export default function MyLocationsPage() {
       }
       setAllCalcLoading(false);
     }, 50);
-  }, [sortMode, browseAll, allCalculatedResults.length, profile]);
+  }, [sortMode, showMode, browseAll, allCalculatedResults.length, profile]);
 
   // Reset pagination when sort or show mode changes
   useEffect(() => {
@@ -589,21 +719,21 @@ export default function MyLocationsPage() {
 
   // Determine active sort mode
   const isActiveSortMode = sortMode !== 'default' && sortMode !== 'saved';
+  const hasGeoFilter = isGeographicFilter(showMode);
 
-  // For active sorts or browse mode, use the full dataset; for default/saved, use user-selected only
-  const baseResults = (isActiveSortMode || browseAll) ? fullDataset : userDeduped;
+  // For active sorts, browse mode, or geographic filters: use the full dataset
+  const baseResults = (isActiveSortMode || browseAll || hasGeoFilter) ? fullDataset : userDeduped;
 
-  // Step 1: Apply show filter
+  // Step 1: Apply show/location filter
   let visibleResults: CalculationResult[];
-  switch (showMode) {
-    case 'saved':
-      visibleResults = baseResults.filter(r => savedLocationNames.includes(r.location));
-      break;
-    case 'other':
-      visibleResults = baseResults.filter(r => !savedLocationNames.includes(r.location));
-      break;
-    default:
-      visibleResults = baseResults;
+  if (showMode === 'saved') {
+    visibleResults = baseResults.filter(r => savedLocationNames.includes(r.location));
+  } else if (showMode === 'other') {
+    visibleResults = baseResults.filter(r => !savedLocationNames.includes(r.location));
+  } else if (hasGeoFilter) {
+    visibleResults = baseResults.filter(r => matchesLocationFilter(r.location, showMode));
+  } else {
+    visibleResults = baseResults;
   }
 
   // Step 2: Apply sort mode
@@ -704,6 +834,8 @@ export default function MyLocationsPage() {
                     ? 'No saved locations yet. Click the heart on any location to save it.'
                     : showMode === 'other'
                     ? 'No other locations to show.'
+                    : isGeographicFilter(showMode)
+                    ? `No locations found for "${getFilterLabel(showMode)}".`
                     : 'No locations to show.'
                 )
               : visibleItems.map(renderCard)}
@@ -902,7 +1034,7 @@ export default function MyLocationsPage() {
   };
 
   const currentSortLabel = SORT_OPTIONS.find(o => o.value === sortMode)?.label || 'Default';
-  const currentShowLabel = SHOW_OPTIONS.find(o => o.value === showMode)?.label || 'All Locations';
+  const currentShowLabel = getFilterLabel(showMode);
 
   return (
     <div className="space-y-6">
@@ -1028,7 +1160,7 @@ export default function MyLocationsPage() {
               )}
             </div>
 
-            {/* Show Dropdown */}
+            {/* Filter by Location Dropdown */}
             <div ref={showDropdownRef} className="relative">
               <button
                 onClick={() => { setShowDropdownOpen(!showDropdownOpen); setSortDropdownOpen(false); }}
@@ -1039,37 +1171,43 @@ export default function MyLocationsPage() {
                 }`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
                 </svg>
-                <span className="hidden sm:inline">Show:</span> {currentShowLabel}
+                <span className="hidden sm:inline">Filter:</span> {currentShowLabel}
                 <svg className={`w-3.5 h-3.5 transition-transform ${showDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                 </svg>
               </button>
 
               {showDropdownOpen && (
-                <div className="absolute z-20 right-0 mt-1 w-52 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
-                  {SHOW_OPTIONS.map(option => (
-                    <button
-                      key={option.value}
-                      onClick={() => {
-                        setShowMode(option.value);
-                        setShowDropdownOpen(false);
-                      }}
-                      className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between ${
-                        showMode === option.value
-                          ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium'
-                          : 'text-gray-700 hover:bg-[#F8FAFB]'
-                      }`}
-                    >
-                      {option.label}
-                      {showMode === option.value && (
-                        <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                        </svg>
-                      )}
-                    </button>
+                <div className="absolute z-20 right-0 mt-1 w-72 bg-white border border-gray-200 rounded-xl shadow-lg max-h-[480px] overflow-y-auto">
+                  {FILTER_SECTIONS.map(section => (
+                    <div key={section.header}>
+                      <div className="sticky top-0 px-4 py-2 bg-gray-50 border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                        {section.header}
+                      </div>
+                      {section.items.map(item => (
+                        <button
+                          key={item.value}
+                          onClick={() => {
+                            setShowMode(item.value);
+                            setShowDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
+                            showMode === item.value
+                              ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium'
+                              : 'text-gray-700 hover:bg-[#F8FAFB]'
+                          }`}
+                        >
+                          {item.label}
+                          {showMode === item.value && (
+                            <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                            </svg>
+                          )}
+                        </button>
+                      ))}
+                    </div>
                   ))}
                 </div>
               )}
