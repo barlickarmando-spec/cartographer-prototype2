@@ -1,12 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname } from 'next/navigation';
-import { getSavedLocations } from '@/lib/storage';
-
 export default function AuthenticatedLayout({
   children,
 }: {
@@ -14,18 +10,6 @@ export default function AuthenticatedLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [hasSavedLocations, setHasSavedLocations] = useState(true);
-
-  useEffect(() => {
-    const check = () => setHasSavedLocations(getSavedLocations().length > 0);
-    check();
-    window.addEventListener('storage', check);
-    window.addEventListener('savedLocationsChanged', check);
-    return () => {
-      window.removeEventListener('storage', check);
-      window.removeEventListener('savedLocationsChanged', check);
-    };
-  }, []);
 
   const handleSignOut = () => {
     // Clear authentication
@@ -42,9 +26,7 @@ export default function AuthenticatedLayout({
     { href: '/job-finder', label: 'Job Finder', icon: 'chart' },
   ];
 
-  const navItems = hasSavedLocations
-    ? allNavItems
-    : allNavItems.filter(item => item.href !== '/my-locations');
+  const navItems = allNavItems;
 
   const isActive = (href: string) => pathname.startsWith(href);
 
