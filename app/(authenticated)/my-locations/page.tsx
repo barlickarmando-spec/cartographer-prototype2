@@ -513,11 +513,6 @@ export default function MyLocationsPage() {
 
     try {
       const results: CalculationResult[] = JSON.parse(stored);
-      if (results.length === 0) {
-        router.push('/onboarding');
-        return;
-      }
-
       setUserResults(results);
 
       const answers = getOnboardingAnswers<OnboardingAnswers>(

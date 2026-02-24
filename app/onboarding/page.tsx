@@ -67,10 +67,8 @@ export default function OnboardingPage() {
         }
       }).filter(r => r !== null);
 
-      // Save results
-      if (results.length > 0) {
-        localStorage.setItem('calculation-results', JSON.stringify(results));
-      }
+      // Always save results (even if empty) so other pages don't redirect back
+      localStorage.setItem('calculation-results', JSON.stringify(results));
 
       // Navigate to profile
       router.push('/profile');
