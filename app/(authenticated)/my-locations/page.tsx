@@ -531,6 +531,11 @@ export default function MyLocationsPage() {
         const normalized = normalizeOnboardingAnswers(answers);
         setProfile(normalized);
         setColKey(getAdjustedCOLKey(normalized.householdType));
+      } else {
+        // Build minimal profile from defaults so filters/sorts can work
+        const fallback = normalizeOnboardingAnswers({} as OnboardingAnswers);
+        setProfile(fallback);
+        setColKey(getAdjustedCOLKey(fallback.householdType));
       }
 
       setSavedLocationNames(getSavedLocations());
@@ -584,7 +589,8 @@ export default function MyLocationsPage() {
   useEffect(() => {
     // Calculate when an active sort is selected, browse mode is on, or geographic filter is active
     const needsFullCalc = browseAll || (sortMode !== 'default' && sortMode !== 'saved') || isGeographicFilter(showMode);
-    if (!needsFullCalc || allCalculatedResults.length > 0 || !profile) return;
+    if (!needsFullCalc || !profile) return;
+    if (allCalculatedResults.length > 0) return;
 
     setAllCalcLoading(true);
 
@@ -1187,6 +1193,7 @@ export default function MyLocationsPage() {
                           onClick={() => {
                             setShowMode(item.value);
                             setShowDropdownOpen(false);
+                            setBrowseAll(false);
                           }}
                           className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
                             showMode === item.value
