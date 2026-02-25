@@ -354,13 +354,18 @@ function LocationCard({
                 </span>
               )}
             </div>
-            {/* Viability Badge */}
-            <span
-              className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold"
-              style={{ backgroundColor: viability.bgColor, color: viability.color }}
-            >
-              {viability.label}
-            </span>
+            {/* Viability Badge + Rating */}
+            <div className="flex items-center gap-2">
+              <span
+                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold"
+                style={{ backgroundColor: viability.bgColor, color: viability.color }}
+              >
+                {viability.label}
+              </span>
+              <span className="text-sm font-bold" style={{ color: viability.color }}>
+                {(VIABILITY_NUMERIC[result.viabilityClassification] ?? 2.0).toFixed(1)}/10
+              </span>
+            </div>
           </div>
 
           {/* Wishlist Heart */}
