@@ -114,9 +114,12 @@ export interface CalculationResult {
   warnings: string[];
 }
 
-export type ViabilityClass = 
+export type ViabilityClass =
+  | 'very-viable-stable-large-house'
+  | 'viable-large-house'
   | 'very-viable-stable'
   | 'viable'
+  | 'viable-small-house'
   | 'viable-higher-allocation'
   | 'viable-extreme-care'
   | 'viable-when-renting'
@@ -215,12 +218,13 @@ function calculateAutoApproach(
     
     // Calculate minimum allocation required FIRST (needed for viability classification)
     const minAllocation = calculateMinimumAllocation(profile, locationData);
-    
-    // Calculate viability (now considers if user meets minimum allocation)
-    const viability = classifyViability(yearsToMortgage, yearsToDebtFree, simulation.snapshots, profile, minAllocation);
-    
-    // House size projections
+
+    // House size projections (needed for house-size-aware viability classification)
     const houseProjections = calculateHouseProjections(profile, locationData, simulation.snapshots);
+
+    // Calculate viability (considers allocation, timeline, AND estimated house size vs median)
+    const medianHomeValue = locationData.housing?.medianHomeValue || 0;
+    const viability = classifyViability(yearsToMortgage, yearsToDebtFree, simulation.snapshots, profile, minAllocation, houseProjections, medianHomeValue);
     
     // Kid viability
     const kidViability = calculateKidViability(profile, locationData);
@@ -742,18 +746,20 @@ function classifyViability(
   yearsToDebtFree: number,
   simulation: YearSnapshot[],
   profile: UserProfile,
-  minRequiredAllocation: number
+  minRequiredAllocation: number,
+  houseProjections: { threeYears: HouseProjection | null; fiveYears: HouseProjection | null; tenYears: HouseProjection | null; fifteenYears: HouseProjection | null; maxAffordable: HouseProjection | null },
+  medianHomeValue: number
 ): ViabilityClass {
   const userAllocation = profile.disposableIncomeAllocation;
-  
+
   // Check for structural issues
   const hasNegativeDI = simulation.some(s => s.disposableIncome < 0);
   const lastYear = simulation[simulation.length - 1];
-  
+
   if (!lastYear) {
     return 'no-viable-path';
   }
-  
+
   // If never achieves mortgage
   if (yearsToMortgage < 0) {
     // But has positive DI - could rent indefinitely
@@ -762,7 +768,7 @@ function classifyViability(
     }
     return 'no-viable-path';
   }
-  
+
   // Check if user's allocation is BELOW minimum required
   // But only if increasing allocation could actually help (minRequired < 100)
   // If minRequired is 100 and mortgage is still unreachable, it's truly unviable
@@ -770,30 +776,56 @@ function classifyViability(
     // User is significantly below minimum - needs to increase allocation
     return 'viable-higher-allocation';
   }
-  
+
   // User MEETS or EXCEEDS minimum allocation
-  // Classification based on TIMELINE
-  
+  // Classification based on TIMELINE + HOUSE SIZE relative to median
+
+  // Determine best estimated house price from projections
+  // Use the projection at the year they reach mortgage, or maxAffordable as fallback
+  const bestProjection = houseProjections.maxAffordable
+    || houseProjections.fifteenYears
+    || houseProjections.tenYears
+    || houseProjections.fiveYears
+    || houseProjections.threeYears;
+  const estimatedHousePrice = bestProjection?.maxSustainableHousePrice ?? 0;
+  const houseDiff = medianHomeValue > 0 ? estimatedHousePrice - medianHomeValue : 0;
+
   // Very Viable & Stable: Quick path to mortgage with buffer
   if (yearsToMortgage <= 3 && lastYear.savingsEnd > 0) {
+    // Check house size relative to median
+    if (medianHomeValue > 0 && houseDiff >= 100000) {
+      return 'very-viable-stable-large-house';
+    }
     return 'very-viable-stable';
   }
-  
+
   // Viable: Reasonable timeline (4-8 years)
   if (yearsToMortgage <= 8) {
+    // Large house: estimated is $100k+ above median
+    if (medianHomeValue > 0 && houseDiff >= 100000) {
+      return 'viable-large-house';
+    }
+    // Normal viable: within ~$50k of median
+    if (medianHomeValue > 0 && houseDiff < -50000) {
+      return 'viable-small-house';
+    }
     return 'viable';
   }
-  
+
   // Viable with Extreme Care: Long timeline (9-12 years)
   if (yearsToMortgage <= 12) {
+    // Even at extreme care, if house is well below median, flag it
+    if (medianHomeValue > 0 && houseDiff < -50000) {
+      return 'viable-small-house';
+    }
     return 'viable-extreme-care';
   }
-  
+
   // Viable When Renting: Very long timeline but still positive
   if (yearsToMortgage > 12 && yearsToMortgage < 30 && lastYear.disposableIncome > 0) {
     return 'viable-when-renting';
   }
-  
+
   return 'no-viable-path';
 }
 

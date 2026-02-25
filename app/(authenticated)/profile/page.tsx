@@ -44,8 +44,11 @@ export default function ProfilePage() {
 
       const sortedResults = [...results].sort((a, b) => {
         const scoreMap: Record<string, number> = {
+          'very-viable-stable-large-house': 8,
+          'viable-large-house': 7,
           'very-viable-stable': 6,
           'viable': 5,
+          'viable-small-house': 4.5,
           'viable-higher-allocation': 4,
           'viable-extreme-care': 3,
           'viable-when-renting': 2,
@@ -219,8 +222,11 @@ export default function ProfilePage() {
   // Get viability label
   const getViabilityLabel = (classification: string) => {
     const labels: Record<string, { label: string; color: string; bgColor: string }> = {
+      'very-viable-stable-large-house': { label: 'Very Viable & Stable: Large House', color: '#065F46', bgColor: '#A7F3D0' },
+      'viable-large-house': { label: 'Viable: Large House', color: '#10B981', bgColor: '#D1FAE5' },
       'very-viable-stable': { label: 'Very Viable & Stable', color: '#10B981', bgColor: '#D1FAE5' },
       'viable': { label: 'Viable', color: '#5BA4E5', bgColor: '#EFF6FF' },
+      'viable-small-house': { label: 'Somewhat Viable: Small House', color: '#0891B2', bgColor: '#CFFAFE' },
       'viable-higher-allocation': { label: 'Viable (Higher Allocation)', color: '#F59E0B', bgColor: '#FEF3C7' },
       'viable-extreme-care': { label: 'Viable (Extreme Care)', color: '#EF4444', bgColor: '#FEE2E2' },
       'viable-when-renting': { label: 'Viable When Renting', color: '#8B5CF6', bgColor: '#EDE9FE' },

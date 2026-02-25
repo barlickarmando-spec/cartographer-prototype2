@@ -114,8 +114,11 @@ const TYPE_OPTIONS: FilterItem[] = [
 // ===== HELPERS =====
 
 const VIABILITY_SCORE: Record<string, number> = {
+  'very-viable-stable-large-house': 8,
+  'viable-large-house': 7,
   'very-viable-stable': 6,
   'viable': 5,
+  'viable-small-house': 4.5,
   'viable-higher-allocation': 4,
   'viable-extreme-care': 3,
   'viable-when-renting': 2,
@@ -123,8 +126,11 @@ const VIABILITY_SCORE: Record<string, number> = {
 };
 
 const VIABILITY_NUMERIC: Record<string, number> = {
+  'very-viable-stable-large-house': 10.0,
+  'viable-large-house': 9.0,
   'very-viable-stable': 9.5,
   'viable': 8.0,
+  'viable-small-house': 7.0,
   'viable-higher-allocation': 6.5,
   'viable-extreme-care': 5.0,
   'viable-when-renting': 4.0,
@@ -133,8 +139,11 @@ const VIABILITY_NUMERIC: Record<string, number> = {
 
 function getViabilityLabel(classification: string): { label: string; color: string; bgColor: string; barColor: string } {
   const labels: Record<string, { label: string; color: string; bgColor: string; barColor: string }> = {
+    'very-viable-stable-large-house': { label: 'Very Viable & Stable: Large House', color: '#065F46', bgColor: '#A7F3D0', barColor: '#059669' },
+    'viable-large-house': { label: 'Viable: Large House', color: '#059669', bgColor: '#D1FAE5', barColor: '#10B981' },
     'very-viable-stable': { label: 'Very Viable & Stable', color: '#059669', bgColor: '#D1FAE5', barColor: '#10B981' },
     'viable': { label: 'Viable', color: '#2563EB', bgColor: '#DBEAFE', barColor: '#3B82F6' },
+    'viable-small-house': { label: 'Somewhat Viable: Small House', color: '#0891B2', bgColor: '#CFFAFE', barColor: '#06B6D4' },
     'viable-higher-allocation': { label: 'Viable (Higher Allocation)', color: '#D97706', bgColor: '#FEF3C7', barColor: '#F59E0B' },
     'viable-extreme-care': { label: 'Viable (Extreme Care)', color: '#DC2626', bgColor: '#FEE2E2', barColor: '#EF4444' },
     'viable-when-renting': { label: 'Viable When Renting', color: '#7C3AED', bgColor: '#EDE9FE', barColor: '#8B5CF6' },
