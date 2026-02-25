@@ -331,13 +331,21 @@ function LocationCard({
                 </span>
               )}
             </div>
-            {/* Viability Badge */}
-            <span
-              className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold"
-              style={{ backgroundColor: viability.bgColor, color: viability.color }}
-            >
-              {viability.label}
-            </span>
+            {/* Viability Badge + Score */}
+            <div className="flex items-center gap-2">
+              <span
+                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold"
+                style={{ backgroundColor: viability.bgColor, color: viability.color }}
+              >
+                {viability.label}
+              </span>
+              <span
+                className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold"
+                style={{ backgroundColor: viability.bgColor, color: viability.color }}
+              >
+                {(VIABILITY_NUMERIC[result.viabilityClassification] ?? 2.0).toFixed(1)}/10
+              </span>
+            </div>
           </div>
 
           {/* Wishlist Heart */}
@@ -806,7 +814,7 @@ export default function MyLocationsPage() {
   if (sortMode === 'saved') {
     finalResults = visibleResults.filter(r => savedLocationNames.includes(r.location));
   } else if (sortMode === 'default') {
-    finalResults = visibleResults;
+    finalResults = [...visibleResults].sort(sortByViability);
   } else {
     finalResults = applySortMode(visibleResults, sortMode, colKey);
   }
