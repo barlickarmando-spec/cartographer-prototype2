@@ -11,6 +11,7 @@ import { getSalary } from '@/lib/data-extraction';
 import { getAdjustedCOLKey } from '@/lib/onboarding/types';
 import type { OnboardingAnswers, UserProfile } from '@/lib/onboarding/types';
 import { searchLocations, getAllLocationOptions } from '@/lib/locations';
+import { estimateHomeSizeSqft } from '@/lib/home-value-lookup';
 
 // ===== TYPES =====
 
@@ -184,12 +185,7 @@ function StarRating({ rating }: { rating: number }) {
   return <div className="flex items-center gap-0.5">{stars}</div>;
 }
 
-// Estimate sqft from home price using rough national median (~$200/sqft)
-function estimateHomeSizeSqft(homePrice: number): number {
-  if (homePrice <= 0) return 0;
-  const pricePerSqft = 200;
-  return Math.round(homePrice / pricePerSqft);
-}
+
 
 function getQualityOfLifeLabel(di: number): { label: string; color: string; bgColor: string } {
   if (di >= 30000) return { label: 'Excellent', color: '#059669', bgColor: '#D1FAE5' };
@@ -403,7 +399,7 @@ function LocationCard({
     || result.houseProjections.fiveYears
     || result.houseProjections.threeYears;
   const projectedHomeValue = maxProj?.canAfford ? maxProj.maxSustainableHousePrice : null;
-  const projectedHomeSizeSqft = projectedHomeValue ? estimateHomeSizeSqft(projectedHomeValue) : null;
+  const projectedHomeSizeSqft = projectedHomeValue ? estimateHomeSizeSqft(projectedHomeValue, result.location) : null;
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col shadow-sm">

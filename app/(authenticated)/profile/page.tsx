@@ -8,6 +8,7 @@ import { formatCurrency, pluralize } from '@/lib/utils';
 import { normalizeOnboardingAnswers } from '@/lib/onboarding/normalize';
 import { getOnboardingAnswers } from '@/lib/storage';
 import { searchLocations, getAllLocationOptions } from '@/lib/locations';
+import { getPricePerSqft } from '@/lib/home-value-lookup';
 import type { OnboardingAnswers } from '@/lib/onboarding/types';
 
 export default function ProfilePage() {
@@ -1069,7 +1070,8 @@ interface HouseProjectionCardProps {
 }
 
 function HouseProjectionCard({ title, projection, location, showHomes, onToggle }: HouseProjectionCardProps) {
-  const estimatedSqFt = Math.round((projection.maxSustainableHousePrice / 250)); // Rough estimate $250/sqft
+  const pricePerSqft = getPricePerSqft(location);
+  const estimatedSqFt = Math.round(projection.maxSustainableHousePrice / pricePerSqft);
   
   return (
     <div className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden">
@@ -1106,7 +1108,7 @@ function HouseProjectionCard({ title, projection, location, showHomes, onToggle 
             <p className="text-2xl font-bold text-[#2C3E50]">
               {estimatedSqFt.toLocaleString()} sqft
             </p>
-            <p className="text-xs text-[#9CA3AF] mt-1">~$250/sqft</p>
+            <p className="text-xs text-[#9CA3AF] mt-1">~${pricePerSqft}/sqft</p>
           </div>
         </div>
 
