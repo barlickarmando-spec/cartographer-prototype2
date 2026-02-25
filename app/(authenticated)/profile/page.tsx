@@ -35,11 +35,29 @@ export default function ProfilePage() {
     }
 
     try {
-      const results: CalculationResult[] = JSON.parse(stored);
+      let results: CalculationResult[] = JSON.parse(stored);
 
       if (results.length === 0) {
         router.push('/onboarding');
         return;
+      }
+
+      // Detect stale cached results (missing numericScore from 3-layer system)
+      const isStale = results.length > 0 && results[0].numericScore === undefined;
+      if (isStale && storedAnswers) {
+        try {
+          const answers = JSON.parse(storedAnswers);
+          const freshProfile = normalizeOnboardingAnswers(answers);
+          results = results.map(r => {
+            try {
+              const fresh = calculateAutoApproach(freshProfile, r.location, 30);
+              return fresh || r;
+            } catch {
+              return r;
+            }
+          });
+          localStorage.setItem('calculation-results', JSON.stringify(results));
+        } catch { /* use original results */ }
       }
 
       const sortedResults = [...results].sort((a, b) => {

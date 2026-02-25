@@ -590,12 +590,30 @@ export default function MyLocationsPage() {
     }
 
     try {
-      const results: CalculationResult[] = JSON.parse(stored);
-      setUserResults(results);
+      let results: CalculationResult[] = JSON.parse(stored);
+
+      // Detect stale cached results (missing numericScore from 3-layer system)
+      // and recalculate them with fresh engine — runs once then re-caches
+      const isStale = results.length > 0 && results[0].numericScore === undefined;
 
       const answers = getOnboardingAnswers<OnboardingAnswers>(
         (d): d is OnboardingAnswers => d != null && typeof d === 'object'
       );
+
+      if (isStale && answers) {
+        const freshProfile = normalizeOnboardingAnswers(answers);
+        results = results.map(r => {
+          try {
+            const fresh = calculateAutoApproach(freshProfile, r.location, 30);
+            return fresh || r;
+          } catch {
+            return r;
+          }
+        });
+        localStorage.setItem('calculation-results', JSON.stringify(results));
+      }
+
+      setUserResults(results);
 
       if (answers) {
         setOccupation(answers.userOccupation || '');
