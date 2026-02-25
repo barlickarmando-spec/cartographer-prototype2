@@ -114,28 +114,30 @@ const TYPE_OPTIONS: FilterItem[] = [
 // ===== HELPERS =====
 
 // Viability label derived from house size classification (the only displayed badge)
-function getViabilityLabel(result: CalculationResult): { label: string; color: string; bgColor: string; barColor: string } {
+function getViabilityLabel(result: CalculationResult): { label: string; viabilityStatus: string; houseSize: string; color: string; bgColor: string; barColor: string } {
   const classification = result.houseClassification || 'viable-median-house';
-  const labels: Record<string, { label: string; color: string; bgColor: string; barColor: string }> = {
-    'very-viable-stable-large-house': { label: 'Very Viable and Stable: Large House', color: '#065F46', bgColor: '#A7F3D0', barColor: '#059669' },
-    'viable-large-house': { label: 'Viable: Large House', color: '#059669', bgColor: '#D1FAE5', barColor: '#10B981' },
-    'very-viable-stable-median-house': { label: 'Very Viable and Stable: Median House', color: '#059669', bgColor: '#D1FAE5', barColor: '#10B981' },
-    'viable-median-house': { label: 'Viable: Median House', color: '#2563EB', bgColor: '#DBEAFE', barColor: '#3B82F6' },
-    'somewhat-viable-small-house': { label: 'Somewhat Viable: Small House', color: '#0891B2', bgColor: '#CFFAFE', barColor: '#06B6D4' },
+  const labels: Record<string, { label: string; viabilityStatus: string; houseSize: string; color: string; bgColor: string; barColor: string }> = {
+    'very-viable-stable-large-house': { label: 'Very Viable and Stable: Large House', viabilityStatus: 'Very Viable and Stable', houseSize: 'Large House', color: '#065F46', bgColor: '#A7F3D0', barColor: '#059669' },
+    'viable-large-house': { label: 'Viable: Large House', viabilityStatus: 'Viable', houseSize: 'Large House', color: '#059669', bgColor: '#D1FAE5', barColor: '#10B981' },
+    'very-viable-stable-median-house': { label: 'Very Viable and Stable: Median House', viabilityStatus: 'Very Viable and Stable', houseSize: 'Median House', color: '#059669', bgColor: '#D1FAE5', barColor: '#10B981' },
+    'viable-median-house': { label: 'Viable: Median House', viabilityStatus: 'Viable', houseSize: 'Median House', color: '#2563EB', bgColor: '#DBEAFE', barColor: '#3B82F6' },
+    'somewhat-viable-small-house': { label: 'Somewhat Viable: Small House', viabilityStatus: 'Somewhat Viable', houseSize: 'Small House', color: '#0891B2', bgColor: '#CFFAFE', barColor: '#06B6D4' },
   };
 
   // For non-viable / renting-only, override with structural labels
   if (result.viabilityClassification === 'no-viable-path') {
-    return { label: 'Not Viable', color: '#DC2626', bgColor: '#FEE2E2', barColor: '#EF4444' };
+    return { label: 'Not Viable', viabilityStatus: 'Not Viable', houseSize: '', color: '#DC2626', bgColor: '#FEE2E2', barColor: '#EF4444' };
   }
   if (result.viabilityClassification === 'viable-when-renting') {
-    return { label: 'Viable When Renting', color: '#7C3AED', bgColor: '#EDE9FE', barColor: '#8B5CF6' };
+    return { label: 'Viable When Renting', viabilityStatus: 'Viable When Renting', houseSize: '', color: '#7C3AED', bgColor: '#EDE9FE', barColor: '#8B5CF6' };
   }
   if (result.viabilityClassification === 'viable-extreme-care') {
-    return { label: labels[classification]?.label || 'Viable (Extreme Care)', color: '#DC2626', bgColor: '#FEE2E2', barColor: '#EF4444' };
+    const base = labels[classification];
+    return { label: base?.label || 'Viable (Extreme Care)', viabilityStatus: 'Viable (Extreme Care)', houseSize: base?.houseSize || '', color: '#DC2626', bgColor: '#FEE2E2', barColor: '#EF4444' };
   }
   if (result.viabilityClassification === 'viable-higher-allocation') {
-    return { label: labels[classification]?.label || 'Viable (Higher Allocation)', color: '#D97706', bgColor: '#FEF3C7', barColor: '#F59E0B' };
+    const base = labels[classification];
+    return { label: base?.label || 'Viable (Higher Allocation)', viabilityStatus: 'Viable (Higher Allocation)', houseSize: base?.houseSize || '', color: '#D97706', bgColor: '#FEF3C7', barColor: '#F59E0B' };
   }
 
   return labels[classification] || labels['viable-median-house'];
@@ -409,7 +411,7 @@ function LocationCard({
       <div className="px-6 pt-5 pb-4">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
-            {/* Row 1: Location name + Viability badge */}
+            {/* Row 1: Location name + Viability status badge */}
             <div className="flex items-center gap-2 mb-2 flex-wrap">
               <h3 className="text-lg font-bold text-gray-900 truncate">{result.location}</h3>
               {isCurrent && (
@@ -421,24 +423,19 @@ function LocationCard({
                 className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold shrink-0"
                 style={{ backgroundColor: viability.bgColor, color: viability.color }}
               >
-                {viability.label}
+                {viability.viabilityStatus}
               </span>
             </div>
-            {/* Row 2: Star rating + Projected home size */}
+            {/* Row 2: Star rating + House size classification */}
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1.5">
                 <StarRating rating={starRating} />
                 <span className="text-xs font-medium text-gray-400">{starRating.toFixed(1)}</span>
               </div>
-              {projectedHomeSizeSqft && (
+              {viability.houseSize && (
                 <>
                   <span className="text-gray-300">|</span>
-                  <div className="flex items-center gap-1">
-                    <svg className="w-3.5 h-3.5 text-[#8B5CF6]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-                    </svg>
-                    <span className="text-xs font-medium text-gray-500">~{projectedHomeSizeSqft.toLocaleString()} sqft</span>
-                  </div>
+                  <span className="text-xs font-semibold" style={{ color: viability.color }}>{viability.houseSize}</span>
                 </>
               )}
             </div>
@@ -467,25 +464,23 @@ function LocationCard({
       {/* ===== MIDDLE SECTION: 2x2 Stats Grid ===== */}
       <div className="px-6 pb-4">
         <div className="grid grid-cols-2 gap-3">
-          {/* Estimated Salary */}
+          {/* Estimated Salary — $ icon (Figma: green/teal) */}
           <div className="bg-[#F0FDF4] rounded-xl p-3.5">
             <div className="flex items-center gap-2 mb-1.5">
               <div className="w-7 h-7 rounded-lg bg-[#DCFCE7] flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 text-[#16A34A]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                <span className="text-sm font-bold text-[#16A34A]">$</span>
               </div>
               <span className="text-xs font-medium text-gray-500">Est. Salary</span>
             </div>
             <p className="text-sm font-bold text-gray-900 pl-9">{formatCurrency(salary)}/yr</p>
           </div>
 
-          {/* Cost of Living */}
-          <div className="bg-[#FFFBEB] rounded-xl p-3.5">
+          {/* Cost of Living — trend line icon (Figma: green) */}
+          <div className="bg-[#F0FDF4] rounded-xl p-3.5">
             <div className="flex items-center gap-2 mb-1.5">
-              <div className="w-7 h-7 rounded-lg bg-[#FEF3C7] flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 text-[#D97706]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
+              <div className="w-7 h-7 rounded-lg bg-[#DCFCE7] flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-[#16A34A]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
                 </svg>
               </div>
               <span className="text-xs font-medium text-gray-500">Cost of Living</span>
@@ -493,12 +488,12 @@ function LocationCard({
             <p className="text-sm font-bold text-gray-900 pl-9">{formatCurrency(col)}/yr</p>
           </div>
 
-          {/* Quality of Life */}
-          <div className="bg-[#EFF6FF] rounded-xl p-3.5">
+          {/* Quality of Life — heart/smile icon (Figma: warm brown/olive) */}
+          <div className="bg-[#FEF9F0] rounded-xl p-3.5">
             <div className="flex items-center gap-2 mb-1.5">
-              <div className="w-7 h-7 rounded-lg bg-[#DBEAFE] flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 text-[#2563EB]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+              <div className="w-7 h-7 rounded-lg bg-[#FDF0D5] flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-[#B45309]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm-.375 0h.008v.015h-.008V9.75zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75zm-.375 0h.008v.015h-.008V9.75z" />
                 </svg>
               </div>
               <span className="text-xs font-medium text-gray-500">Quality of Life</span>
@@ -513,12 +508,12 @@ function LocationCard({
             </p>
           </div>
 
-          {/* Fastest to Home */}
-          <div className="bg-[#F5F3FF] rounded-xl p-3.5">
+          {/* Fastest to Home — house icon (Figma: orange/brown) */}
+          <div className="bg-[#FFF7ED] rounded-xl p-3.5">
             <div className="flex items-center gap-2 mb-1.5">
-              <div className="w-7 h-7 rounded-lg bg-[#EDE9FE] flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 text-[#7C3AED]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 21v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21m0 0h4.5V3.545M12.75 21h7.5V10.75M2.25 21h1.5m18 0h-18M2.25 9l4.5-1.636M18.75 3l-1.5.545m0 6.205l3 1m1.5.5l-1.5-.5M6.75 7.364V3h-3v18m3-13.636l10.5-3.819" />
+              <div className="w-7 h-7 rounded-lg bg-[#FFEDD5] flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-[#C2410C]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
                 </svg>
               </div>
               <span className="text-xs font-medium text-gray-500">Fastest to Home</span>
@@ -581,7 +576,7 @@ function LocationCard({
         <div className="px-6 pb-5 pt-2 bg-[#FAFBFC]">
           <Link
             href="/profile"
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#22C55E] text-white rounded-xl hover:bg-[#16A34A] transition-colors text-sm font-semibold"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#7C3AED] text-white rounded-xl hover:bg-[#6D28D9] transition-colors text-sm font-semibold"
           >
             View Detailed Analysis
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -1033,7 +1028,7 @@ export default function MyLocationsPage() {
           <div className="flex justify-center mt-6">
             <button
               onClick={() => setVisibleOtherCount(prev => prev + 6)}
-              className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] hover:border-[#5BA4E5]/30 transition-all"
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] hover:border-[#7C3AED]/30 transition-all"
             >
               See More
               <span className="text-xs text-gray-400">({finalResults.length - visibleOtherCount} remaining)</span>
@@ -1101,7 +1096,7 @@ export default function MyLocationsPage() {
                 <div className="flex justify-center mt-6">
                   <button
                     onClick={() => setVisibleOtherCount(prev => prev + 6)}
-                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] hover:border-[#5BA4E5]/30 transition-all"
+                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] hover:border-[#7C3AED]/30 transition-all"
                   >
                     See More
                     <span className="text-xs text-gray-400">({otherSorted.length - visibleOtherCount} remaining)</span>
@@ -1203,7 +1198,7 @@ export default function MyLocationsPage() {
                   <div className="flex justify-center mt-6">
                     <button
                       onClick={() => setVisibleDefaultCount(prev => prev + 6)}
-                      className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] hover:border-[#5BA4E5]/30 transition-all"
+                      className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] hover:border-[#7C3AED]/30 transition-all"
                     >
                       See More
                       <span className="text-xs text-gray-400">({allSectionResults.length - visibleDefaultCount} remaining)</span>
@@ -1232,7 +1227,7 @@ export default function MyLocationsPage() {
       </div>
 
       {/* Filter Bar + Search */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div className="bg-[#F5F3FF] rounded-2xl border border-[#DDD6FE] p-4">
         <div className="flex flex-col gap-4">
           {/* Top Row: Quick Buttons + Dropdown Filters */}
           <div className="flex flex-wrap items-center gap-2">
@@ -1241,8 +1236,8 @@ export default function MyLocationsPage() {
               onClick={() => { setSortMode('default'); setShowFilter('all'); setTypeFilter('all'); setGeoFilters([]); setBrowseAll(false); }}
               className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 isAllActive
-                  ? 'bg-[#5BA4E5] text-white shadow-sm'
-                  : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border border-gray-200'
+                  ? 'bg-[#7C3AED] text-white shadow-sm'
+                  : 'bg-white text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] border border-gray-200'
               }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -1256,8 +1251,8 @@ export default function MyLocationsPage() {
               onClick={() => { setSortMode('default'); setShowFilter('all'); setTypeFilter('all'); setGeoFilters([]); setBrowseAll(true); }}
               className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 isBrowseActive
-                  ? 'bg-[#5BA4E5] text-white shadow-sm'
-                  : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border border-gray-200'
+                  ? 'bg-[#7C3AED] text-white shadow-sm'
+                  : 'bg-white text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] border border-gray-200'
               }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -1271,8 +1266,8 @@ export default function MyLocationsPage() {
               onClick={() => { setSortMode('saved'); setShowFilter('all'); setBrowseAll(false); }}
               className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 isSavedActive
-                  ? 'bg-[#5BA4E5] text-white shadow-sm'
-                  : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border border-gray-200'
+                  ? 'bg-[#7C3AED] text-white shadow-sm'
+                  : 'bg-white text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] border border-gray-200'
               }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -1286,8 +1281,8 @@ export default function MyLocationsPage() {
               onClick={() => { setSortMode('most-recommended'); setShowFilter('all'); setBrowseAll(false); }}
               className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 isRecommendedActive
-                  ? 'bg-[#5BA4E5] text-white shadow-sm'
-                  : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border border-gray-200'
+                  ? 'bg-[#7C3AED] text-white shadow-sm'
+                  : 'bg-white text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] border border-gray-200'
               }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -1305,8 +1300,8 @@ export default function MyLocationsPage() {
                 onClick={() => { setSortDropdownOpen(!sortDropdownOpen); setShowDropdownOpen(false); setStateDropdownOpen(false); }}
                 className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
                   sortMode !== 'default'
-                    ? 'bg-[#EFF6FF] text-[#5BA4E5] border-[#5BA4E5]/30'
-                    : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border-gray-200'
+                    ? 'bg-[#EDE9FE] text-[#7C3AED] border-[#7C3AED]/30'
+                    : 'bg-white text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] border-gray-200'
                 }`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -1331,13 +1326,13 @@ export default function MyLocationsPage() {
                       }}
                       className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between ${
                         sortMode === option.value
-                          ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium'
-                          : 'text-gray-700 hover:bg-[#F8FAFB]'
+                          ? 'bg-[#EDE9FE] text-[#7C3AED] font-medium'
+                          : 'text-gray-700 hover:bg-[#F5F3FF]'
                       }`}
                     >
                       {option.label}
                       {sortMode === option.value && (
-                        <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <svg className="w-4 h-4 text-[#7C3AED] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                         </svg>
                       )}
@@ -1353,8 +1348,8 @@ export default function MyLocationsPage() {
                 onClick={() => { setShowDropdownOpen(!showDropdownOpen); setSortDropdownOpen(false); setStateDropdownOpen(false); }}
                 className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
                   showFilter !== 'all' || hasActiveGeoFilter(geoFilters)
-                    ? 'bg-[#EFF6FF] text-[#5BA4E5] border-[#5BA4E5]/30'
-                    : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border-gray-200'
+                    ? 'bg-[#EDE9FE] text-[#7C3AED] border-[#7C3AED]/30'
+                    : 'bg-white text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] border-gray-200'
                 }`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -1362,10 +1357,10 @@ export default function MyLocationsPage() {
                 </svg>
                 <span className="hidden sm:inline">Filter</span>
                 {(showFilter !== 'all' || hasActiveGeoFilter(geoFilters)) && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#5BA4E5]"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#7C3AED]"></span>
                 )}
                 {geoFilters.length > 0 && (
-                  <span className="text-xs bg-[#5BA4E5] text-white rounded-full w-5 h-5 flex items-center justify-center font-bold">{geoFilters.length}</span>
+                  <span className="text-xs bg-[#7C3AED] text-white rounded-full w-5 h-5 flex items-center justify-center font-bold">{geoFilters.length}</span>
                 )}
                 <svg className={`w-3.5 h-3.5 transition-transform ${showDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
@@ -1386,7 +1381,7 @@ export default function MyLocationsPage() {
                     >
                       {item.label}
                       {showFilter === item.value && (
-                        <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <svg className="w-4 h-4 text-[#7C3AED] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                         </svg>
                       )}
@@ -1423,7 +1418,7 @@ export default function MyLocationsPage() {
                       >
                         <span className="flex items-center gap-2.5">
                           <span className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
-                            isActive ? 'bg-[#5BA4E5] border-[#5BA4E5]' : 'border-gray-300'
+                            isActive ? 'bg-[#7C3AED] border-[#7C3AED]' : 'border-gray-300'
                           }`}>
                             {isActive && (
                               <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
@@ -1466,7 +1461,7 @@ export default function MyLocationsPage() {
                       >
                         <span className="flex items-center gap-2.5">
                           <span className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
-                            isActive ? 'bg-[#5BA4E5] border-[#5BA4E5]' : 'border-gray-300'
+                            isActive ? 'bg-[#7C3AED] border-[#7C3AED]' : 'border-gray-300'
                           }`}>
                             {isActive && (
                               <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
@@ -1501,8 +1496,8 @@ export default function MyLocationsPage() {
                 onClick={() => { setStateDropdownOpen(!stateDropdownOpen); setSortDropdownOpen(false); setShowDropdownOpen(false); if (stateDropdownOpen) { setSelectedStateInDropdown(null); setShowStatesInDropdown(false); } }}
                 className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
                   typeFilter !== 'all' || geoFilters.some(f => f.startsWith('state:') || f.startsWith('city:'))
-                    ? 'bg-[#EFF6FF] text-[#5BA4E5] border-[#5BA4E5]/30'
-                    : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border-gray-200'
+                    ? 'bg-[#EDE9FE] text-[#7C3AED] border-[#7C3AED]/30'
+                    : 'bg-white text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] border-gray-200'
                 }`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -1735,7 +1730,7 @@ export default function MyLocationsPage() {
                 onChange={(e) => handleSearchInput(e.target.value)}
                 onFocus={() => { if (searchDropdown.length > 0) setShowSearchDropdown(true); }}
                 placeholder="Search any location..."
-                className="w-full pl-11 pr-4 py-2.5 bg-[#F8FAFB] border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#5BA4E5]/30 focus:border-[#5BA4E5] focus:bg-white outline-none transition-all"
+                className="w-full pl-11 pr-4 py-2.5 bg-[#F8FAFB] border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#7C3AED]/30 focus:border-[#7C3AED] focus:bg-white outline-none transition-all"
               />
               {searchLoading && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
