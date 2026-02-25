@@ -34,7 +34,7 @@ export default function AuthenticatedLayout({
     <div className="min-h-screen bg-[#F7FAFC]">
       {/* Top Bar */}
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="w-full px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           {/* Logo */}
           <Link href="/profile" className="flex items-center shrink-0">
             <Image
@@ -61,7 +61,7 @@ export default function AuthenticatedLayout({
 
       {/* Main Navigation */}
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
           <nav className="flex items-center gap-1">
             {navItems.map((item) => (
               <Link
@@ -82,7 +82,7 @@ export default function AuthenticatedLayout({
       </div>
 
       {/* Page Content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="w-full px-4 sm:px-6 lg:px-8 py-8">
         {children}
       </main>
     </div>
