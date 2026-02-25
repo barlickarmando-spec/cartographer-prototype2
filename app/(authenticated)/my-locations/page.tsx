@@ -82,6 +82,11 @@ const STATE_TO_ABBREV: Record<string, string> = {
   'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY',
 };
 
+// Reverse mapping: abbreviation → full state name (e.g., "FL" → "Florida")
+const ABBREV_TO_STATE: Record<string, string> = Object.fromEntries(
+  Object.entries(STATE_TO_ABBREV).map(([full, abbr]) => [abbr, full])
+);
+
 type FilterSection = { header: string; items: { value: string; label: string }[] };
 
 const FILTER_SECTIONS: FilterSection[] = [
@@ -96,8 +101,9 @@ const FILTER_SECTIONS: FilterSection[] = [
   {
     header: 'Type',
     items: [
-      { value: 'type:states', label: 'States' },
-      { value: 'type:cities', label: 'Cities' },
+      { value: 'type:all', label: 'All (States & Cities)' },
+      { value: 'type:states', label: 'States Only' },
+      { value: 'type:cities', label: 'Cities Only' },
     ],
   },
   {
@@ -167,6 +173,7 @@ function isCity(locationName: string): boolean {
 function matchesLocationFilter(locationName: string, filter: string): boolean {
   if (filter === 'all' || filter === 'saved' || filter === 'other') return true;
 
+  if (filter === 'type:all') return true;
   if (filter === 'type:states') {
     return !isCity(locationName) || locationName === 'District of Columbia';
   }
@@ -176,22 +183,26 @@ function matchesLocationFilter(locationName: string, filter: string): boolean {
 
   if (filter.startsWith('region:')) {
     const regionName = filter.substring(7);
+    const locState = getLocationState(locationName);
+    // Resolve abbreviation to full name for cities (e.g., "FL" → "Florida")
+    const fullStateName = ABBREV_TO_STATE[locState] || locState;
     if (regionName === 'Continental United States') {
-      const state = getLocationState(locationName);
-      return state !== 'Alaska' && state !== 'Hawaii';
+      return fullStateName !== 'Alaska' && fullStateName !== 'Hawaii';
     }
     const regionStates = REGIONS[regionName];
     if (!regionStates) return false;
-    const state = getLocationState(locationName);
-    return regionStates.includes(state);
+    return regionStates.includes(fullStateName);
   }
 
   if (filter.startsWith('weather:')) {
     const weatherName = filter.substring(8);
     const category = WEATHER_CATEGORIES[weatherName];
     if (!category) return false;
-    const state = getLocationState(locationName);
-    if (category.states.includes(state)) return true;
+    const locState = getLocationState(locationName);
+    const fullStateName = ABBREV_TO_STATE[locState] || locState;
+    // Match if the location's state is in the weather category
+    if (category.states.includes(fullStateName)) return true;
+    // Also match explicitly listed cities
     if (isCity(locationName)) {
       const cityName = locationName.split(', ')[0];
       if (category.cities.includes(cityName)) return true;
