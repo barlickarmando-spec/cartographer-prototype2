@@ -234,12 +234,24 @@ function getGeoFilterLabel(filter: string): string {
   return 'All';
 }
 
-function hasActiveGeoFilter(geoFilter: string): boolean {
-  return geoFilter !== 'all';
+function hasActiveGeoFilter(geoFilters: string[]): boolean {
+  return geoFilters.length > 0;
 }
 
-function hasAnyGeoFilter(typeFilter: string, geoFilter: string): boolean {
-  return typeFilter !== 'all' || geoFilter !== 'all';
+function hasAnyGeoFilter(typeFilter: string, geoFilters: string[]): boolean {
+  return typeFilter !== 'all' || geoFilters.length > 0;
+}
+
+function matchesAnyGeoFilter(locationName: string, geoFilters: string[]): boolean {
+  if (geoFilters.length === 0) return true;
+  return geoFilters.some(f => matchesLocationFilter(locationName, f));
+}
+
+function toggleGeoFilter(current: string[], value: string): string[] {
+  if (current.includes(value)) {
+    return current.filter(v => v !== value);
+  }
+  return [...current, value];
 }
 
 function sortByViability(a: CalculationResult, b: CalculationResult): number {
@@ -530,7 +542,7 @@ export default function MyLocationsPage() {
   const [sortMode, setSortMode] = useState<SortMode>('default');
   const [showFilter, setShowFilter] = useState('all');       // 'all' | 'saved' | 'other'
   const [typeFilter, setTypeFilter] = useState('all');       // 'all' | 'states' | 'cities'
-  const [geoFilter, setGeoFilter] = useState('all');         // 'all' | 'region:X' | 'weather:X' | 'state:X' | 'city:X'
+  const [geoFilters, setGeoFilters] = useState<string[]>([]);  // multi-select: ['region:X', 'weather:Y', ...] or [] for all
   const [browseAll, setBrowseAll] = useState(false);
   const [showStatesInDropdown, setShowStatesInDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -632,7 +644,7 @@ export default function MyLocationsPage() {
   // ===== CALCULATE ALL LOCATIONS (for full-dataset sorting or browse) =====
   useEffect(() => {
     // Calculate when an active sort is selected, browse mode is on, or geographic filter is active
-    const needsFullCalc = browseAll || (sortMode !== 'default' && sortMode !== 'saved') || hasAnyGeoFilter(typeFilter, geoFilter);
+    const needsFullCalc = browseAll || (sortMode !== 'default' && sortMode !== 'saved') || hasAnyGeoFilter(typeFilter, geoFilters);
     if (!needsFullCalc || !profile) return;
     if (allCalculatedResults.length > 0) return;
 
@@ -669,13 +681,13 @@ export default function MyLocationsPage() {
       }
       setAllCalcLoading(false);
     }, 50);
-  }, [sortMode, showFilter, typeFilter, geoFilter, browseAll, allCalculatedResults.length, profile]);
+  }, [sortMode, showFilter, typeFilter, geoFilters, browseAll, allCalculatedResults.length, profile]);
 
   // Reset pagination when sort or filter changes
   useEffect(() => {
     setVisibleOtherCount(6);
     setVisibleDefaultCount(6);
-  }, [sortMode, showFilter, typeFilter, geoFilter, browseAll]);
+  }, [sortMode, showFilter, typeFilter, geoFilters, browseAll]);
 
   // ===== CLOSE DROPDOWNS ON OUTSIDE CLICK =====
   useEffect(() => {
@@ -786,7 +798,7 @@ export default function MyLocationsPage() {
 
   // Determine active sort mode
   const isActiveSortMode = sortMode !== 'default' && sortMode !== 'saved';
-  const hasGeoOrTypeFilter = hasAnyGeoFilter(typeFilter, geoFilter);
+  const hasGeoOrTypeFilter = hasAnyGeoFilter(typeFilter, geoFilters);
 
   // For active sorts, browse mode, or geographic/type filters: use the full dataset
   const baseResults = (isActiveSortMode || browseAll || hasGeoOrTypeFilter) ? fullDataset : userDeduped;
@@ -808,9 +820,9 @@ export default function MyLocationsPage() {
     visibleResults = visibleResults.filter(r => matchesLocationFilter(r.location, 'type:cities'));
   }
 
-  // Apply geographic filter (region/weather/state/city)
-  if (hasActiveGeoFilter(geoFilter)) {
-    visibleResults = visibleResults.filter(r => matchesLocationFilter(r.location, geoFilter));
+  // Apply geographic filters (region/weather/state/city — OR logic across selections)
+  if (hasActiveGeoFilter(geoFilters)) {
+    visibleResults = visibleResults.filter(r => matchesAnyGeoFilter(r.location, geoFilters));
   }
 
   // Step 2: Apply sort mode
@@ -824,7 +836,7 @@ export default function MyLocationsPage() {
   }
 
   // For default + all filters (non-browse): pin current location first
-  const allFiltersDefault = showFilter === 'all' && typeFilter === 'all' && geoFilter === 'all';
+  const allFiltersDefault = showFilter === 'all' && typeFilter === 'all' && geoFilters.length === 0;
   if (sortMode === 'default' && allFiltersDefault && !browseAll) {
     const currentIdx = finalResults.findIndex(r => r.location === currentLocation);
     if (currentIdx > 0) {
@@ -1128,7 +1140,7 @@ export default function MyLocationsPage() {
           <div className="flex flex-wrap items-center gap-2">
             {/* My Locations Button */}
             <button
-              onClick={() => { setSortMode('default'); setShowFilter('all'); setTypeFilter('all'); setGeoFilter('all'); setBrowseAll(false); }}
+              onClick={() => { setSortMode('default'); setShowFilter('all'); setTypeFilter('all'); setGeoFilters([]); setBrowseAll(false); }}
               className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 isAllActive
                   ? 'bg-[#5BA4E5] text-white shadow-sm'
@@ -1143,7 +1155,7 @@ export default function MyLocationsPage() {
 
             {/* Browse All Button */}
             <button
-              onClick={() => { setSortMode('default'); setShowFilter('all'); setTypeFilter('all'); setGeoFilter('all'); setBrowseAll(true); }}
+              onClick={() => { setSortMode('default'); setShowFilter('all'); setTypeFilter('all'); setGeoFilters([]); setBrowseAll(true); }}
               className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 isBrowseActive
                   ? 'bg-[#5BA4E5] text-white shadow-sm'
@@ -1217,7 +1229,7 @@ export default function MyLocationsPage() {
                         setSortMode(option.value);
                         setSortDropdownOpen(false);
                         setBrowseAll(false);
-                        if (option.value === 'default') { setShowFilter('all'); setTypeFilter('all'); setGeoFilter('all'); }
+                        if (option.value === 'default') { setShowFilter('all'); setTypeFilter('all'); setGeoFilters([]); }
                       }}
                       className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between ${
                         sortMode === option.value
@@ -1237,12 +1249,12 @@ export default function MyLocationsPage() {
               )}
             </div>
 
-            {/* Filter Dropdown (Show + Regions + Weather) */}
+            {/* Filter Dropdown (Show + Regions + Weather — multi-select) */}
             <div ref={showDropdownRef} className="relative">
               <button
                 onClick={() => { setShowDropdownOpen(!showDropdownOpen); setSortDropdownOpen(false); setStateDropdownOpen(false); }}
                 className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
-                  showFilter !== 'all' || hasActiveGeoFilter(geoFilter)
+                  showFilter !== 'all' || hasActiveGeoFilter(geoFilters)
                     ? 'bg-[#EFF6FF] text-[#5BA4E5] border-[#5BA4E5]/30'
                     : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border-gray-200'
                 }`}
@@ -1251,8 +1263,11 @@ export default function MyLocationsPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
                 </svg>
                 <span className="hidden sm:inline">Filter</span>
-                {(showFilter !== 'all' || hasActiveGeoFilter(geoFilter)) && (
+                {(showFilter !== 'all' || hasActiveGeoFilter(geoFilters)) && (
                   <span className="w-1.5 h-1.5 rounded-full bg-[#5BA4E5]"></span>
+                )}
+                {geoFilters.length > 0 && (
+                  <span className="text-xs bg-[#5BA4E5] text-white rounded-full w-5 h-5 flex items-center justify-center font-bold">{geoFilters.length}</span>
                 )}
                 <svg className={`w-3.5 h-3.5 transition-transform ${showDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
@@ -1261,7 +1276,7 @@ export default function MyLocationsPage() {
 
               {showDropdownOpen && (
                 <div className="absolute z-20 right-0 mt-1 w-72 bg-white border border-gray-200 rounded-xl shadow-lg max-h-[480px] overflow-y-auto">
-                  {/* Show section */}
+                  {/* Show section (single-select) */}
                   <div className="sticky top-0 px-4 py-2 bg-gray-50 border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider">Show</div>
                   {SHOW_OPTIONS.map(item => (
                     <button
@@ -1280,66 +1295,104 @@ export default function MyLocationsPage() {
                     </button>
                   ))}
 
-                  {/* Regions section */}
-                  <div className="sticky top-0 px-4 py-2 bg-gray-50 border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider">Regions</div>
-                  {REGION_OPTIONS.map(item => {
-                    const isActive = item.value === 'all' ? !geoFilter.startsWith('region:') && !geoFilter.startsWith('weather:') : geoFilter === item.value;
+                  {/* Regions section (multi-select) */}
+                  <div className="sticky top-0 px-4 py-2 bg-gray-50 border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                    <span>Regions</span>
+                    {geoFilters.some(f => f.startsWith('region:')) && (
+                      <button
+                        onClick={() => setGeoFilters(geoFilters.filter(f => !f.startsWith('region:')))}
+                        className="text-[10px] text-[#5BA4E5] hover:text-[#4A8FCC] font-semibold"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  {REGION_OPTIONS.filter(item => item.value !== 'all').map(item => {
+                    const isActive = geoFilters.includes(item.value);
                     return (
                       <button
                         key={item.value}
                         onClick={() => {
-                          if (item.value === 'all') {
-                            // Only clear region/weather geo filters, keep state/city
-                            if (geoFilter.startsWith('region:') || geoFilter.startsWith('weather:')) setGeoFilter('all');
-                          } else {
-                            setGeoFilter(item.value);
-                          }
-                          setShowDropdownOpen(false);
+                          // Clear any state/city filters when selecting regions
+                          const withoutStateCity = geoFilters.filter(f => !f.startsWith('state:') && !f.startsWith('city:'));
+                          const toggled = toggleGeoFilter(withoutStateCity, item.value);
+                          setGeoFilters(toggled);
                           setBrowseAll(false);
                         }}
                         className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
                           isActive ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
                         }`}
                       >
-                        {item.label}
-                        {isActive && (
-                          <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                          </svg>
-                        )}
+                        <span className="flex items-center gap-2.5">
+                          <span className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
+                            isActive ? 'bg-[#5BA4E5] border-[#5BA4E5]' : 'border-gray-300'
+                          }`}>
+                            {isActive && (
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                              </svg>
+                            )}
+                          </span>
+                          {item.label}
+                        </span>
                       </button>
                     );
                   })}
 
-                  {/* Weather section */}
-                  <div className="sticky top-0 px-4 py-2 bg-gray-50 border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider">Weather</div>
-                  {WEATHER_OPTIONS.map(item => {
-                    const isActive = item.value === 'all' ? !geoFilter.startsWith('weather:') && !geoFilter.startsWith('region:') : geoFilter === item.value;
+                  {/* Weather section (multi-select) */}
+                  <div className="sticky top-0 px-4 py-2 bg-gray-50 border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                    <span>Weather</span>
+                    {geoFilters.some(f => f.startsWith('weather:')) && (
+                      <button
+                        onClick={() => setGeoFilters(geoFilters.filter(f => !f.startsWith('weather:')))}
+                        className="text-[10px] text-[#5BA4E5] hover:text-[#4A8FCC] font-semibold"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  {WEATHER_OPTIONS.filter(item => item.value !== 'all').map(item => {
+                    const isActive = geoFilters.includes(item.value);
                     return (
                       <button
                         key={item.value}
                         onClick={() => {
-                          if (item.value === 'all') {
-                            if (geoFilter.startsWith('weather:') || geoFilter.startsWith('region:')) setGeoFilter('all');
-                          } else {
-                            setGeoFilter(item.value);
-                          }
-                          setShowDropdownOpen(false);
+                          const withoutStateCity = geoFilters.filter(f => !f.startsWith('state:') && !f.startsWith('city:'));
+                          const toggled = toggleGeoFilter(withoutStateCity, item.value);
+                          setGeoFilters(toggled);
                           setBrowseAll(false);
                         }}
                         className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
                           isActive ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
                         }`}
                       >
-                        {item.label}
-                        {isActive && (
-                          <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                          </svg>
-                        )}
+                        <span className="flex items-center gap-2.5">
+                          <span className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
+                            isActive ? 'bg-[#5BA4E5] border-[#5BA4E5]' : 'border-gray-300'
+                          }`}>
+                            {isActive && (
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                              </svg>
+                            )}
+                          </span>
+                          {item.label}
+                        </span>
                       </button>
                     );
                   })}
+
+                  {/* Clear All button */}
+                  {geoFilters.length > 0 && (
+                    <div className="sticky bottom-0 border-t border-gray-100 bg-white px-4 py-2.5">
+                      <button
+                        onClick={() => { setGeoFilters([]); setShowDropdownOpen(false); }}
+                        className="w-full text-center text-sm font-medium text-red-500 hover:text-red-600 transition-colors"
+                      >
+                        Clear All Filters ({geoFilters.length})
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1349,7 +1402,7 @@ export default function MyLocationsPage() {
               <button
                 onClick={() => { setStateDropdownOpen(!stateDropdownOpen); setSortDropdownOpen(false); setShowDropdownOpen(false); if (stateDropdownOpen) { setSelectedStateInDropdown(null); setShowStatesInDropdown(false); } }}
                 className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
-                  typeFilter !== 'all' || geoFilter.startsWith('state:') || geoFilter.startsWith('city:')
+                  typeFilter !== 'all' || geoFilters.some(f => f.startsWith('state:') || f.startsWith('city:'))
                     ? 'bg-[#EFF6FF] text-[#5BA4E5] border-[#5BA4E5]/30'
                     : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border-gray-200'
                 }`}
@@ -1359,13 +1412,19 @@ export default function MyLocationsPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
                 </svg>
                 <span className="hidden sm:inline">Location</span>
-                {(typeFilter !== 'all' || geoFilter.startsWith('state:') || geoFilter.startsWith('city:')) && (
-                  <span className="text-xs">
-                    {typeFilter !== 'all' ? (typeFilter === 'states' ? 'States' : 'Cities') : ''}
-                    {typeFilter !== 'all' && (geoFilter.startsWith('state:') || geoFilter.startsWith('city:')) ? ' · ' : ''}
-                    {geoFilter.startsWith('state:') ? geoFilter.substring(6) : geoFilter.startsWith('city:') ? geoFilter.substring(5) : ''}
-                  </span>
-                )}
+                {(() => {
+                  const stateFilter = geoFilters.find(f => f.startsWith('state:'));
+                  const cityFilter = geoFilters.find(f => f.startsWith('city:'));
+                  const hasLocFilter = stateFilter || cityFilter;
+                  if (!hasLocFilter && typeFilter === 'all') return null;
+                  return (
+                    <span className="text-xs">
+                      {typeFilter !== 'all' ? (typeFilter === 'states' ? 'States' : 'Cities') : ''}
+                      {typeFilter !== 'all' && hasLocFilter ? ' · ' : ''}
+                      {stateFilter ? stateFilter.substring(6) : cityFilter ? cityFilter.substring(5) : ''}
+                    </span>
+                  );
+                })()}
                 <svg className={`w-3.5 h-3.5 transition-transform ${stateDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                 </svg>
@@ -1389,17 +1448,17 @@ export default function MyLocationsPage() {
                       {/* All in [State] */}
                       <button
                         onClick={() => {
-                          setGeoFilter(`state:${selectedStateInDropdown}`);
+                          setGeoFilters([`state:${selectedStateInDropdown}`]);
                           setStateDropdownOpen(false);
                           setSelectedStateInDropdown(null);
                           setBrowseAll(false);
                         }}
                         className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between font-medium ${
-                          geoFilter === `state:${selectedStateInDropdown}` ? 'bg-[#EFF6FF] text-[#5BA4E5]' : 'text-gray-900 hover:bg-[#F8FAFB]'
+                          geoFilters.includes(`state:${selectedStateInDropdown}`) ? 'bg-[#EFF6FF] text-[#5BA4E5]' : 'text-gray-900 hover:bg-[#F8FAFB]'
                         }`}
                       >
                         <span>All in {selectedStateInDropdown}</span>
-                        {geoFilter === `state:${selectedStateInDropdown}` && (
+                        {geoFilters.includes(`state:${selectedStateInDropdown}`) && (
                           <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                           </svg>
@@ -1416,17 +1475,17 @@ export default function MyLocationsPage() {
                             <button
                               key={cityLabel}
                               onClick={() => {
-                                setGeoFilter(`city:${cityLabel}`);
+                                setGeoFilters([`city:${cityLabel}`]);
                                 setStateDropdownOpen(false);
                                 setSelectedStateInDropdown(null);
                                 setBrowseAll(false);
                               }}
                               className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
-                                geoFilter === `city:${cityLabel}` ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                                geoFilters.includes(`city:${cityLabel}`) ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
                               }`}
                             >
                               {cityLabel}
-                              {geoFilter === `city:${cityLabel}` && (
+                              {geoFilters.includes(`city:${cityLabel}`) && (
                                 <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                                 </svg>
@@ -1465,15 +1524,15 @@ export default function MyLocationsPage() {
                       {/* All option */}
                       <button
                         onClick={() => {
-                          setGeoFilter('all');
+                          setGeoFilters(geoFilters.filter(f => !f.startsWith('state:') && !f.startsWith('city:')));
                           setShowStatesInDropdown(false);
                         }}
                         className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
-                          !geoFilter.startsWith('state:') && !geoFilter.startsWith('city:') ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                          !geoFilters.some(f => f.startsWith('state:') || f.startsWith('city:')) ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
                         }`}
                       >
                         All States
-                        {!geoFilter.startsWith('state:') && !geoFilter.startsWith('city:') && (
+                        {!geoFilters.some(f => f.startsWith('state:') || f.startsWith('city:')) && (
                           <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                           </svg>
@@ -1481,11 +1540,11 @@ export default function MyLocationsPage() {
                       </button>
 
                       {/* Active state/city indicator (if one is selected) */}
-                      {(geoFilter.startsWith('state:') || geoFilter.startsWith('city:')) && (
+                      {geoFilters.some(f => f.startsWith('state:') || f.startsWith('city:')) && (
                         <div className="px-4 py-2 text-sm bg-[#EFF6FF] text-[#5BA4E5] font-medium flex items-center justify-between">
-                          {getGeoFilterLabel(geoFilter)}
+                          {getGeoFilterLabel(geoFilters.find(f => f.startsWith('state:') || f.startsWith('city:')) || '')}
                           <button
-                            onClick={() => setGeoFilter('all')}
+                            onClick={() => setGeoFilters(geoFilters.filter(f => !f.startsWith('state:') && !f.startsWith('city:')))}
                             className="text-[#5BA4E5] hover:text-[#4A8FCC] p-0.5"
                             title="Clear state filter"
                           >
@@ -1520,7 +1579,7 @@ export default function MyLocationsPage() {
                           </button>
                           {ALL_STATES.map(stateName => {
                             const cityCount = (stateCitiesMap[stateName] || []).length;
-                            const isActive = geoFilter === `state:${stateName}`;
+                            const isActive = geoFilters.includes(`state:${stateName}`);
                             return (
                               <button
                                 key={stateName}
@@ -1528,7 +1587,7 @@ export default function MyLocationsPage() {
                                   if (cityCount > 0) {
                                     setSelectedStateInDropdown(stateName);
                                   } else {
-                                    setGeoFilter(`state:${stateName}`);
+                                    setGeoFilters([`state:${stateName}`]);
                                     setStateDropdownOpen(false);
                                     setShowStatesInDropdown(false);
                                     setBrowseAll(false);
