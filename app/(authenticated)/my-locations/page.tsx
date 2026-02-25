@@ -113,43 +113,39 @@ const TYPE_OPTIONS: FilterItem[] = [
 
 // ===== HELPERS =====
 
+// Layer 1 — Structural tier ordering (for sorting)
 const VIABILITY_SCORE: Record<string, number> = {
-  'very-viable-stable-large-house': 8,
-  'viable-large-house': 7,
   'very-viable-stable': 6,
   'viable': 5,
-  'viable-small-house': 4.5,
   'viable-higher-allocation': 4,
   'viable-extreme-care': 3,
   'viable-when-renting': 2,
   'no-viable-path': 1,
 };
 
-const VIABILITY_NUMERIC: Record<string, number> = {
-  'very-viable-stable-large-house': 10.0,
-  'viable-large-house': 9.0,
-  'very-viable-stable': 9.5,
-  'viable': 8.0,
-  'viable-small-house': 7.0,
-  'viable-higher-allocation': 6.5,
-  'viable-extreme-care': 5.0,
-  'viable-when-renting': 4.0,
-  'no-viable-path': 2.0,
-};
-
+// Layer 1 — Structural tier labels (financial stability only)
 function getViabilityLabel(classification: string): { label: string; color: string; bgColor: string; barColor: string } {
   const labels: Record<string, { label: string; color: string; bgColor: string; barColor: string }> = {
-    'very-viable-stable-large-house': { label: 'Very Viable & Stable: Large House', color: '#065F46', bgColor: '#A7F3D0', barColor: '#059669' },
-    'viable-large-house': { label: 'Viable: Large House', color: '#059669', bgColor: '#D1FAE5', barColor: '#10B981' },
     'very-viable-stable': { label: 'Very Viable & Stable', color: '#059669', bgColor: '#D1FAE5', barColor: '#10B981' },
     'viable': { label: 'Viable', color: '#2563EB', bgColor: '#DBEAFE', barColor: '#3B82F6' },
-    'viable-small-house': { label: 'Somewhat Viable: Small House', color: '#0891B2', bgColor: '#CFFAFE', barColor: '#06B6D4' },
     'viable-higher-allocation': { label: 'Viable (Higher Allocation)', color: '#D97706', bgColor: '#FEF3C7', barColor: '#F59E0B' },
     'viable-extreme-care': { label: 'Viable (Extreme Care)', color: '#DC2626', bgColor: '#FEE2E2', barColor: '#EF4444' },
     'viable-when-renting': { label: 'Viable When Renting', color: '#7C3AED', bgColor: '#EDE9FE', barColor: '#8B5CF6' },
     'no-viable-path': { label: 'Not Viable', color: '#DC2626', bgColor: '#FEE2E2', barColor: '#EF4444' },
   };
   return labels[classification] || labels['no-viable-path'];
+}
+
+// Layer 3 — House size classification labels (relative to median)
+function getHouseClassificationLabel(classification: string): { label: string; color: string; bgColor: string } {
+  const labels: Record<string, { label: string; color: string; bgColor: string }> = {
+    'very-viable-stable-large-house': { label: 'Very Viable and Stable: Large House', color: '#065F46', bgColor: '#A7F3D0' },
+    'viable-large-house': { label: 'Viable: Large House', color: '#059669', bgColor: '#D1FAE5' },
+    'viable-median-house': { label: 'Viable: Median House', color: '#2563EB', bgColor: '#DBEAFE' },
+    'very-viable-stable-median-house': { label: 'Very Viable and Stable: Median House', color: '#059669', bgColor: '#D1FAE5' },
+    'somewhat-viable-small-house': { label: 'Somewhat Viable: Small House', color: '#0891B2', bgColor: '#CFFAFE' },
+  };
+  return labels[classification] || labels['viable-median-house'];
 }
 
 function getQualityOfLifeLabel(di: number): { label: string; color: string; bgColor: string } {
@@ -264,8 +260,13 @@ function toggleGeoFilter(current: string[], value: string): string[] {
 }
 
 function sortByViability(a: CalculationResult, b: CalculationResult): number {
+  // Primary: structural tier
   const scoreDiff = (VIABILITY_SCORE[b.viabilityClassification] || 0) - (VIABILITY_SCORE[a.viabilityClassification] || 0);
   if (scoreDiff !== 0) return scoreDiff;
+  // Secondary: numeric score (0-10) as tiebreaker
+  const numDiff = (b.numericScore ?? 0) - (a.numericScore ?? 0);
+  if (Math.abs(numDiff) > 0.05) return numDiff;
+  // Tertiary: years to mortgage
   const aYears = a.yearsToMortgage > 0 ? a.yearsToMortgage : 999;
   const bYears = b.yearsToMortgage > 0 ? b.yearsToMortgage : 999;
   return aYears - bYears;
@@ -375,7 +376,7 @@ function LocationCard({
                 </span>
               )}
             </div>
-            {/* Viability Badge + Rating */}
+            {/* Layer 1: Structural Tier Badge + Layer 2: Numeric Score */}
             <div className="flex items-center gap-2">
               <span
                 className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold"
@@ -384,9 +385,21 @@ function LocationCard({
                 {viability.label}
               </span>
               <span className="text-sm font-bold" style={{ color: viability.color }}>
-                {(VIABILITY_NUMERIC[result.viabilityClassification] ?? 2.0).toFixed(1)}/10
+                {(result.numericScore ?? 0).toFixed(1)}/10
               </span>
             </div>
+            {/* Layer 3: House Size Classification */}
+            {result.houseClassification && (() => {
+              const houseTag = getHouseClassificationLabel(result.houseClassification);
+              return (
+                <span
+                  className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold mt-1"
+                  style={{ backgroundColor: houseTag.bgColor, color: houseTag.color }}
+                >
+                  {houseTag.label}
+                </span>
+              );
+            })()}
           </div>
 
           {/* Wishlist Heart */}

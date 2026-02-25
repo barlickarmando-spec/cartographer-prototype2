@@ -44,17 +44,16 @@ export default function ProfilePage() {
 
       const sortedResults = [...results].sort((a, b) => {
         const scoreMap: Record<string, number> = {
-          'very-viable-stable-large-house': 8,
-          'viable-large-house': 7,
           'very-viable-stable': 6,
           'viable': 5,
-          'viable-small-house': 4.5,
           'viable-higher-allocation': 4,
           'viable-extreme-care': 3,
           'viable-when-renting': 2,
           'no-viable-path': 1,
         };
-        return (scoreMap[b.viabilityClassification] || 0) - (scoreMap[a.viabilityClassification] || 0);
+        const tierDiff = (scoreMap[b.viabilityClassification] || 0) - (scoreMap[a.viabilityClassification] || 0);
+        if (tierDiff !== 0) return tierDiff;
+        return (b.numericScore ?? 0) - (a.numericScore ?? 0);
       });
 
       setAllResults(sortedResults);
@@ -222,17 +221,25 @@ export default function ProfilePage() {
   // Get viability label
   const getViabilityLabel = (classification: string) => {
     const labels: Record<string, { label: string; color: string; bgColor: string }> = {
-      'very-viable-stable-large-house': { label: 'Very Viable & Stable: Large House', color: '#065F46', bgColor: '#A7F3D0' },
-      'viable-large-house': { label: 'Viable: Large House', color: '#10B981', bgColor: '#D1FAE5' },
       'very-viable-stable': { label: 'Very Viable & Stable', color: '#10B981', bgColor: '#D1FAE5' },
       'viable': { label: 'Viable', color: '#5BA4E5', bgColor: '#EFF6FF' },
-      'viable-small-house': { label: 'Somewhat Viable: Small House', color: '#0891B2', bgColor: '#CFFAFE' },
       'viable-higher-allocation': { label: 'Viable (Higher Allocation)', color: '#F59E0B', bgColor: '#FEF3C7' },
       'viable-extreme-care': { label: 'Viable (Extreme Care)', color: '#EF4444', bgColor: '#FEE2E2' },
       'viable-when-renting': { label: 'Viable When Renting', color: '#8B5CF6', bgColor: '#EDE9FE' },
       'no-viable-path': { label: 'Not Viable', color: '#DC2626', bgColor: '#FEE2E2' },
     };
     return labels[classification] || labels['no-viable-path'];
+  };
+
+  const getHouseClassificationLabel = (classification: string) => {
+    const labels: Record<string, { label: string; color: string; bgColor: string }> = {
+      'very-viable-stable-large-house': { label: 'Very Viable and Stable: Large House', color: '#065F46', bgColor: '#A7F3D0' },
+      'viable-large-house': { label: 'Viable: Large House', color: '#10B981', bgColor: '#D1FAE5' },
+      'viable-median-house': { label: 'Viable: Median House', color: '#5BA4E5', bgColor: '#EFF6FF' },
+      'very-viable-stable-median-house': { label: 'Very Viable and Stable: Median House', color: '#10B981', bgColor: '#D1FAE5' },
+      'somewhat-viable-small-house': { label: 'Somewhat Viable: Small House', color: '#0891B2', bgColor: '#CFFAFE' },
+    };
+    return labels[classification] || labels['viable-median-house'];
   };
 
   const viabilityInfo = getViabilityLabel(result.viabilityClassification);
@@ -392,10 +399,14 @@ export default function ProfilePage() {
               )}
             </div>
 
-            {/* Viability Classification */}
+            {/* Viability Classification (3 layers) */}
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
               <p className="text-white/70 text-sm mb-1">Status</p>
               <p className="text-lg font-bold">{viabilityInfo.label}</p>
+              <p className="text-white/80 text-sm font-semibold">{(result.numericScore ?? 0).toFixed(1)}/10</p>
+              {result.houseClassification && (
+                <p className="text-white/60 text-xs mt-1">{getHouseClassificationLabel(result.houseClassification).label}</p>
+              )}
             </div>
 
             {/* Estimated Home Value */}
