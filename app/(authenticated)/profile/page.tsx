@@ -60,18 +60,13 @@ export default function ProfilePage() {
         } catch { /* use original results */ }
       }
 
+      // Sort by numeric score (analog — 8.7 beats 8.6)
       const sortedResults = [...results].sort((a, b) => {
-        const scoreMap: Record<string, number> = {
-          'very-viable-stable': 6,
-          'viable': 5,
-          'viable-higher-allocation': 4,
-          'viable-extreme-care': 3,
-          'viable-when-renting': 2,
-          'no-viable-path': 1,
-        };
-        const tierDiff = (scoreMap[b.viabilityClassification] || 0) - (scoreMap[a.viabilityClassification] || 0);
-        if (tierDiff !== 0) return tierDiff;
-        return (b.numericScore ?? 0) - (a.numericScore ?? 0);
+        const numDiff = (b.numericScore ?? 0) - (a.numericScore ?? 0);
+        if (Math.abs(numDiff) > 0.001) return numDiff;
+        const aYears = a.yearsToMortgage > 0 ? a.yearsToMortgage : 999;
+        const bYears = b.yearsToMortgage > 0 ? b.yearsToMortgage : 999;
+        return aYears - bYears;
       });
 
       setAllResults(sortedResults);
@@ -237,30 +232,33 @@ export default function ProfilePage() {
   const isViable = result.viabilityClassification !== 'no-viable-path';
   
   // Get viability label
-  const getViabilityLabel = (classification: string) => {
-    const labels: Record<string, { label: string; color: string; bgColor: string }> = {
-      'very-viable-stable': { label: 'Very Viable & Stable', color: '#10B981', bgColor: '#D1FAE5' },
-      'viable': { label: 'Viable', color: '#5BA4E5', bgColor: '#EFF6FF' },
-      'viable-higher-allocation': { label: 'Viable (Higher Allocation)', color: '#F59E0B', bgColor: '#FEF3C7' },
-      'viable-extreme-care': { label: 'Viable (Extreme Care)', color: '#EF4444', bgColor: '#FEE2E2' },
-      'viable-when-renting': { label: 'Viable When Renting', color: '#8B5CF6', bgColor: '#EDE9FE' },
-      'no-viable-path': { label: 'Not Viable', color: '#DC2626', bgColor: '#FEE2E2' },
-    };
-    return labels[classification] || labels['no-viable-path'];
-  };
-
-  const getHouseClassificationLabel = (classification: string) => {
-    const labels: Record<string, { label: string; color: string; bgColor: string }> = {
+  const getViabilityLabel = (r: CalculationResult) => {
+    const houseClassification = r.houseClassification || 'viable-median-house';
+    const houseLabels: Record<string, { label: string; color: string; bgColor: string }> = {
       'very-viable-stable-large-house': { label: 'Very Viable and Stable: Large House', color: '#065F46', bgColor: '#A7F3D0' },
       'viable-large-house': { label: 'Viable: Large House', color: '#10B981', bgColor: '#D1FAE5' },
-      'viable-median-house': { label: 'Viable: Median House', color: '#5BA4E5', bgColor: '#EFF6FF' },
       'very-viable-stable-median-house': { label: 'Very Viable and Stable: Median House', color: '#10B981', bgColor: '#D1FAE5' },
+      'viable-median-house': { label: 'Viable: Median House', color: '#5BA4E5', bgColor: '#EFF6FF' },
       'somewhat-viable-small-house': { label: 'Somewhat Viable: Small House', color: '#0891B2', bgColor: '#CFFAFE' },
     };
-    return labels[classification] || labels['viable-median-house'];
+
+    if (r.viabilityClassification === 'no-viable-path') {
+      return { label: 'Not Viable', color: '#DC2626', bgColor: '#FEE2E2' };
+    }
+    if (r.viabilityClassification === 'viable-when-renting') {
+      return { label: 'Viable When Renting', color: '#8B5CF6', bgColor: '#EDE9FE' };
+    }
+    if (r.viabilityClassification === 'viable-extreme-care') {
+      return { label: houseLabels[houseClassification]?.label || 'Viable (Extreme Care)', color: '#EF4444', bgColor: '#FEE2E2' };
+    }
+    if (r.viabilityClassification === 'viable-higher-allocation') {
+      return { label: houseLabels[houseClassification]?.label || 'Viable (Higher Allocation)', color: '#F59E0B', bgColor: '#FEF3C7' };
+    }
+
+    return houseLabels[houseClassification] || houseLabels['viable-median-house'];
   };
 
-  const viabilityInfo = getViabilityLabel(result.viabilityClassification);
+  const viabilityInfo = getViabilityLabel(result);
 
   return (
     <div className="space-y-6">
@@ -314,9 +312,9 @@ export default function ProfilePage() {
                       <span>{r.location}</span>
                       <span
                         className="text-xs px-1.5 py-0.5 rounded-full font-medium"
-                        style={{ backgroundColor: getViabilityLabel(r.viabilityClassification).bgColor, color: getViabilityLabel(r.viabilityClassification).color }}
+                        style={{ backgroundColor: getViabilityLabel(r).bgColor, color: getViabilityLabel(r).color }}
                       >
-                        {getViabilityLabel(r.viabilityClassification).label}
+                        {getViabilityLabel(r).label} ({(r.numericScore ?? 0).toFixed(1)})
                       </span>
                     </button>
                   ))}
@@ -343,9 +341,9 @@ export default function ProfilePage() {
                           {alreadyCalc && (
                             <span
                               className="ml-auto text-xs px-1.5 py-0.5 rounded-full font-medium"
-                              style={{ backgroundColor: getViabilityLabel(alreadyCalc.viabilityClassification).bgColor, color: getViabilityLabel(alreadyCalc.viabilityClassification).color }}
+                              style={{ backgroundColor: getViabilityLabel(alreadyCalc).bgColor, color: getViabilityLabel(alreadyCalc).color }}
                             >
-                              {getViabilityLabel(alreadyCalc.viabilityClassification).label}
+                              {getViabilityLabel(alreadyCalc).label} ({(alreadyCalc.numericScore ?? 0).toFixed(1)})
                             </span>
                           )}
                         </button>
@@ -417,14 +415,11 @@ export default function ProfilePage() {
               )}
             </div>
 
-            {/* Viability Classification (3 layers) */}
+            {/* Viability Classification + Score */}
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
               <p className="text-white/70 text-sm mb-1">Status</p>
               <p className="text-lg font-bold">{viabilityInfo.label}</p>
               <p className="text-white/80 text-sm font-semibold">{(result.numericScore ?? 0).toFixed(1)}/10</p>
-              {result.houseClassification && (
-                <p className="text-white/60 text-xs mt-1">{getHouseClassificationLabel(result.houseClassification).label}</p>
-              )}
             </div>
 
             {/* Estimated Home Value */}
