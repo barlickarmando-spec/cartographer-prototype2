@@ -141,13 +141,52 @@ function getViabilityLabel(result: CalculationResult): { label: string; color: s
   return labels[classification] || labels['viable-median-house'];
 }
 
-// Score-based color — maps the 0-10 numeric score to a color
-function getScoreColor(score: number): string {
-  if (score >= 8) return '#059669';   // green
-  if (score >= 6) return '#2563EB';   // blue
-  if (score >= 4) return '#D97706';   // amber
-  if (score >= 2) return '#DC2626';   // red
-  return '#6B7280';                   // gray
+// Convert 0-10 score to 0-5 star rating
+function getStarRating(score: number): number {
+  return Math.round((score / 10) * 5 * 2) / 2; // half-star increments
+}
+
+// Render 5-star display from a 0-5 value
+function StarRating({ rating }: { rating: number }) {
+  const stars = [];
+  for (let i = 1; i <= 5; i++) {
+    if (rating >= i) {
+      // Full star
+      stars.push(
+        <svg key={i} className="w-4 h-4 text-[#FACC15]" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+        </svg>
+      );
+    } else if (rating >= i - 0.5) {
+      // Half star
+      stars.push(
+        <svg key={i} className="w-4 h-4" viewBox="0 0 24 24">
+          <defs>
+            <linearGradient id={`half-${i}`}>
+              <stop offset="50%" stopColor="#FACC15" />
+              <stop offset="50%" stopColor="#4B5563" />
+            </linearGradient>
+          </defs>
+          <path fill={`url(#half-${i})`} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+        </svg>
+      );
+    } else {
+      // Empty star
+      stars.push(
+        <svg key={i} className="w-4 h-4 text-[#4B5563]" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+        </svg>
+      );
+    }
+  }
+  return <div className="flex items-center gap-0.5">{stars}</div>;
+}
+
+// Estimate sqft from home price using rough national median (~$200/sqft)
+function estimateHomeSizeSqft(homePrice: number): number {
+  if (homePrice <= 0) return 0;
+  const pricePerSqft = 200;
+  return Math.round(homePrice / pricePerSqft);
 }
 
 function getQualityOfLifeLabel(di: number): { label: string; color: string; bgColor: string } {
@@ -353,57 +392,60 @@ function LocationCard({
   const qol = getQualityOfLifeLabel(qualityOfLife);
   const fastestToHome = result.yearsToMortgage > 0 ? `${result.yearsToMortgage} yr${result.yearsToMortgage !== 1 ? 's' : ''}` : 'N/A';
   const debtFree = result.yearsToDebtFree > 0 ? `${result.yearsToDebtFree} yr${result.yearsToDebtFree !== 1 ? 's' : ''}` : 'Debt-free';
+  const starRating = getStarRating(result.numericScore ?? 0);
 
-  // Max home value: use maxAffordable first, then fall back to longest available projection
+  // Projected home value: use maxAffordable first, then fall back to longest available projection
   const maxProj = result.houseProjections.maxAffordable
     || result.houseProjections.fifteenYears
     || result.houseProjections.tenYears
     || result.houseProjections.fiveYears
     || result.houseProjections.threeYears;
-  const maxHomeValue = maxProj?.canAfford ? maxProj.maxSustainableHousePrice : null;
+  const projectedHomeValue = maxProj?.canAfford ? maxProj.maxSustainableHousePrice : null;
+  const projectedHomeSizeSqft = projectedHomeValue ? estimateHomeSizeSqft(projectedHomeValue) : null;
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col shadow-sm">
+    <div className="bg-[#1E293B] rounded-2xl overflow-hidden hover:shadow-xl hover:shadow-black/20 transition-all duration-300 flex flex-col">
       {/* ===== TOP SECTION ===== */}
-      <div className="px-6 pt-5 pb-4">
+      <div className="px-5 pt-5 pb-4">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2">
-              <h3 className="text-lg font-bold text-gray-900 truncate">{result.location}</h3>
+              <h3 className="text-lg font-bold text-white truncate">{result.location}</h3>
               {isCurrent && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EFF6FF] text-[#5BA4E5] uppercase tracking-wider shrink-0">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#334155] text-[#5BA4E5] uppercase tracking-wider shrink-0">
                   Current
                 </span>
               )}
             </div>
-            {/* Viability Badge + Numeric Score */}
-            <div className="flex items-center gap-2">
+            {/* Viability Badge + Star Rating */}
+            <div className="flex items-center gap-3">
               <span
                 className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold"
                 style={{ backgroundColor: viability.bgColor, color: viability.color }}
               >
                 {viability.label}
               </span>
-              <span className="text-sm font-bold" style={{ color: getScoreColor(result.numericScore ?? 0) }}>
-                {(result.numericScore ?? 0).toFixed(1)}/10
-              </span>
+              <div className="flex items-center gap-1.5">
+                <StarRating rating={starRating} />
+                <span className="text-xs font-medium text-slate-400">{starRating.toFixed(1)}</span>
+              </div>
             </div>
           </div>
 
-          {/* Wishlist Heart */}
+          {/* Save Button — green square */}
           <button
             onClick={(e) => { e.preventDefault(); onToggleSave(); }}
-            className="ml-3 shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-110"
-            style={{ backgroundColor: isSaved ? '#FEE2E2' : '#F3F4F6' }}
+            className="ml-3 shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-all hover:scale-110"
+            style={{ backgroundColor: '#22C55E' }}
             title={isSaved ? 'Remove from saved' : 'Save location'}
           >
             {isSaved ? (
-              <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+              <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
               </svg>
             ) : (
-              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
               </svg>
             )}
           </button>
@@ -411,43 +453,43 @@ function LocationCard({
       </div>
 
       {/* ===== MIDDLE SECTION: 2x2 Stats Grid ===== */}
-      <div className="px-6 pb-4">
+      <div className="px-5 pb-4">
         <div className="grid grid-cols-2 gap-3">
           {/* Estimated Salary */}
-          <div className="bg-[#F0FDF4] rounded-xl p-3.5">
+          <div className="bg-[#334155] rounded-xl p-3.5">
             <div className="flex items-center gap-2 mb-1.5">
-              <div className="w-7 h-7 rounded-lg bg-[#DCFCE7] flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 text-[#16A34A]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <div className="w-7 h-7 rounded-lg bg-[#22C55E]/20 flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-[#22C55E]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <span className="text-xs font-medium text-gray-500">Est. Salary</span>
+              <span className="text-xs font-medium text-slate-400">Est. Salary</span>
             </div>
-            <p className="text-sm font-bold text-gray-900 pl-9">{formatCurrency(salary)}/yr</p>
+            <p className="text-sm font-bold text-white pl-9">{formatCurrency(salary)}/yr</p>
           </div>
 
           {/* Cost of Living */}
-          <div className="bg-[#FFFBEB] rounded-xl p-3.5">
+          <div className="bg-[#334155] rounded-xl p-3.5">
             <div className="flex items-center gap-2 mb-1.5">
-              <div className="w-7 h-7 rounded-lg bg-[#FEF3C7] flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 text-[#D97706]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <div className="w-7 h-7 rounded-lg bg-[#F59E0B]/20 flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-[#F59E0B]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
                 </svg>
               </div>
-              <span className="text-xs font-medium text-gray-500">Cost of Living</span>
+              <span className="text-xs font-medium text-slate-400">Cost of Living</span>
             </div>
-            <p className="text-sm font-bold text-gray-900 pl-9">{formatCurrency(col)}/yr</p>
+            <p className="text-sm font-bold text-white pl-9">{formatCurrency(col)}/yr</p>
           </div>
 
           {/* Quality of Life */}
-          <div className="bg-[#EFF6FF] rounded-xl p-3.5">
+          <div className="bg-[#334155] rounded-xl p-3.5">
             <div className="flex items-center gap-2 mb-1.5">
-              <div className="w-7 h-7 rounded-lg bg-[#DBEAFE] flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 text-[#2563EB]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <div className="w-7 h-7 rounded-lg bg-[#3B82F6]/20 flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-[#3B82F6]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
                 </svg>
               </div>
-              <span className="text-xs font-medium text-gray-500">Quality of Life</span>
+              <span className="text-xs font-medium text-slate-400">Quality of Life</span>
             </div>
             <p className="pl-9">
               <span
@@ -460,32 +502,32 @@ function LocationCard({
           </div>
 
           {/* Fastest to Home */}
-          <div className="bg-[#F5F3FF] rounded-xl p-3.5">
+          <div className="bg-[#334155] rounded-xl p-3.5">
             <div className="flex items-center gap-2 mb-1.5">
-              <div className="w-7 h-7 rounded-lg bg-[#EDE9FE] flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 text-[#7C3AED]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <div className="w-7 h-7 rounded-lg bg-[#8B5CF6]/20 flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-[#8B5CF6]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 21v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21m0 0h4.5V3.545M12.75 21h7.5V10.75M2.25 21h1.5m18 0h-18M2.25 9l4.5-1.636M18.75 3l-1.5.545m0 6.205l3 1m1.5.5l-1.5-.5M6.75 7.364V3h-3v18m3-13.636l10.5-3.819" />
                 </svg>
               </div>
-              <span className="text-xs font-medium text-gray-500">Fastest to Home</span>
+              <span className="text-xs font-medium text-slate-400">Fastest to Home</span>
             </div>
-            <p className="text-sm font-bold text-gray-900 pl-9">{fastestToHome}</p>
+            <p className="text-sm font-bold text-white pl-9">{fastestToHome}</p>
           </div>
         </div>
       </div>
 
       {/* ===== BOTTOM SECTION ===== */}
-      <div className="mt-auto border-t border-gray-100">
-        <div className="px-6 py-4 bg-[#FAFBFC] space-y-3">
+      <div className="mt-auto border-t border-[#334155]">
+        <div className="px-5 py-4 bg-[#172033] space-y-3">
           {/* Time to Debt Free */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-[#5BA4E5]/15 flex items-center justify-center shrink-0">
                 <svg className="w-4 h-4 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <span className="text-sm font-medium text-gray-600">Time to Debt Free</span>
+              <span className="text-sm font-medium text-slate-400">Time to Debt Free</span>
             </div>
             <span className="text-sm font-bold text-[#5BA4E5]">{debtFree}</span>
           </div>
@@ -493,25 +535,41 @@ function LocationCard({
           {/* Projected Home Value */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#F0FDF4] flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 text-[#16A34A]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <div className="w-8 h-8 rounded-lg bg-[#22C55E]/15 flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-[#22C55E]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
                 </svg>
               </div>
               <div>
-                <span className="text-sm font-medium text-gray-600">Max Home Value</span>
-                <p className="text-[10px] text-gray-400 leading-tight">When saved as long as possible</p>
+                <span className="text-sm font-medium text-slate-400">Projected Home Value</span>
+                <p className="text-[10px] text-slate-500 leading-tight">When saved as long as possible</p>
               </div>
             </div>
-            <span className="text-sm font-bold text-[#16A34A]">{maxHomeValue ? formatCurrency(maxHomeValue) : 'N/A'}</span>
+            <span className="text-sm font-bold text-[#22C55E]">{projectedHomeValue ? formatCurrency(projectedHomeValue) : 'N/A'}</span>
+          </div>
+
+          {/* Projected Home Size */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-[#8B5CF6]/15 flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-[#8B5CF6]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                </svg>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-slate-400">Projected Home Size</span>
+                <p className="text-[10px] text-slate-500 leading-tight">Estimated from projected value</p>
+              </div>
+            </div>
+            <span className="text-sm font-bold text-[#8B5CF6]">{projectedHomeSizeSqft ? `~${projectedHomeSizeSqft.toLocaleString()} sqft` : 'N/A'}</span>
           </div>
         </div>
 
         {/* View Detailed Analysis Button */}
-        <div className="px-6 pb-5 pt-2 bg-[#FAFBFC]">
+        <div className="px-5 pb-5 pt-2 bg-[#172033]">
           <Link
             href="/profile"
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#5BA4E5] text-white rounded-xl hover:bg-[#4A93D4] transition-colors text-sm font-semibold"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#22C55E] text-white rounded-xl hover:bg-[#16A34A] transition-colors text-sm font-semibold"
           >
             View Detailed Analysis
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
