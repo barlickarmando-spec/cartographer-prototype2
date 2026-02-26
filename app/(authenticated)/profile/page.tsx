@@ -416,14 +416,11 @@ export default function ProfilePage() {
               )}
             </div>
 
-            {/* Viability Classification + Score + House Tag */}
+            {/* Viability Classification + Score */}
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
               <p className="text-white/70 text-sm mb-1">Status</p>
               <p className="text-lg font-bold">{viabilityInfo.label}</p>
               <p className="text-white/80 text-sm font-semibold">{(result.numericScore ?? 0).toFixed(1)}/10</p>
-              {result.houseTag && result.houseTag !== 'Unknown' && (
-                <p className="text-white/60 text-xs mt-1">{result.houseTag}</p>
-              )}
             </div>
 
             {/* Required Home Value (kids-based sqft) */}
@@ -640,7 +637,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* FAMILY PLANNING SECTION - Vertical Timeline */}
+        {/* FAMILY PLANNING SECTION - Vertical Timeline (only when user plans kids) */}
         {result.kidViability && result.kidViability.firstKid.reason !== 'User does not plan to have kids' && (() => {
           const currentAge = result.yearByYear[0]?.age ?? 0;
           const currentYear = new Date().getFullYear();
@@ -1058,6 +1055,51 @@ export default function ProfilePage() {
             </div>
           )}
         </div>
+
+        {/* FAMILY PLANNING SECTION - "What if" for users who don't plan kids */}
+        {result.kidViability && result.kidViability.firstKid.reason === 'User does not plan to have kids' && (() => {
+          const currentAge = result.yearByYear[0]?.age ?? 0;
+          const kv = result.kidViability;
+
+          return (
+            <div className="px-8 py-6 bg-white border-t border-[#E5E7EB]">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+                  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">What If You Had Kids?</h3>
+                  <p className="text-sm text-gray-500">You indicated no plans for children, but here&apos;s what it would look like</p>
+                </div>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-5 border border-gray-200">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <p className="text-sm text-gray-600 mb-2">
+                      Based on your finances in {result.location}, having a first child would be viable
+                      {kv.firstKid.isViable && kv.firstKid.minimumAge
+                        ? ` starting at age ${kv.firstKid.minimumAge} (in ${pluralize(Math.max(0, kv.firstKid.minimumAge - currentAge), 'year')}).`
+                        : ' — but is not currently feasible within the projection window.'}
+                    </p>
+                    {kv.firstKid.isViable && (
+                      <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+                        <span>1st child: age {kv.firstKid.minimumAge}</span>
+                        {kv.secondKid.isViable && <span>2nd child: age {kv.secondKid.minimumAge}</span>}
+                        {kv.thirdKid.isViable && <span>3rd child: age {kv.thirdKid.minimumAge}</span>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
       </div>
     </div>
   );

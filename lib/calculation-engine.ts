@@ -337,8 +337,7 @@ function calculateAutoApproach(
     }
 
     // Dynamic baseline label (replaces hardcoded "2,200 sqft")
-    const kidsLabel = plannedKids === 0 ? 'no kids' : `${plannedKids}-kid family`;
-    const baselineSqFtLabel = `${requiredSqFt.toLocaleString()} sqft for ${kidsLabel}`;
+    const baselineSqFtLabel = `${requiredSqFt.toLocaleString()} sqft home`;
 
     // Generate recommendations and warnings (now sqft-aware)
     const recommendations = generateRecommendations(

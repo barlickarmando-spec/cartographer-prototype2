@@ -11,11 +11,11 @@ import { getSalary } from '@/lib/data-extraction';
 import { getAdjustedCOLKey } from '@/lib/onboarding/types';
 import type { OnboardingAnswers, UserProfile } from '@/lib/onboarding/types';
 import { searchLocations, getAllLocationOptions } from '@/lib/locations';
-import { estimateHomeSizeSqft, getTypicalHomeValue } from '@/lib/home-value-lookup';
+import { estimateHomeSizeSqft } from '@/lib/home-value-lookup';
 
 // ===== TYPES =====
 
-type SortMode = 'default' | 'saved' | 'most-viable' | 'most-affordable' | 'most-recommended' | 'greatest-value' | 'quality-of-life' | 'fastest-home-ownership' | 'highest-projected-home-value' | 'fastest-debt-free' | 'most-viable-raising-kids';
+type SortMode = 'default' | 'saved' | 'most-viable' | 'most-affordable' | 'most-recommended' | 'greatest-value' | 'quality-of-life' | 'fastest-home-ownership' | 'largest-home-size' | 'fastest-debt-free' | 'most-viable-raising-kids';
 // ===== CONSTANTS =====
 
 const SORT_OPTIONS: { value: SortMode; label: string }[] = [
@@ -27,7 +27,7 @@ const SORT_OPTIONS: { value: SortMode; label: string }[] = [
   { value: 'greatest-value', label: 'Greatest Value (QoL / Affordability)' },
   { value: 'quality-of-life', label: 'Quality of Life' },
   { value: 'fastest-home-ownership', label: 'Fastest Time to Home Ownership' },
-  { value: 'highest-projected-home-value', label: 'Highest Projected Home Value' },
+  { value: 'largest-home-size', label: 'Largest Home Size' },
   { value: 'fastest-debt-free', label: 'Fastest Time to Debt Free' },
   { value: 'most-viable-raising-kids', label: 'Most Viable for Raising Kids' },
 ];
@@ -337,12 +337,13 @@ function applySortMode(results: CalculationResult[], mode: SortMode, colKey: str
         const bYears = b.yearsToMortgage > 0 ? b.yearsToMortgage : 999;
         return aYears - bYears;
       });
-    case 'highest-projected-home-value': {
-      const getMaxHome = (r: CalculationResult) => {
+    case 'largest-home-size': {
+      const getMaxSqft = (r: CalculationResult) => {
+        if (r.projectedSqFt > 0) return r.projectedSqFt;
         const proj = r.houseProjections.maxAffordable || r.houseProjections.fifteenYears || r.houseProjections.tenYears || r.houseProjections.fiveYears || r.houseProjections.threeYears;
-        return proj?.canAfford ? proj.maxSustainableHousePrice : 0;
+        return proj?.canAfford ? estimateHomeSizeSqft(proj.maxSustainableHousePrice, r.location) : 0;
       };
-      return [...results].sort((a, b) => getMaxHome(b) - getMaxHome(a));
+      return [...results].sort((a, b) => getMaxSqft(b) - getMaxSqft(a));
     }
     case 'fastest-debt-free':
       return [...results].sort((a, b) => {
@@ -400,7 +401,7 @@ function LocationCard({
     || result.houseProjections.threeYears;
   const projectedHomeValue = maxProj?.canAfford ? maxProj.maxSustainableHousePrice : null;
   const projectedHomeSizeSqft = projectedHomeValue ? estimateHomeSizeSqft(projectedHomeValue, result.location) : null;
-  const typicalHomeValue = getTypicalHomeValue(result.location) || result.locationData.housing.medianHomeValue;
+
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col shadow-sm">
@@ -433,12 +434,6 @@ function LocationCard({
                 <>
                   <span className="text-gray-300">|</span>
                   <span className="text-xs font-semibold" style={{ color: viability.color }}>{viability.houseSize}</span>
-                </>
-              )}
-              {result.houseTag && result.houseTag !== 'Unknown' && (
-                <>
-                  <span className="text-gray-300">|</span>
-                  <span className="text-xs text-gray-500">{result.houseTag}</span>
                 </>
               )}
             </div>
@@ -540,22 +535,6 @@ function LocationCard({
               <span className="text-sm font-medium text-gray-600">Time to Debt Free</span>
             </div>
             <span className="text-sm font-bold text-[#5BA4E5]">{debtFree}</span>
-          </div>
-
-          {/* Required Home Value (kids-based sqft) */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#FEF3C7] flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 text-[#D97706]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
-                </svg>
-              </div>
-              <div>
-                <span className="text-sm font-medium text-gray-600">Required Home Value</span>
-                <p className="text-[10px] text-gray-400 leading-tight">{result.baselineSqFtLabel || '2,200 sqft home in this area'}</p>
-              </div>
-            </div>
-            <span className="text-sm font-bold text-[#D97706]">{formatCurrency(result.requiredHousePrice || typicalHomeValue)}</span>
           </div>
 
           {/* Projected Home Value */}
@@ -717,8 +696,10 @@ export default function MyLocationsPage() {
   }, [router]);
 
   // ===== GENERATE SUGGESTIONS =====
+  // When the user has very few results (e.g. "know-exactly" with 1 location),
+  // generate more suggestions so the page isn't sparse.
   useEffect(() => {
-    if (!profile || userResults.length === 0) return;
+    if (!profile) return;
 
     setSuggestionsLoading(true);
 
@@ -728,8 +709,12 @@ export default function MyLocationsPage() {
         const allOptions = getAllLocationOptions()
           .filter(o => o.type === 'state' && !existingLocations.has(o.label));
 
-        const step = Math.max(1, Math.floor(allOptions.length / 8));
-        const candidates = allOptions.filter((_, i) => i % step === 0).slice(0, 8);
+        // When user has few results, sample more candidates for richer suggestions
+        const sampleSize = userResults.length <= 3 ? 20 : 8;
+        const showCount = userResults.length <= 3 ? 6 : 3;
+
+        const step = Math.max(1, Math.floor(allOptions.length / sampleSize));
+        const candidates = allOptions.filter((_, i) => i % step === 0).slice(0, sampleSize);
 
         const suggestions: CalculationResult[] = [];
         for (const loc of candidates) {
@@ -745,7 +730,7 @@ export default function MyLocationsPage() {
         }
 
         suggestions.sort(sortByViability);
-        setSuggestedResults(suggestions.slice(0, 3));
+        setSuggestedResults(suggestions.slice(0, showCount));
       } catch (error) {
         console.error('Error generating suggestions:', error);
       }
