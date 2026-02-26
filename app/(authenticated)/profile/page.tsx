@@ -407,7 +407,7 @@ export default function ProfilePage() {
           <div className="flex items-start justify-between mb-1">
             <h1 className="text-3xl font-bold">{result.location}</h1>
             <span
-              className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold shrink-0 ml-3"
+              className="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-semibold shrink-0 ml-3"
               style={{ backgroundColor: viabilityInfo.bgColor, color: viabilityInfo.color }}
             >
               {viabilityInfo.label}
