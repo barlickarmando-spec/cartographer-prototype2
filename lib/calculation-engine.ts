@@ -227,24 +227,27 @@ function calculateAutoApproach(
     const ageDebtFree = yearsToDebtFree > 0 ? profile.currentAge + yearsToDebtFree : -1;
     const ageMortgageAcquired = yearsToMortgage > 0 ? profile.currentAge + yearsToMortgage : -1;
     
-    // Calculate minimum allocation required FIRST (needed for viability classification)
+    // House size projections (computed first — needed by unified viability)
+    const houseProjections = calculateHouseProjections(profile, locationData, simulation.snapshots);
+
+    // Minimum allocation required (needed for viability classification)
     const minAllocation = calculateMinimumAllocation(profile, locationData);
 
-    // Layer 1 — Structural Viability Tier (pure financial stability)
-    const viability = classifyViability(yearsToMortgage, yearsToDebtFree, simulation.snapshots, profile, minAllocation);
+    // Location-specific pricing
+    const locationPricePerSqft = getPricePerSqft(locationName);
+    const typicalValue = getTypicalHomeValue(locationName) || (locationData.housing?.medianHomeValue || 0);
 
-    // House size projections
-    const houseProjections = calculateHouseProjections(profile, locationData, simulation.snapshots);
+    // Unified viability + house size classification (benchmarked against typical 2,200 sqft home)
+    const { viability, houseClassification } = classifyViabilityAndHouseSize(
+      yearsToMortgage, simulation.snapshots, profile, minAllocation,
+      houseProjections, locationPricePerSqft, typicalValue
+    );
 
     // Kid viability
     const kidViability = calculateKidViability(profile, locationData);
 
-    // Layer 2 — Numeric Score (0-10 precision)
+    // Numeric Score (0-10 precision)
     const numericScore = calculateNumericScore(viability, yearsToMortgage, simulation.snapshots, minAllocation, kidViability);
-
-    // Layer 3 — House Size Classification (sqft-based: Small 1000-1500, Medium 1501-3000, Large 3000+)
-    const locationPricePerSqft = getPricePerSqft(locationName);
-    const houseClassification = classifyHouseSize(houseProjections, locationPricePerSqft, yearsToMortgage, profile.disposableIncomeAllocation, simulation.snapshots);
 
     // Generate recommendations and warnings
     const recommendations = generateRecommendations(profile, viability, minAllocation, yearsToMortgage, simulation.snapshots);
@@ -752,66 +755,177 @@ function checkMortgageHardRules(hardRules: string[], loanDebt: number): boolean 
 // ===== PART 2: VIABILITY CLASSIFICATION & PROJECTIONS =====
 
 /**
- * Classify the viability of a location based on timeline and allocation
- * 
- * Classifications:
- * - very-viable-stable: ≤3 years to mortgage, sustainable
- * - viable: ≤5 years to mortgage
- * - viable-higher-allocation: User needs to increase allocation (below minimum required)
- * - viable-extreme-care: ≤12 years, fragile situation
- * - viable-when-renting: >15 years but positive DI
- * - no-viable-path: Cannot achieve mortgage or structural issues
+ * Unified viability + house size classification using the typical home
+ * value (2,200 sqft) as the core benchmark.
+ *
+ * The typical home value is THE reference point:
+ *   • CAN afford typical → viability determined by timeline
+ *   • CANNOT afford typical → viability DOWNGRADED based on what sqft you can get
+ *
+ * House size (sqft ranges):
+ *   Small:  1,000 – 1,500 sqft
+ *   Medium: 1,501 – 3,000 sqft
+ *   Large:  > 3,000 sqft
+ *
+ * Guardrail: Large house label blocked if post-mortgage margin < 5% income
  */
+function classifyViabilityAndHouseSize(
+  yearsToMortgage: number,
+  simulation: YearSnapshot[],
+  profile: UserProfile,
+  minRequiredAllocation: number,
+  houseProjections: {
+    threeYears: HouseProjection | null;
+    fiveYears: HouseProjection | null;
+    tenYears: HouseProjection | null;
+    fifteenYears: HouseProjection | null;
+    maxAffordable: HouseProjection | null;
+  },
+  pricePerSqft: number,
+  typicalHomeValue: number
+): { viability: ViabilityClass; houseClassification: HouseSizeClassification } {
+  const userAllocation = profile.disposableIncomeAllocation;
+  const hasNegativeDI = simulation.some(s => s.disposableIncome < 0);
+  const lastYear = simulation[simulation.length - 1];
+
+  // --- Projected house price & sqft ---
+  const bestProjection = houseProjections.maxAffordable
+    || houseProjections.fifteenYears
+    || houseProjections.tenYears
+    || houseProjections.fiveYears
+    || houseProjections.threeYears;
+  const projectedPrice = bestProjection?.maxSustainableHousePrice ?? 0;
+  const projectedSqft = pricePerSqft > 0 ? projectedPrice / pricePerSqft : 0;
+  const canAffordTypical = typicalHomeValue > 0 && projectedPrice >= typicalHomeValue;
+
+  // --- House size classification (pure sqft) ---
+  let largeHouseBlocked = false;
+  if (projectedSqft > 3000 && bestProjection && simulation.length > 0) {
+    let worstIncome = Infinity;
+    let worstCOL = 0;
+    for (const snap of simulation) {
+      if (snap.totalIncome > 0 && snap.totalIncome < worstIncome) {
+        worstIncome = snap.totalIncome;
+        worstCOL = snap.adjustedCOL;
+      }
+    }
+    if (worstIncome < Infinity) {
+      const margin = worstIncome - worstCOL - bestProjection.sustainableAnnualPayment;
+      if (margin < worstIncome * 0.05) largeHouseBlocked = true;
+    }
+  }
+
+  let houseClassification: HouseSizeClassification;
+  if (!largeHouseBlocked && projectedSqft > 3000 && yearsToMortgage > 0 && yearsToMortgage <= 5 && userAllocation <= 75) {
+    houseClassification = 'very-viable-stable-large-house';
+  } else if (!largeHouseBlocked && projectedSqft > 3000) {
+    houseClassification = 'viable-large-house';
+  } else if (projectedSqft >= 1501 && yearsToMortgage > 0 && yearsToMortgage <= 6) {
+    houseClassification = 'very-viable-stable-medium-house';
+  } else if (projectedSqft >= 1501) {
+    houseClassification = 'viable-medium-house';
+  } else {
+    houseClassification = 'somewhat-viable-small-house';
+  }
+
+  // --- Structural failure ---
+  if (!lastYear) {
+    return { viability: 'no-viable-path', houseClassification: 'somewhat-viable-small-house' };
+  }
+
+  // --- Never achieves mortgage ---
+  if (yearsToMortgage < 0) {
+    if (lastYear.disposableIncome > 0 && !hasNegativeDI) {
+      return { viability: 'viable-when-renting', houseClassification };
+    }
+    return { viability: 'no-viable-path', houseClassification };
+  }
+
+  // --- Allocation below minimum ---
+  if (userAllocation < minRequiredAllocation - 3 && minRequiredAllocation < 100) {
+    return { viability: 'viable-higher-allocation', houseClassification };
+  }
+
+  // --- CAN afford the typical 2,200 sqft home ---
+  if (canAffordTypical) {
+    if (yearsToMortgage <= 3 && lastYear.savingsEnd > 0) {
+      return { viability: 'very-viable-stable', houseClassification };
+    }
+    if (yearsToMortgage <= 8) {
+      return { viability: 'viable', houseClassification };
+    }
+    if (yearsToMortgage <= 12) {
+      return { viability: 'viable-extreme-care', houseClassification };
+    }
+    // Can sustain it but takes very long to save for down payment
+    return { viability: 'viable-when-renting', houseClassification };
+  }
+
+  // --- CANNOT afford typical home — viability downgraded ---
+
+  // Medium house (1,501-3,000 sqft): still viable but tighter thresholds
+  if (projectedSqft >= 1501) {
+    if (yearsToMortgage <= 5) {
+      return { viability: 'viable', houseClassification };
+    }
+    if (yearsToMortgage <= 10) {
+      return { viability: 'viable-extreme-care', houseClassification };
+    }
+    return { viability: 'viable-when-renting', houseClassification };
+  }
+
+  // Small house (1,000-1,500 sqft): viable only with extreme care
+  if (projectedSqft >= 1000) {
+    if (yearsToMortgage <= 8) {
+      return { viability: 'viable-extreme-care', houseClassification };
+    }
+    return { viability: 'viable-when-renting', houseClassification };
+  }
+
+  // Very small (< 1,000 sqft): essentially renting territory
+  if (lastYear.disposableIncome > 0) {
+    return { viability: 'viable-when-renting', houseClassification };
+  }
+  return { viability: 'no-viable-path', houseClassification };
+}
+
+// Keep backward-compatible wrappers for exports
 function classifyViability(
   yearsToMortgage: number,
-  yearsToDebtFree: number,
+  _yearsToDebtFree: number,
   simulation: YearSnapshot[],
   profile: UserProfile,
   minRequiredAllocation: number
 ): ViabilityClass {
-  const userAllocation = profile.disposableIncomeAllocation;
-
-  // Check for structural issues
-  const hasNegativeDI = simulation.some(s => s.disposableIncome < 0);
+  // Stub — only used by exports; real logic is in classifyViabilityAndHouseSize
   const lastYear = simulation[simulation.length - 1];
-
-  if (!lastYear) {
-    return 'no-viable-path';
-  }
-
-  // If never achieves mortgage
+  const hasNegativeDI = simulation.some(s => s.disposableIncome < 0);
+  if (!lastYear) return 'no-viable-path';
   if (yearsToMortgage < 0) {
-    // But has positive DI - could rent indefinitely
-    if (lastYear.disposableIncome > 0 && !hasNegativeDI) {
-      return 'viable-when-renting';
-    }
-    return 'no-viable-path';
+    return (lastYear.disposableIncome > 0 && !hasNegativeDI) ? 'viable-when-renting' : 'no-viable-path';
   }
-
-  // Check if user's allocation is BELOW minimum required
-  // But only if increasing allocation could actually help (minRequired < 100)
-  if (userAllocation < minRequiredAllocation - 3 && minRequiredAllocation < 100) {
-    return 'viable-higher-allocation';
-  }
-
-  // User MEETS or EXCEEDS minimum allocation — classify by TIMELINE only
-  if (yearsToMortgage <= 3 && lastYear.savingsEnd > 0) {
-    return 'very-viable-stable';
-  }
-
-  if (yearsToMortgage <= 8) {
-    return 'viable';
-  }
-
-  if (yearsToMortgage <= 12) {
-    return 'viable-extreme-care';
-  }
-
-  if (yearsToMortgage > 12 && yearsToMortgage < 30 && lastYear.disposableIncome > 0) {
-    return 'viable-when-renting';
-  }
-
+  if (profile.disposableIncomeAllocation < minRequiredAllocation - 3 && minRequiredAllocation < 100) return 'viable-higher-allocation';
+  if (yearsToMortgage <= 3 && lastYear.savingsEnd > 0) return 'very-viable-stable';
+  if (yearsToMortgage <= 8) return 'viable';
+  if (yearsToMortgage <= 12) return 'viable-extreme-care';
+  if (lastYear.disposableIncome > 0) return 'viable-when-renting';
   return 'no-viable-path';
+}
+
+function classifyHouseSize(
+  houseProjections: { threeYears: HouseProjection | null; fiveYears: HouseProjection | null; tenYears: HouseProjection | null; fifteenYears: HouseProjection | null; maxAffordable: HouseProjection | null },
+  pricePerSqft: number,
+  yearsToMortgage: number,
+  allocationPercent: number,
+  simulation: YearSnapshot[]
+): HouseSizeClassification {
+  const bestProjection = houseProjections.maxAffordable || houseProjections.fifteenYears || houseProjections.tenYears || houseProjections.fiveYears || houseProjections.threeYears;
+  const projectedSqft = pricePerSqft > 0 ? (bestProjection?.maxSustainableHousePrice ?? 0) / pricePerSqft : 0;
+  if (projectedSqft > 3000 && yearsToMortgage > 0 && yearsToMortgage <= 5 && allocationPercent <= 75) return 'very-viable-stable-large-house';
+  if (projectedSqft > 3000) return 'viable-large-house';
+  if (projectedSqft >= 1501 && yearsToMortgage > 0 && yearsToMortgage <= 6) return 'very-viable-stable-medium-house';
+  if (projectedSqft >= 1501) return 'viable-medium-house';
+  return 'somewhat-viable-small-house';
 }
 
 /**
@@ -857,7 +971,6 @@ function calculateNumericScore(
   }
 
   // === Allocation Pressure (0-2) ===
-  // Use minimum required allocation — lower is better (less pressure)
   let allocation = 0;
   if (minRequiredAllocation <= 70) {
     allocation = 2;
@@ -872,7 +985,6 @@ function calculateNumericScore(
   }
 
   // === Resilience (0-2) ===
-  // Kid plan stability + savings growth
   let resilience = 0;
   const kidsViable = kidViability.firstKid.isViable;
   const savingsGrowing = lastYear && simulation.length > 1
@@ -890,75 +1002,6 @@ function calculateNumericScore(
   // Clamp 0-10, round to 1 decimal
   const raw = structural + speed + allocation + resilience;
   return Math.round(Math.min(10, Math.max(0, raw)) * 10) / 10;
-}
-
-/**
- * Classify house size by projected square footage (Layer 3)
- *
- * Sqft ranges:
- *   < 1000 sqft               → 'somewhat-viable-small-house'
- *   1,000 – 1,500 sqft        → 'somewhat-viable-small-house'
- *   1,501 – 3,000 sqft        → 'viable-medium-house'
- *   1,501 – 3,000 sqft + fast → 'very-viable-stable-medium-house'
- *   > 3,000 sqft              → 'viable-large-house'
- *   > 3,000 sqft + fast       → 'very-viable-stable-large-house'
- *
- * Guardrail: Large house blocked if post-mortgage margin < 5% of income
- */
-function classifyHouseSize(
-  houseProjections: { threeYears: HouseProjection | null; fiveYears: HouseProjection | null; tenYears: HouseProjection | null; fifteenYears: HouseProjection | null; maxAffordable: HouseProjection | null },
-  pricePerSqft: number,
-  yearsToMortgage: number,
-  allocationPercent: number,
-  simulation: YearSnapshot[]
-): HouseSizeClassification {
-  if (pricePerSqft <= 0) {
-    return 'viable-medium-house';
-  }
-
-  // Best projected house price
-  const bestProjection = houseProjections.maxAffordable
-    || houseProjections.fifteenYears
-    || houseProjections.tenYears
-    || houseProjections.fiveYears
-    || houseProjections.threeYears;
-  const projectedHouse = bestProjection?.maxSustainableHousePrice ?? 0;
-  const projectedSqft = projectedHouse / pricePerSqft;
-
-  // Guardrail: check if post-mortgage margin is too thin for large house label
-  let largeHouseBlocked = false;
-  if (projectedSqft > 3000 && bestProjection && simulation.length > 0) {
-    let worstIncome = Infinity;
-    let worstCOL = 0;
-    for (const snap of simulation) {
-      if (snap.totalIncome > 0 && snap.totalIncome < worstIncome) {
-        worstIncome = snap.totalIncome;
-        worstCOL = snap.adjustedCOL;
-      }
-    }
-    if (worstIncome < Infinity) {
-      const mortgagePayment = bestProjection.sustainableAnnualPayment;
-      const margin = worstIncome - worstCOL - mortgagePayment;
-      if (margin < worstIncome * 0.05) {
-        largeHouseBlocked = true;
-      }
-    }
-  }
-
-  // Classification logic by sqft (check most specific first)
-  if (!largeHouseBlocked && projectedSqft > 3000 && yearsToMortgage > 0 && yearsToMortgage <= 5 && allocationPercent <= 75) {
-    return 'very-viable-stable-large-house';
-  }
-  if (!largeHouseBlocked && projectedSqft > 3000) {
-    return 'viable-large-house';
-  }
-  if (projectedSqft >= 1501 && yearsToMortgage > 0 && yearsToMortgage <= 6) {
-    return 'very-viable-stable-medium-house';
-  }
-  if (projectedSqft >= 1501) {
-    return 'viable-medium-house';
-  }
-  return 'somewhat-viable-small-house';
 }
 
 /**
