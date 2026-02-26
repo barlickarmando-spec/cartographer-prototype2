@@ -11,12 +11,11 @@ import { getSalary } from '@/lib/data-extraction';
 import { getAdjustedCOLKey } from '@/lib/onboarding/types';
 import type { OnboardingAnswers, UserProfile } from '@/lib/onboarding/types';
 import { searchLocations, getAllLocationOptions } from '@/lib/locations';
+import { estimateHomeSizeSqft } from '@/lib/home-value-lookup';
 
 // ===== TYPES =====
 
-type SortMode = 'default' | 'saved' | 'most-viable' | 'most-affordable' | 'most-recommended' | 'greatest-value' | 'quality-of-life' | 'fastest-home-ownership' | 'highest-projected-home-value' | 'fastest-debt-free' | 'most-viable-raising-kids';
-type ShowMode = 'all' | 'saved' | 'other';
-
+type SortMode = 'default' | 'saved' | 'most-viable' | 'most-affordable' | 'most-recommended' | 'greatest-value' | 'quality-of-life' | 'fastest-home-ownership' | 'largest-home-size' | 'fastest-debt-free' | 'most-viable-raising-kids';
 // ===== CONSTANTS =====
 
 const SORT_OPTIONS: { value: SortMode; label: string }[] = [
@@ -28,48 +27,165 @@ const SORT_OPTIONS: { value: SortMode; label: string }[] = [
   { value: 'greatest-value', label: 'Greatest Value (QoL / Affordability)' },
   { value: 'quality-of-life', label: 'Quality of Life' },
   { value: 'fastest-home-ownership', label: 'Fastest Time to Home Ownership' },
-  { value: 'highest-projected-home-value', label: 'Highest Projected Home Value' },
+  { value: 'largest-home-size', label: 'Largest Home Size' },
   { value: 'fastest-debt-free', label: 'Fastest Time to Debt Free' },
   { value: 'most-viable-raising-kids', label: 'Most Viable for Raising Kids' },
 ];
 
-const SHOW_OPTIONS: { value: ShowMode; label: string }[] = [
+// ===== LOCATION FILTER DATA =====
+
+const REGIONS: Record<string, string[]> = {
+  'South': ['Florida', 'Georgia', 'Alabama', 'North Carolina', 'South Carolina', 'Tennessee', 'Kentucky', 'Louisiana', 'Arkansas', 'Mississippi', 'Oklahoma', 'Texas'],
+  'Southwest': ['California', 'Nevada', 'Utah', 'Colorado', 'New Mexico', 'Arizona', 'Wyoming'],
+  'Pacific Northwest': ['Washington', 'Oregon', 'Idaho', 'Montana'],
+  'West Coast': ['Oregon', 'California', 'Washington'],
+  'North East': ['Maine', 'New Hampshire', 'Massachusetts', 'Vermont', 'New York', 'Rhode Island', 'Connecticut', 'New Jersey', 'Pennsylvania', 'Delaware'],
+  'Mid Atlantic': ['Maryland', 'Virginia', 'Delaware', 'District of Columbia', 'West Virginia', 'New York', 'New Jersey', 'Pennsylvania'],
+  'Middle America': ['Oklahoma', 'Kansas', 'Nebraska', 'North Dakota', 'South Dakota', 'Wyoming', 'Arkansas', 'Missouri', 'Iowa'],
+  'Midwest': ['Ohio', 'Illinois', 'Iowa', 'Indiana', 'Michigan', 'Minnesota', 'Wisconsin', 'Missouri', 'North Dakota', 'South Dakota'],
+  'East Coast': ['Maine', 'New Hampshire', 'Massachusetts', 'Rhode Island', 'Connecticut', 'New York', 'New Jersey', 'Delaware', 'Maryland', 'Virginia', 'North Carolina', 'South Carolina', 'Georgia', 'Florida'],
+  'Continental United States': [], // special: all except Alaska & Hawaii
+  'Non-Continental United States': ['Alaska', 'Hawaii'],
+};
+
+const WEATHER_CATEGORIES: Record<string, { states: string[]; cities: string[] }> = {
+  'Extreme Heat (No Snow)': { states: ['Florida', 'Hawaii'], cities: [] },
+  'Strong Heat': { states: ['Arizona', 'Nevada', 'New Mexico'], cities: ['Anaheim', 'Los Angeles', 'San Diego', 'El Paso'] },
+  'Relative Heat': { states: ['Texas', 'Georgia', 'Alabama', 'Mississippi', 'Louisiana', 'South Carolina', 'Arkansas', 'Oklahoma', 'District of Columbia'], cities: ['Fresno'] },
+  'Average': { states: ['Missouri', 'Kentucky', 'Kansas', 'Tennessee', 'North Carolina', 'Maryland', 'Virginia', 'Delaware', 'New Jersey', 'Pennsylvania', 'Ohio'], cities: ['San Jose', 'San Francisco'] },
+  'Cold': { states: ['Colorado', 'Utah', 'Idaho', 'Oregon', 'Washington', 'Illinois', 'Indiana', 'New York', 'Connecticut', 'Rhode Island', 'Massachusetts', 'West Virginia'], cities: [] },
+  'Extreme Cold': { states: ['Alaska', 'Minnesota', 'Wisconsin', 'Michigan', 'North Dakota', 'South Dakota', 'Montana', 'Wyoming', 'Vermont', 'New Hampshire', 'Maine'], cities: [] },
+};
+
+const ALL_STATES = [
+  'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut',
+  'Delaware', 'District of Columbia', 'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois',
+  'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 'Massachusetts',
+  'Michigan', 'Minnesota', 'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada',
+  'New Hampshire', 'New Jersey', 'New Mexico', 'New York', 'North Carolina', 'North Dakota',
+  'Ohio', 'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina',
+  'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington',
+  'West Virginia', 'Wisconsin', 'Wyoming',
+];
+
+// Full state name → abbreviation mapping (used for matching cities to states)
+const STATE_TO_ABBREV: Record<string, string> = {
+  'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA',
+  'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE', 'District of Columbia': 'DC',
+  'Florida': 'FL', 'Georgia': 'GA', 'Hawaii': 'HI', 'Idaho': 'ID', 'Illinois': 'IL',
+  'Indiana': 'IN', 'Iowa': 'IA', 'Kansas': 'KS', 'Kentucky': 'KY', 'Louisiana': 'LA',
+  'Maine': 'ME', 'Maryland': 'MD', 'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN',
+  'Mississippi': 'MS', 'Missouri': 'MO', 'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV',
+  'New Hampshire': 'NH', 'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY',
+  'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH', 'Oklahoma': 'OK', 'Oregon': 'OR',
+  'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC', 'South Dakota': 'SD',
+  'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT', 'Vermont': 'VT', 'Virginia': 'VA',
+  'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY',
+};
+
+// Reverse mapping: abbreviation → full state name (e.g., "FL" → "Florida")
+const ABBREV_TO_STATE: Record<string, string> = Object.fromEntries(
+  Object.entries(STATE_TO_ABBREV).map(([full, abbr]) => [abbr, full])
+);
+
+type FilterItem = { value: string; label: string };
+
+const SHOW_OPTIONS: FilterItem[] = [
   { value: 'all', label: 'All Locations' },
   { value: 'saved', label: 'Your Locations' },
   { value: 'other', label: 'Other Locations' },
 ];
 
+const REGION_OPTIONS: FilterItem[] = [
+  { value: 'all', label: 'All Regions' },
+  ...Object.keys(REGIONS).map(r => ({ value: `region:${r}`, label: r })),
+];
+
+const WEATHER_OPTIONS: FilterItem[] = [
+  { value: 'all', label: 'All Weather' },
+  ...Object.keys(WEATHER_CATEGORIES).map(w => ({ value: `weather:${w}`, label: w })),
+];
+
+const TYPE_OPTIONS: FilterItem[] = [
+  { value: 'all', label: 'All (States & Cities)' },
+  { value: 'states', label: 'States Only' },
+  { value: 'cities', label: 'Cities Only' },
+];
+
 // ===== HELPERS =====
 
-const VIABILITY_SCORE: Record<string, number> = {
-  'very-viable-stable': 6,
-  'viable': 5,
-  'viable-higher-allocation': 4,
-  'viable-extreme-care': 3,
-  'viable-when-renting': 2,
-  'no-viable-path': 1,
-};
-
-const VIABILITY_NUMERIC: Record<string, number> = {
-  'very-viable-stable': 9.5,
-  'viable': 8.0,
-  'viable-higher-allocation': 6.5,
-  'viable-extreme-care': 5.0,
-  'viable-when-renting': 4.0,
-  'no-viable-path': 2.0,
-};
-
-function getViabilityLabel(classification: string): { label: string; color: string; bgColor: string; barColor: string } {
-  const labels: Record<string, { label: string; color: string; bgColor: string; barColor: string }> = {
-    'very-viable-stable': { label: 'Very Viable & Stable', color: '#059669', bgColor: '#D1FAE5', barColor: '#10B981' },
-    'viable': { label: 'Viable', color: '#2563EB', bgColor: '#DBEAFE', barColor: '#3B82F6' },
-    'viable-higher-allocation': { label: 'Viable (Higher Allocation)', color: '#D97706', bgColor: '#FEF3C7', barColor: '#F59E0B' },
-    'viable-extreme-care': { label: 'Viable (Extreme Care)', color: '#DC2626', bgColor: '#FEE2E2', barColor: '#EF4444' },
-    'viable-when-renting': { label: 'Viable When Renting', color: '#7C3AED', bgColor: '#EDE9FE', barColor: '#8B5CF6' },
-    'no-viable-path': { label: 'Not Viable', color: '#DC2626', bgColor: '#FEE2E2', barColor: '#EF4444' },
+// Viability label derived from house size classification (the only displayed badge)
+function getViabilityLabel(result: CalculationResult): { label: string; viabilityStatus: string; houseSize: string; color: string; bgColor: string; barColor: string } {
+  const classification = result.houseClassification || 'viable-medium-house';
+  const labels: Record<string, { label: string; viabilityStatus: string; houseSize: string; color: string; bgColor: string; barColor: string }> = {
+    'very-viable-stable-large-house': { label: 'Very Viable and Stable: Large House', viabilityStatus: 'Very Viable and Stable', houseSize: 'Large House', color: '#065F46', bgColor: '#A7F3D0', barColor: '#059669' },
+    'viable-large-house': { label: 'Viable: Large House', viabilityStatus: 'Viable', houseSize: 'Large House', color: '#059669', bgColor: '#D1FAE5', barColor: '#10B981' },
+    'very-viable-stable-medium-house': { label: 'Very Viable and Stable: Medium House', viabilityStatus: 'Very Viable and Stable', houseSize: 'Medium House', color: '#059669', bgColor: '#D1FAE5', barColor: '#10B981' },
+    'viable-medium-house': { label: 'Viable: Medium House', viabilityStatus: 'Viable', houseSize: 'Medium House', color: '#2563EB', bgColor: '#DBEAFE', barColor: '#3B82F6' },
+    'somewhat-viable-small-house': { label: 'Somewhat Viable: Small House', viabilityStatus: 'Somewhat Viable', houseSize: 'Small House', color: '#0891B2', bgColor: '#CFFAFE', barColor: '#06B6D4' },
   };
-  return labels[classification] || labels['no-viable-path'];
+
+  // For non-viable / renting-only, override with structural labels
+  if (result.viabilityClassification === 'no-viable-path') {
+    return { label: 'Not Viable', viabilityStatus: 'Not Viable', houseSize: '', color: '#DC2626', bgColor: '#FEE2E2', barColor: '#EF4444' };
+  }
+  if (result.viabilityClassification === 'viable-when-renting') {
+    return { label: 'Viable When Renting', viabilityStatus: 'Viable When Renting', houseSize: '', color: '#7C3AED', bgColor: '#EDE9FE', barColor: '#8B5CF6' };
+  }
+  if (result.viabilityClassification === 'viable-extreme-care') {
+    const base = labels[classification];
+    return { label: base?.label || 'Viable (Extreme Care)', viabilityStatus: 'Viable (Extreme Care)', houseSize: base?.houseSize || '', color: '#DC2626', bgColor: '#FEE2E2', barColor: '#EF4444' };
+  }
+  if (result.viabilityClassification === 'viable-higher-allocation') {
+    const base = labels[classification];
+    return { label: base?.label || 'Viable (Higher Allocation)', viabilityStatus: 'Viable (Higher Allocation)', houseSize: base?.houseSize || '', color: '#D97706', bgColor: '#FEF3C7', barColor: '#F59E0B' };
+  }
+
+  return labels[classification] || labels['viable-medium-house'];
 }
+
+// Convert 0-10 score to 0-5 star rating
+function getStarRating(score: number): number {
+  return Math.round((score / 10) * 5 * 2) / 2; // half-star increments
+}
+
+// Render 5-star display from a 0-5 value
+function StarRating({ rating }: { rating: number }) {
+  const stars = [];
+  for (let i = 1; i <= 5; i++) {
+    if (rating >= i) {
+      // Full star
+      stars.push(
+        <svg key={i} className="w-4 h-4 text-[#FACC15]" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+        </svg>
+      );
+    } else if (rating >= i - 0.5) {
+      // Half star
+      stars.push(
+        <svg key={i} className="w-4 h-4" viewBox="0 0 24 24">
+          <defs>
+            <linearGradient id={`half-${i}`}>
+              <stop offset="50%" stopColor="#FACC15" />
+              <stop offset="50%" stopColor="#4B5563" />
+            </linearGradient>
+          </defs>
+          <path fill={`url(#half-${i})`} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+        </svg>
+      );
+    } else {
+      // Empty star
+      stars.push(
+        <svg key={i} className="w-4 h-4 text-[#4B5563]" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+        </svg>
+      );
+    }
+  }
+  return <div className="flex items-center gap-0.5">{stars}</div>;
+}
+
+
 
 function getQualityOfLifeLabel(di: number): { label: string; color: string; bgColor: string } {
   if (di >= 30000) return { label: 'Excellent', color: '#059669', bgColor: '#D1FAE5' };
@@ -79,66 +195,181 @@ function getQualityOfLifeLabel(di: number): { label: string; color: string; bgCo
   return { label: 'Challenging', color: '#DC2626', bgColor: '#FEE2E2' };
 }
 
+// ===== LOCATION FILTER HELPERS =====
+
+function getLocationState(locationName: string): string {
+  // Cities have format "City, State" — extract the state
+  const commaIdx = locationName.lastIndexOf(', ');
+  if (commaIdx >= 0) return locationName.substring(commaIdx + 2);
+  // States/territories are the name itself
+  return locationName;
+}
+
+function isCity(locationName: string): boolean {
+  return locationName.includes(', ');
+}
+
+function matchesLocationFilter(locationName: string, filter: string): boolean {
+  if (filter === 'all' || filter === 'saved' || filter === 'other') return true;
+
+  if (filter === 'type:all') return true;
+  if (filter === 'type:states') {
+    return !isCity(locationName) || locationName === 'District of Columbia';
+  }
+  if (filter === 'type:cities') {
+    return isCity(locationName) || locationName === 'District of Columbia';
+  }
+
+  if (filter.startsWith('region:')) {
+    const regionName = filter.substring(7);
+    const locState = getLocationState(locationName);
+    // Resolve abbreviation to full name for cities (e.g., "FL" → "Florida")
+    const fullStateName = ABBREV_TO_STATE[locState] || locState;
+    if (regionName === 'Continental United States') {
+      return fullStateName !== 'Alaska' && fullStateName !== 'Hawaii';
+    }
+    const regionStates = REGIONS[regionName];
+    if (!regionStates) return false;
+    return regionStates.includes(fullStateName);
+  }
+
+  if (filter.startsWith('weather:')) {
+    const weatherName = filter.substring(8);
+    const category = WEATHER_CATEGORIES[weatherName];
+    if (!category) return false;
+    const locState = getLocationState(locationName);
+    const fullStateName = ABBREV_TO_STATE[locState] || locState;
+    // Match if the location's state is in the weather category
+    if (category.states.includes(fullStateName)) return true;
+    // Also match explicitly listed cities
+    if (isCity(locationName)) {
+      const cityName = locationName.split(', ')[0];
+      if (category.cities.includes(cityName)) return true;
+    }
+    return false;
+  }
+
+  if (filter.startsWith('state:')) {
+    const stateName = filter.substring(6);
+    if (locationName === stateName) return true; // exact match for the state itself
+    const locationState = getLocationState(locationName);
+    // Match full name OR abbreviation (cities use abbreviations like "FL")
+    const abbrev = STATE_TO_ABBREV[stateName];
+    return locationState === stateName || (!!abbrev && locationState === abbrev);
+  }
+
+  if (filter.startsWith('city:')) {
+    const cityLabel = filter.substring(5);
+    return locationName === cityLabel;
+  }
+
+  return true;
+}
+
+function getGeoFilterLabel(filter: string): string {
+  if (filter === 'all') return 'All';
+  if (filter.startsWith('region:')) {
+    const name = filter.substring(7);
+    return name;
+  }
+  if (filter.startsWith('weather:')) return filter.substring(8);
+  if (filter.startsWith('state:')) return filter.substring(6);
+  if (filter.startsWith('city:')) return filter.substring(5);
+  return 'All';
+}
+
+function hasActiveGeoFilter(geoFilters: string[]): boolean {
+  return geoFilters.length > 0;
+}
+
+function hasAnyGeoFilter(typeFilter: string, geoFilters: string[]): boolean {
+  return typeFilter !== 'all' || geoFilters.length > 0;
+}
+
+function matchesAnyGeoFilter(locationName: string, geoFilters: string[]): boolean {
+  if (geoFilters.length === 0) return true;
+  return geoFilters.some(f => matchesLocationFilter(locationName, f));
+}
+
+function toggleGeoFilter(current: string[], value: string): string[] {
+  if (current.includes(value)) {
+    return current.filter(v => v !== value);
+  }
+  return [...current, value];
+}
+
 function sortByViability(a: CalculationResult, b: CalculationResult): number {
-  const scoreDiff = (VIABILITY_SCORE[b.viabilityClassification] || 0) - (VIABILITY_SCORE[a.viabilityClassification] || 0);
-  if (scoreDiff !== 0) return scoreDiff;
+  // Primary: numeric score (analog — 8.7 beats 8.6)
+  const numDiff = (b.numericScore ?? 0) - (a.numericScore ?? 0);
+  if (Math.abs(numDiff) > 0.001) return numDiff;
+  // Tiebreaker: years to mortgage
   const aYears = a.yearsToMortgage > 0 ? a.yearsToMortgage : 999;
   const bYears = b.yearsToMortgage > 0 ? b.yearsToMortgage : 999;
   return aYears - bYears;
 }
 
 function applySortMode(results: CalculationResult[], mode: SortMode, colKey: string): CalculationResult[] {
+  // Helper: wrap any comparator so non-viable locations always sink to the bottom
+  const viableFirst = (cmp: (a: CalculationResult, b: CalculationResult) => number) =>
+    (a: CalculationResult, b: CalculationResult): number => {
+      const aViable = a.viabilityClassification !== 'no-viable-path' ? 0 : 1;
+      const bViable = b.viabilityClassification !== 'no-viable-path' ? 0 : 1;
+      if (aViable !== bViable) return aViable - bViable;
+      return cmp(a, b);
+    };
+
   switch (mode) {
     case 'most-viable':
     case 'most-recommended':
-      return [...results].sort(sortByViability);
+      return [...results].sort(viableFirst(sortByViability));
     case 'most-affordable':
-      return [...results].sort((a, b) => {
+      return [...results].sort(viableFirst((a, b) => {
         const aCOL = (a.locationData.adjustedCOL as Record<string, number>)[colKey] || 0;
         const bCOL = (b.locationData.adjustedCOL as Record<string, number>)[colKey] || 0;
         return aCOL - bCOL;
-      });
+      }));
     case 'greatest-value':
-      return [...results].sort((a, b) => {
+      return [...results].sort(viableFirst((a, b) => {
         const aQoL = a.yearByYear[0]?.disposableIncome ?? 0;
         const bQoL = b.yearByYear[0]?.disposableIncome ?? 0;
         const aCOL = (a.locationData.adjustedCOL as Record<string, number>)[colKey] || 1;
         const bCOL = (b.locationData.adjustedCOL as Record<string, number>)[colKey] || 1;
         return (bQoL / bCOL) - (aQoL / aCOL);
-      });
+      }));
     case 'quality-of-life':
-      return [...results].sort((a, b) => {
+      return [...results].sort(viableFirst((a, b) => {
         return (b.yearByYear[0]?.disposableIncome ?? 0) - (a.yearByYear[0]?.disposableIncome ?? 0);
-      });
+      }));
     case 'fastest-home-ownership':
-      return [...results].sort((a, b) => {
+      return [...results].sort(viableFirst((a, b) => {
         const aYears = a.yearsToMortgage > 0 ? a.yearsToMortgage : 999;
         const bYears = b.yearsToMortgage > 0 ? b.yearsToMortgage : 999;
         return aYears - bYears;
-      });
-    case 'highest-projected-home-value': {
-      const getMaxHome = (r: CalculationResult) => {
+      }));
+    case 'largest-home-size': {
+      const getMaxSqft = (r: CalculationResult) => {
+        if (r.projectedSqFt > 0) return r.projectedSqFt;
         const proj = r.houseProjections.maxAffordable || r.houseProjections.fifteenYears || r.houseProjections.tenYears || r.houseProjections.fiveYears || r.houseProjections.threeYears;
-        return proj?.canAfford ? proj.maxSustainableHousePrice : 0;
+        return proj?.canAfford ? estimateHomeSizeSqft(proj.maxSustainableHousePrice, r.location) : 0;
       };
-      return [...results].sort((a, b) => getMaxHome(b) - getMaxHome(a));
+      return [...results].sort(viableFirst((a, b) => getMaxSqft(b) - getMaxSqft(a)));
     }
     case 'fastest-debt-free':
-      return [...results].sort((a, b) => {
+      return [...results].sort(viableFirst((a, b) => {
         const aYears = a.yearsToDebtFree > 0 ? a.yearsToDebtFree : 999;
         const bYears = b.yearsToDebtFree > 0 ? b.yearsToDebtFree : 999;
         return aYears - bYears;
-      });
+      }));
     case 'most-viable-raising-kids':
-      return [...results].sort((a, b) => {
-        const aScore = (VIABILITY_SCORE[a.viabilityClassification] || 0) * 2
+      return [...results].sort(viableFirst((a, b) => {
+        const aScore = (a.numericScore ?? 0) * 2
           + (a.yearByYear[0]?.disposableIncome ?? 0) / 10000
           + (a.yearsToMortgage > 0 ? (30 - a.yearsToMortgage) / 30 : 0);
-        const bScore = (VIABILITY_SCORE[b.viabilityClassification] || 0) * 2
+        const bScore = (b.numericScore ?? 0) * 2
           + (b.yearByYear[0]?.disposableIncome ?? 0) / 10000
           + (b.yearsToMortgage > 0 ? (30 - b.yearsToMortgage) / 30 : 0);
         return bScore - aScore;
-      });
+      }));
     default:
       return results;
   }
@@ -161,21 +392,24 @@ function LocationCard({
   occupation: string;
   colKey: string;
 }) {
-  const viability = getViabilityLabel(result.viabilityClassification);
+  const viability = getViabilityLabel(result);
   const salary = getSalary(result.location, occupation);
   const col = (result.locationData.adjustedCOL as Record<string, number>)[colKey] || 0;
   const qualityOfLife = result.yearByYear[0]?.disposableIncome ?? 0;
   const qol = getQualityOfLifeLabel(qualityOfLife);
   const fastestToHome = result.yearsToMortgage > 0 ? `${result.yearsToMortgage} yr${result.yearsToMortgage !== 1 ? 's' : ''}` : 'N/A';
   const debtFree = result.yearsToDebtFree > 0 ? `${result.yearsToDebtFree} yr${result.yearsToDebtFree !== 1 ? 's' : ''}` : 'Debt-free';
+  const starRating = getStarRating(result.numericScore ?? 0);
 
-  // Max home value: use maxAffordable first, then fall back to longest available projection
+  // Projected home value: use maxAffordable first, then fall back to longest available projection
   const maxProj = result.houseProjections.maxAffordable
     || result.houseProjections.fifteenYears
     || result.houseProjections.tenYears
     || result.houseProjections.fiveYears
     || result.houseProjections.threeYears;
-  const maxHomeValue = maxProj?.canAfford ? maxProj.maxSustainableHousePrice : null;
+  const projectedHomeValue = maxProj?.canAfford ? maxProj.maxSustainableHousePrice : null;
+  const projectedHomeSizeSqft = projectedHomeValue ? estimateHomeSizeSqft(projectedHomeValue, result.location) : null;
+
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col shadow-sm">
@@ -183,21 +417,34 @@ function LocationCard({
       <div className="px-6 pt-5 pb-4">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2">
+            {/* Row 1: Location name + Viability status badge */}
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               <h3 className="text-lg font-bold text-gray-900 truncate">{result.location}</h3>
               {isCurrent && (
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EFF6FF] text-[#5BA4E5] uppercase tracking-wider shrink-0">
                   Current
                 </span>
               )}
+              <span
+                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold shrink-0"
+                style={{ backgroundColor: viability.bgColor, color: viability.color }}
+              >
+                {viability.viabilityStatus}
+              </span>
             </div>
-            {/* Viability Badge */}
-            <span
-              className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold"
-              style={{ backgroundColor: viability.bgColor, color: viability.color }}
-            >
-              {viability.label}
-            </span>
+            {/* Row 2: Star rating + House size classification */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <StarRating rating={starRating} />
+                <span className="text-xs font-medium text-gray-400">{starRating.toFixed(1)}</span>
+              </div>
+              {viability.houseSize && (
+                <>
+                  <span className="text-gray-300">|</span>
+                  <span className="text-xs font-semibold" style={{ color: viability.color }}>{viability.houseSize}</span>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Wishlist Heart */}
@@ -223,38 +470,44 @@ function LocationCard({
       {/* ===== MIDDLE SECTION: 2x2 Stats Grid ===== */}
       <div className="px-6 pb-4">
         <div className="grid grid-cols-2 gap-3">
-          {/* Estimated Salary */}
+          {/* Estimated Salary — $ icon (green box) */}
+          <div className="bg-[#F0FDF4] rounded-xl p-3.5">
+            <div className="flex items-center gap-2 mb-1.5">
+              <div className="w-7 h-7 rounded-lg bg-[#DCFCE7] flex items-center justify-center shrink-0">
+                <span className="text-sm font-bold text-[#16A34A]">$</span>
+              </div>
+              <span className="text-xs font-medium text-gray-500">Est. Salary</span>
+            </div>
+            {result.yearByYear[0]?.partnerIncome > 0 ? (
+              <div className="flex items-baseline gap-1.5 pl-9 flex-wrap">
+                <span className="text-[11px] font-semibold text-gray-500">{formatCurrency(result.yearByYear[0].userIncome)}</span>
+                <span className="text-[10px] text-gray-300">|</span>
+                <span className="text-sm font-bold text-gray-900">{formatCurrency(result.yearByYear[0].totalIncome)}/yr</span>
+              </div>
+            ) : (
+              <p className="text-sm font-bold text-gray-900 pl-9">{formatCurrency(salary)}/yr</p>
+            )}
+          </div>
+
+          {/* Cost of Living — trend line icon (green) */}
           <div className="bg-[#F0FDF4] rounded-xl p-3.5">
             <div className="flex items-center gap-2 mb-1.5">
               <div className="w-7 h-7 rounded-lg bg-[#DCFCE7] flex items-center justify-center shrink-0">
                 <svg className="w-4 h-4 text-[#16A34A]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <span className="text-xs font-medium text-gray-500">Est. Salary</span>
-            </div>
-            <p className="text-sm font-bold text-gray-900 pl-9">{formatCurrency(salary)}/yr</p>
-          </div>
-
-          {/* Cost of Living */}
-          <div className="bg-[#FFFBEB] rounded-xl p-3.5">
-            <div className="flex items-center gap-2 mb-1.5">
-              <div className="w-7 h-7 rounded-lg bg-[#FEF3C7] flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 text-[#D97706]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
                 </svg>
               </div>
               <span className="text-xs font-medium text-gray-500">Cost of Living</span>
             </div>
-            <p className="text-sm font-bold text-gray-900 pl-9">{formatCurrency(col)}/yr</p>
+            <p className="text-sm font-bold text-gray-900 pl-9">{formatCurrency(col + (result.yearByYear[0]?.housingCost || 0))}/yr</p>
           </div>
 
-          {/* Quality of Life */}
-          <div className="bg-[#EFF6FF] rounded-xl p-3.5">
+          {/* Quality of Life — heart/smile icon (Figma: warm brown/olive) */}
+          <div className="bg-[#FEF9F0] rounded-xl p-3.5">
             <div className="flex items-center gap-2 mb-1.5">
-              <div className="w-7 h-7 rounded-lg bg-[#DBEAFE] flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 text-[#2563EB]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+              <div className="w-7 h-7 rounded-lg bg-[#FDF0D5] flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-[#B45309]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm-.375 0h.008v.015h-.008V9.75zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75zm-.375 0h.008v.015h-.008V9.75z" />
                 </svg>
               </div>
               <span className="text-xs font-medium text-gray-500">Quality of Life</span>
@@ -269,12 +522,12 @@ function LocationCard({
             </p>
           </div>
 
-          {/* Fastest to Home */}
-          <div className="bg-[#F5F3FF] rounded-xl p-3.5">
+          {/* Fastest to Home — house icon (Figma: orange/brown) */}
+          <div className="bg-[#FFF7ED] rounded-xl p-3.5">
             <div className="flex items-center gap-2 mb-1.5">
-              <div className="w-7 h-7 rounded-lg bg-[#EDE9FE] flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 text-[#7C3AED]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 21v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21m0 0h4.5V3.545M12.75 21h7.5V10.75M2.25 21h1.5m18 0h-18M2.25 9l4.5-1.636M18.75 3l-1.5.545m0 6.205l3 1m1.5.5l-1.5-.5M6.75 7.364V3h-3v18m3-13.636l10.5-3.819" />
+              <div className="w-7 h-7 rounded-lg bg-[#FFEDD5] flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-[#C2410C]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
                 </svg>
               </div>
               <span className="text-xs font-medium text-gray-500">Fastest to Home</span>
@@ -309,11 +562,27 @@ function LocationCard({
                 </svg>
               </div>
               <div>
-                <span className="text-sm font-medium text-gray-600">Max Home Value</span>
+                <span className="text-sm font-medium text-gray-600">Projected Home Value</span>
                 <p className="text-[10px] text-gray-400 leading-tight">When saved as long as possible</p>
               </div>
             </div>
-            <span className="text-sm font-bold text-[#16A34A]">{maxHomeValue ? formatCurrency(maxHomeValue) : 'N/A'}</span>
+            <span className="text-sm font-bold text-[#16A34A]">{projectedHomeValue ? formatCurrency(projectedHomeValue) : 'N/A'}</span>
+          </div>
+
+          {/* Projected Home Size */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-[#F5F3FF] flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-[#8B5CF6]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                </svg>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-gray-600">Projected Home Size</span>
+                <p className="text-[10px] text-gray-400 leading-tight">Estimated from projected value</p>
+              </div>
+            </div>
+            <span className="text-sm font-bold text-[#8B5CF6]">{projectedHomeSizeSqft ? `~${projectedHomeSizeSqft.toLocaleString()} sqft` : 'N/A'}</span>
           </div>
         </div>
 
@@ -321,7 +590,7 @@ function LocationCard({
         <div className="px-6 pb-5 pt-2 bg-[#FAFBFC]">
           <Link
             href="/profile"
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#5BA4E5] text-white rounded-xl hover:bg-[#4A93D4] transition-colors text-sm font-semibold"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#7C3AED] text-white rounded-xl hover:bg-[#6D28D9] transition-colors text-sm font-semibold"
           >
             View Detailed Analysis
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -360,17 +629,23 @@ export default function MyLocationsPage() {
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>('default');
-  const [showMode, setShowMode] = useState<ShowMode>('all');
+  const [showFilter, setShowFilter] = useState('all');       // 'all' | 'saved' | 'other'
+  const [typeFilter, setTypeFilter] = useState('all');       // 'all' | 'states' | 'cities'
+  const [geoFilters, setGeoFilters] = useState<string[]>([]);  // multi-select: ['region:X', 'weather:Y', ...] or [] for all
   const [browseAll, setBrowseAll] = useState(false);
+  const [showStatesInDropdown, setShowStatesInDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchDropdown, setSearchDropdown] = useState<{ label: string; rawName: string }[]>([]);
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [showDropdownOpen, setShowDropdownOpen] = useState(false);
+  const [stateDropdownOpen, setStateDropdownOpen] = useState(false);
+  const [selectedStateInDropdown, setSelectedStateInDropdown] = useState<string | null>(null);
 
   const searchRef = useRef<HTMLDivElement>(null);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
   const showDropdownRef = useRef<HTMLDivElement>(null);
+  const stateDropdownRef = useRef<HTMLDivElement>(null);
   const searchCacheRef = useRef<Map<string, CalculationResult>>(new Map());
 
   // ===== LOAD DATA =====
@@ -382,17 +657,30 @@ export default function MyLocationsPage() {
     }
 
     try {
-      const results: CalculationResult[] = JSON.parse(stored);
-      if (results.length === 0) {
-        router.push('/onboarding');
-        return;
-      }
+      let results: CalculationResult[] = JSON.parse(stored);
 
-      setUserResults(results);
+      // Detect stale cached results (missing numericScore from 3-layer system)
+      // and recalculate them with fresh engine — runs once then re-caches
+      const isStale = results.length > 0 && results[0].numericScore === undefined;
 
       const answers = getOnboardingAnswers<OnboardingAnswers>(
         (d): d is OnboardingAnswers => d != null && typeof d === 'object'
       );
+
+      if (isStale && answers) {
+        const freshProfile = normalizeOnboardingAnswers(answers);
+        results = results.map(r => {
+          try {
+            const fresh = calculateAutoApproach(freshProfile, r.location, 30);
+            return fresh || r;
+          } catch {
+            return r;
+          }
+        });
+        localStorage.setItem('calculation-results', JSON.stringify(results));
+      }
+
+      setUserResults(results);
 
       if (answers) {
         setOccupation(answers.userOccupation || '');
@@ -406,6 +694,11 @@ export default function MyLocationsPage() {
         const normalized = normalizeOnboardingAnswers(answers);
         setProfile(normalized);
         setColKey(getAdjustedCOLKey(normalized.householdType));
+      } else {
+        // Build minimal profile from defaults so filters/sorts can work
+        const fallback = normalizeOnboardingAnswers({} as OnboardingAnswers);
+        setProfile(fallback);
+        setColKey(getAdjustedCOLKey(fallback.householdType));
       }
 
       setSavedLocationNames(getSavedLocations());
@@ -419,8 +712,10 @@ export default function MyLocationsPage() {
   }, [router]);
 
   // ===== GENERATE SUGGESTIONS =====
+  // When the user has very few results (e.g. "know-exactly" with 1 location),
+  // generate more suggestions so the page isn't sparse.
   useEffect(() => {
-    if (!profile || userResults.length === 0) return;
+    if (!profile) return;
 
     setSuggestionsLoading(true);
 
@@ -430,8 +725,12 @@ export default function MyLocationsPage() {
         const allOptions = getAllLocationOptions()
           .filter(o => o.type === 'state' && !existingLocations.has(o.label));
 
-        const step = Math.max(1, Math.floor(allOptions.length / 8));
-        const candidates = allOptions.filter((_, i) => i % step === 0).slice(0, 8);
+        // When user has few results, sample more candidates for richer suggestions
+        const sampleSize = userResults.length <= 3 ? 20 : 8;
+        const showCount = userResults.length <= 3 ? 6 : 3;
+
+        const step = Math.max(1, Math.floor(allOptions.length / sampleSize));
+        const candidates = allOptions.filter((_, i) => i % step === 0).slice(0, sampleSize);
 
         const suggestions: CalculationResult[] = [];
         for (const loc of candidates) {
@@ -447,7 +746,7 @@ export default function MyLocationsPage() {
         }
 
         suggestions.sort(sortByViability);
-        setSuggestedResults(suggestions.slice(0, 3));
+        setSuggestedResults(suggestions.slice(0, showCount));
       } catch (error) {
         console.error('Error generating suggestions:', error);
       }
@@ -457,9 +756,10 @@ export default function MyLocationsPage() {
 
   // ===== CALCULATE ALL LOCATIONS (for full-dataset sorting or browse) =====
   useEffect(() => {
-    // Calculate when an active sort is selected or browse mode is on
-    const needsFullCalc = browseAll || (sortMode !== 'default' && sortMode !== 'saved');
-    if (!needsFullCalc || allCalculatedResults.length > 0 || !profile) return;
+    // Calculate when an active sort is selected, browse mode is on, or geographic filter is active
+    const needsFullCalc = browseAll || (sortMode !== 'default' && sortMode !== 'saved') || hasAnyGeoFilter(typeFilter, geoFilters);
+    if (!needsFullCalc || !profile) return;
+    if (allCalculatedResults.length > 0) return;
 
     setAllCalcLoading(true);
 
@@ -494,13 +794,13 @@ export default function MyLocationsPage() {
       }
       setAllCalcLoading(false);
     }, 50);
-  }, [sortMode, browseAll, allCalculatedResults.length, profile]);
+  }, [sortMode, showFilter, typeFilter, geoFilters, browseAll, allCalculatedResults.length, profile]);
 
-  // Reset pagination when sort or show mode changes
+  // Reset pagination when sort or filter changes
   useEffect(() => {
     setVisibleOtherCount(6);
     setVisibleDefaultCount(6);
-  }, [sortMode, showMode, browseAll]);
+  }, [sortMode, showFilter, typeFilter, geoFilters, browseAll]);
 
   // ===== CLOSE DROPDOWNS ON OUTSIDE CLICK =====
   useEffect(() => {
@@ -513,6 +813,10 @@ export default function MyLocationsPage() {
       }
       if (showDropdownRef.current && !showDropdownRef.current.contains(e.target as Node)) {
         setShowDropdownOpen(false);
+      }
+      if (stateDropdownRef.current && !stateDropdownRef.current.contains(e.target as Node)) {
+        setStateDropdownOpen(false);
+        setSelectedStateInDropdown(null);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -570,6 +874,24 @@ export default function MyLocationsPage() {
     });
   }, []);
 
+  // ===== STATE → CITIES MAPPING (for state dropdown) =====
+  // Build a mapping of full state name → list of city labels (e.g., "Miami, FL")
+  const stateCitiesMap = (() => {
+    const map: Record<string, string[]> = {};
+    const allOptions = getAllLocationOptions();
+    for (const opt of allOptions) {
+      if (opt.type === 'city' && opt.state) {
+        // opt.state is abbreviation (e.g., "FL"), find matching full name
+        const fullName = Object.entries(STATE_TO_ABBREV).find(([, abbr]) => abbr === opt.state)?.[0];
+        if (fullName) {
+          if (!map[fullName]) map[fullName] = [];
+          map[fullName].push(opt.label);
+        }
+      }
+    }
+    return map;
+  })();
+
   // ===== FILTER + SORT =====
 
   // Combine user-selected locations (onboarding + suggestions + search)
@@ -589,35 +911,52 @@ export default function MyLocationsPage() {
 
   // Determine active sort mode
   const isActiveSortMode = sortMode !== 'default' && sortMode !== 'saved';
+  const hasGeoOrTypeFilter = hasAnyGeoFilter(typeFilter, geoFilters);
 
-  // For active sorts or browse mode, use the full dataset; for default/saved, use user-selected only
-  const baseResults = (isActiveSortMode || browseAll) ? fullDataset : userDeduped;
+  // For active sorts, browse mode, or geographic/type filters: use the full dataset
+  const baseResults = (isActiveSortMode || browseAll || hasGeoOrTypeFilter) ? fullDataset : userDeduped;
 
-  // Step 1: Apply show filter
-  let visibleResults: CalculationResult[];
-  switch (showMode) {
-    case 'saved':
-      visibleResults = baseResults.filter(r => savedLocationNames.includes(r.location));
-      break;
-    case 'other':
-      visibleResults = baseResults.filter(r => !savedLocationNames.includes(r.location));
-      break;
-    default:
-      visibleResults = baseResults;
+  // Step 1: Apply all independent filters
+  let visibleResults: CalculationResult[] = baseResults;
+
+  // Apply show filter (saved/other/all)
+  if (showFilter === 'saved') {
+    visibleResults = visibleResults.filter(r => savedLocationNames.includes(r.location));
+  } else if (showFilter === 'other') {
+    visibleResults = visibleResults.filter(r => !savedLocationNames.includes(r.location));
   }
 
-  // Step 2: Apply sort mode
+  // Apply type filter (states/cities/all)
+  if (typeFilter === 'states') {
+    visibleResults = visibleResults.filter(r => matchesLocationFilter(r.location, 'type:states'));
+  } else if (typeFilter === 'cities') {
+    visibleResults = visibleResults.filter(r => matchesLocationFilter(r.location, 'type:cities'));
+  }
+
+  // Apply geographic filters (region/weather/state/city — OR logic across selections)
+  if (hasActiveGeoFilter(geoFilters)) {
+    visibleResults = visibleResults.filter(r => matchesAnyGeoFilter(r.location, geoFilters));
+  }
+
+  // Step 2: Apply sort mode (non-viable always sink to the bottom)
+  const pushNonViableToBottom = (arr: CalculationResult[]) => {
+    const viable = arr.filter(r => r.viabilityClassification !== 'no-viable-path');
+    const nonViable = arr.filter(r => r.viabilityClassification === 'no-viable-path');
+    return [...viable, ...nonViable];
+  };
+
   let finalResults: CalculationResult[];
   if (sortMode === 'saved') {
-    finalResults = visibleResults.filter(r => savedLocationNames.includes(r.location));
+    finalResults = pushNonViableToBottom(visibleResults.filter(r => savedLocationNames.includes(r.location)));
   } else if (sortMode === 'default') {
-    finalResults = visibleResults;
+    finalResults = pushNonViableToBottom(visibleResults);
   } else {
     finalResults = applySortMode(visibleResults, sortMode, colKey);
   }
 
-  // For default + all (non-browse): pin current location first
-  if (sortMode === 'default' && showMode === 'all' && !browseAll) {
+  // For default + all filters (non-browse): pin current location first
+  const allFiltersDefault = showFilter === 'all' && typeFilter === 'all' && geoFilters.length === 0;
+  if (sortMode === 'default' && allFiltersDefault && !browseAll) {
     const currentIdx = finalResults.findIndex(r => r.location === currentLocation);
     if (currentIdx > 0) {
       const [current] = finalResults.splice(currentIdx, 1);
@@ -626,7 +965,7 @@ export default function MyLocationsPage() {
   }
 
   // Browse mode: exclude saved locations so you discover new ones
-  if (browseAll && showMode === 'all') {
+  if (browseAll && allFiltersDefault) {
     finalResults = finalResults.filter(r => !savedLocationNames.includes(r.location));
   }
 
@@ -642,7 +981,7 @@ export default function MyLocationsPage() {
   const suggestedLocationNames = new Set(suggestedResults.map(r => r.location));
 
   // Button active states
-  const isAllActive = sortMode === 'default' && showMode === 'all' && !browseAll;
+  const isAllActive = sortMode === 'default' && allFiltersDefault && !browseAll;
   const isBrowseActive = browseAll && sortMode === 'default';
   const isSavedActive = sortMode === 'saved';
   const isRecommendedActive = sortMode === 'most-recommended';
@@ -700,10 +1039,12 @@ export default function MyLocationsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {visibleItems.length === 0
               ? renderEmptyState(
-                  sortMode === 'saved' || showMode === 'saved'
+                  sortMode === 'saved' || showFilter === 'saved'
                     ? 'No saved locations yet. Click the heart on any location to save it.'
-                    : showMode === 'other'
+                    : showFilter === 'other'
                     ? 'No other locations to show.'
+                    : hasGeoOrTypeFilter
+                    ? `No locations found for the current filters.`
                     : 'No locations to show.'
                 )
               : visibleItems.map(renderCard)}
@@ -713,7 +1054,7 @@ export default function MyLocationsPage() {
           <div className="flex justify-center mt-6">
             <button
               onClick={() => setVisibleOtherCount(prev => prev + 6)}
-              className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] hover:border-[#5BA4E5]/30 transition-all"
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] hover:border-[#7C3AED]/30 transition-all"
             >
               See More
               <span className="text-xs text-gray-400">({finalResults.length - visibleOtherCount} remaining)</span>
@@ -781,7 +1122,7 @@ export default function MyLocationsPage() {
                 <div className="flex justify-center mt-6">
                   <button
                     onClick={() => setVisibleOtherCount(prev => prev + 6)}
-                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] hover:border-[#5BA4E5]/30 transition-all"
+                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] hover:border-[#7C3AED]/30 transition-all"
                   >
                     See More
                     <span className="text-xs text-gray-400">({otherSorted.length - visibleOtherCount} remaining)</span>
@@ -883,7 +1224,7 @@ export default function MyLocationsPage() {
                   <div className="flex justify-center mt-6">
                     <button
                       onClick={() => setVisibleDefaultCount(prev => prev + 6)}
-                      className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] hover:border-[#5BA4E5]/30 transition-all"
+                      className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] hover:border-[#7C3AED]/30 transition-all"
                     >
                       See More
                       <span className="text-xs text-gray-400">({allSectionResults.length - visibleDefaultCount} remaining)</span>
@@ -902,7 +1243,6 @@ export default function MyLocationsPage() {
   };
 
   const currentSortLabel = SORT_OPTIONS.find(o => o.value === sortMode)?.label || 'Default';
-  const currentShowLabel = SHOW_OPTIONS.find(o => o.value === showMode)?.label || 'All Locations';
 
   return (
     <div className="space-y-6">
@@ -913,17 +1253,17 @@ export default function MyLocationsPage() {
       </div>
 
       {/* Filter Bar + Search */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div className="bg-[#F5F3FF] rounded-2xl border border-[#DDD6FE] p-4">
         <div className="flex flex-col gap-4">
           {/* Top Row: Quick Buttons + Dropdown Filters */}
           <div className="flex flex-wrap items-center gap-2">
             {/* My Locations Button */}
             <button
-              onClick={() => { setSortMode('default'); setShowMode('all'); setBrowseAll(false); }}
+              onClick={() => { setSortMode('default'); setShowFilter('all'); setTypeFilter('all'); setGeoFilters([]); setBrowseAll(false); }}
               className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 isAllActive
-                  ? 'bg-[#5BA4E5] text-white shadow-sm'
-                  : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border border-gray-200'
+                  ? 'bg-[#7C3AED] text-white shadow-sm'
+                  : 'bg-white text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] border border-gray-200'
               }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -934,11 +1274,11 @@ export default function MyLocationsPage() {
 
             {/* Browse All Button */}
             <button
-              onClick={() => { setSortMode('default'); setShowMode('all'); setBrowseAll(true); }}
+              onClick={() => { setSortMode('default'); setShowFilter('all'); setTypeFilter('all'); setGeoFilters([]); setBrowseAll(true); }}
               className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 isBrowseActive
-                  ? 'bg-[#5BA4E5] text-white shadow-sm'
-                  : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border border-gray-200'
+                  ? 'bg-[#7C3AED] text-white shadow-sm'
+                  : 'bg-white text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] border border-gray-200'
               }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -949,11 +1289,11 @@ export default function MyLocationsPage() {
 
             {/* Saved Button */}
             <button
-              onClick={() => { setSortMode('saved'); setShowMode('all'); setBrowseAll(false); }}
+              onClick={() => { setSortMode('saved'); setShowFilter('all'); setBrowseAll(false); }}
               className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 isSavedActive
-                  ? 'bg-[#5BA4E5] text-white shadow-sm'
-                  : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border border-gray-200'
+                  ? 'bg-[#7C3AED] text-white shadow-sm'
+                  : 'bg-white text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] border border-gray-200'
               }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -964,11 +1304,11 @@ export default function MyLocationsPage() {
 
             {/* Most Recommended Button */}
             <button
-              onClick={() => { setSortMode('most-recommended'); setShowMode('all'); setBrowseAll(false); }}
+              onClick={() => { setSortMode('most-recommended'); setShowFilter('all'); setBrowseAll(false); }}
               className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 isRecommendedActive
-                  ? 'bg-[#5BA4E5] text-white shadow-sm'
-                  : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border border-gray-200'
+                  ? 'bg-[#7C3AED] text-white shadow-sm'
+                  : 'bg-white text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] border border-gray-200'
               }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -983,11 +1323,11 @@ export default function MyLocationsPage() {
             {/* Sort By Dropdown */}
             <div ref={sortDropdownRef} className="relative">
               <button
-                onClick={() => { setSortDropdownOpen(!sortDropdownOpen); setShowDropdownOpen(false); }}
+                onClick={() => { setSortDropdownOpen(!sortDropdownOpen); setShowDropdownOpen(false); setStateDropdownOpen(false); }}
                 className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
                   sortMode !== 'default'
-                    ? 'bg-[#EFF6FF] text-[#5BA4E5] border-[#5BA4E5]/30'
-                    : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border-gray-200'
+                    ? 'bg-[#EDE9FE] text-[#7C3AED] border-[#7C3AED]/30'
+                    : 'bg-white text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] border-gray-200'
                 }`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -1008,17 +1348,17 @@ export default function MyLocationsPage() {
                         setSortMode(option.value);
                         setSortDropdownOpen(false);
                         setBrowseAll(false);
-                        if (option.value === 'default') setShowMode('all');
+                        if (option.value === 'default') { setShowFilter('all'); setTypeFilter('all'); setGeoFilters([]); }
                       }}
                       className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between ${
                         sortMode === option.value
-                          ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium'
-                          : 'text-gray-700 hover:bg-[#F8FAFB]'
+                          ? 'bg-[#EDE9FE] text-[#7C3AED] font-medium'
+                          : 'text-gray-700 hover:bg-[#F5F3FF]'
                       }`}
                     >
                       {option.label}
                       {sortMode === option.value && (
-                        <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <svg className="w-4 h-4 text-[#7C3AED] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                         </svg>
                       )}
@@ -1028,49 +1368,377 @@ export default function MyLocationsPage() {
               )}
             </div>
 
-            {/* Show Dropdown */}
+            {/* Filter Dropdown (Show + Regions + Weather — multi-select) */}
             <div ref={showDropdownRef} className="relative">
               <button
-                onClick={() => { setShowDropdownOpen(!showDropdownOpen); setSortDropdownOpen(false); }}
+                onClick={() => { setShowDropdownOpen(!showDropdownOpen); setSortDropdownOpen(false); setStateDropdownOpen(false); }}
                 className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
-                  showMode !== 'all'
-                    ? 'bg-[#EFF6FF] text-[#5BA4E5] border-[#5BA4E5]/30'
-                    : 'bg-[#F8FAFB] text-gray-600 hover:bg-[#EFF6FF] hover:text-[#5BA4E5] border-gray-200'
+                  showFilter !== 'all' || hasActiveGeoFilter(geoFilters)
+                    ? 'bg-[#EDE9FE] text-[#7C3AED] border-[#7C3AED]/30'
+                    : 'bg-white text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] border-gray-200'
                 }`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
                 </svg>
-                <span className="hidden sm:inline">Show:</span> {currentShowLabel}
+                <span className="hidden sm:inline">Filter</span>
+                {(showFilter !== 'all' || hasActiveGeoFilter(geoFilters)) && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#7C3AED]"></span>
+                )}
+                {geoFilters.length > 0 && (
+                  <span className="text-xs bg-[#7C3AED] text-white rounded-full w-5 h-5 flex items-center justify-center font-bold">{geoFilters.length}</span>
+                )}
                 <svg className={`w-3.5 h-3.5 transition-transform ${showDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                 </svg>
               </button>
 
               {showDropdownOpen && (
-                <div className="absolute z-20 right-0 mt-1 w-52 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
-                  {SHOW_OPTIONS.map(option => (
+                <div className="absolute z-20 right-0 mt-1 w-72 bg-white border border-gray-200 rounded-xl shadow-lg max-h-[480px] overflow-y-auto">
+                  {/* Show section (single-select) */}
+                  <div className="sticky top-0 px-4 py-2 bg-gray-50 border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider">Show</div>
+                  {SHOW_OPTIONS.map(item => (
                     <button
-                      key={option.value}
-                      onClick={() => {
-                        setShowMode(option.value);
-                        setShowDropdownOpen(false);
-                      }}
-                      className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between ${
-                        showMode === option.value
-                          ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium'
-                          : 'text-gray-700 hover:bg-[#F8FAFB]'
+                      key={item.value}
+                      onClick={() => { setShowFilter(item.value); setShowDropdownOpen(false); setBrowseAll(false); }}
+                      className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
+                        showFilter === item.value ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
                       }`}
                     >
-                      {option.label}
-                      {showMode === option.value && (
-                        <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      {item.label}
+                      {showFilter === item.value && (
+                        <svg className="w-4 h-4 text-[#7C3AED] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                         </svg>
                       )}
                     </button>
                   ))}
+
+                  {/* Regions section (multi-select) */}
+                  <div className="sticky top-0 px-4 py-2 bg-gray-50 border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                    <span>Regions</span>
+                    {geoFilters.some(f => f.startsWith('region:')) && (
+                      <button
+                        onClick={() => setGeoFilters(geoFilters.filter(f => !f.startsWith('region:')))}
+                        className="text-[10px] text-[#5BA4E5] hover:text-[#4A8FCC] font-semibold"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  {REGION_OPTIONS.filter(item => item.value !== 'all').map(item => {
+                    const isActive = geoFilters.includes(item.value);
+                    return (
+                      <button
+                        key={item.value}
+                        onClick={() => {
+                          // Clear any state/city filters when selecting regions
+                          const withoutStateCity = geoFilters.filter(f => !f.startsWith('state:') && !f.startsWith('city:'));
+                          const toggled = toggleGeoFilter(withoutStateCity, item.value);
+                          setGeoFilters(toggled);
+                          setBrowseAll(false);
+                        }}
+                        className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
+                          isActive ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <span className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
+                            isActive ? 'bg-[#7C3AED] border-[#7C3AED]' : 'border-gray-300'
+                          }`}>
+                            {isActive && (
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                              </svg>
+                            )}
+                          </span>
+                          {item.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+
+                  {/* Weather section (multi-select) */}
+                  <div className="sticky top-0 px-4 py-2 bg-gray-50 border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                    <span>Weather</span>
+                    {geoFilters.some(f => f.startsWith('weather:')) && (
+                      <button
+                        onClick={() => setGeoFilters(geoFilters.filter(f => !f.startsWith('weather:')))}
+                        className="text-[10px] text-[#5BA4E5] hover:text-[#4A8FCC] font-semibold"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  {WEATHER_OPTIONS.filter(item => item.value !== 'all').map(item => {
+                    const isActive = geoFilters.includes(item.value);
+                    return (
+                      <button
+                        key={item.value}
+                        onClick={() => {
+                          const withoutStateCity = geoFilters.filter(f => !f.startsWith('state:') && !f.startsWith('city:'));
+                          const toggled = toggleGeoFilter(withoutStateCity, item.value);
+                          setGeoFilters(toggled);
+                          setBrowseAll(false);
+                        }}
+                        className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
+                          isActive ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <span className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
+                            isActive ? 'bg-[#7C3AED] border-[#7C3AED]' : 'border-gray-300'
+                          }`}>
+                            {isActive && (
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                              </svg>
+                            )}
+                          </span>
+                          {item.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+
+                  {/* Clear All button */}
+                  {geoFilters.length > 0 && (
+                    <div className="sticky bottom-0 border-t border-gray-100 bg-white px-4 py-2.5">
+                      <button
+                        onClick={() => { setGeoFilters([]); setShowDropdownOpen(false); }}
+                        className="w-full text-center text-sm font-medium text-red-500 hover:text-red-600 transition-colors"
+                      >
+                        Clear All Filters ({geoFilters.length})
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Location Type & State Dropdown */}
+            <div ref={stateDropdownRef} className="relative">
+              <button
+                onClick={() => { setStateDropdownOpen(!stateDropdownOpen); setSortDropdownOpen(false); setShowDropdownOpen(false); if (stateDropdownOpen) { setSelectedStateInDropdown(null); setShowStatesInDropdown(false); } }}
+                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
+                  typeFilter !== 'all' || geoFilters.some(f => f.startsWith('state:') || f.startsWith('city:'))
+                    ? 'bg-[#EDE9FE] text-[#7C3AED] border-[#7C3AED]/30'
+                    : 'bg-white text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] border-gray-200'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                </svg>
+                <span className="hidden sm:inline">Location</span>
+                {(() => {
+                  const stateFilter = geoFilters.find(f => f.startsWith('state:'));
+                  const cityFilter = geoFilters.find(f => f.startsWith('city:'));
+                  const hasLocFilter = stateFilter || cityFilter;
+                  if (!hasLocFilter && typeFilter === 'all') return null;
+                  return (
+                    <span className="text-xs">
+                      {typeFilter !== 'all' ? (typeFilter === 'states' ? 'States' : 'Cities') : ''}
+                      {typeFilter !== 'all' && hasLocFilter ? ' · ' : ''}
+                      {stateFilter ? stateFilter.substring(6) : cityFilter ? cityFilter.substring(5) : ''}
+                    </span>
+                  );
+                })()}
+                <svg className={`w-3.5 h-3.5 transition-transform ${stateDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                </svg>
+              </button>
+
+              {stateDropdownOpen && (
+                <div className="absolute z-20 right-0 mt-1 w-80 bg-white border border-gray-200 rounded-xl shadow-lg max-h-[480px] overflow-y-auto">
+                  {selectedStateInDropdown ? (
+                    <>
+                      {/* Back button */}
+                      <button
+                        onClick={() => setSelectedStateInDropdown(null)}
+                        className="sticky top-0 w-full flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-100 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                        </svg>
+                        Back
+                      </button>
+
+                      {/* All in [State] */}
+                      <button
+                        onClick={() => {
+                          setGeoFilters([`state:${selectedStateInDropdown}`]);
+                          setStateDropdownOpen(false);
+                          setSelectedStateInDropdown(null);
+                          setBrowseAll(false);
+                        }}
+                        className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between font-medium ${
+                          geoFilters.includes(`state:${selectedStateInDropdown}`) ? 'bg-[#EFF6FF] text-[#5BA4E5]' : 'text-gray-900 hover:bg-[#F8FAFB]'
+                        }`}
+                      >
+                        <span>All in {selectedStateInDropdown}</span>
+                        {geoFilters.includes(`state:${selectedStateInDropdown}`) && (
+                          <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                          </svg>
+                        )}
+                      </button>
+
+                      {/* Cities list */}
+                      {(stateCitiesMap[selectedStateInDropdown] || []).length > 0 ? (
+                        <>
+                          <div className="px-4 py-1.5 bg-gray-50 border-y border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                            Cities in {selectedStateInDropdown}
+                          </div>
+                          {(stateCitiesMap[selectedStateInDropdown] || []).map(cityLabel => (
+                            <button
+                              key={cityLabel}
+                              onClick={() => {
+                                setGeoFilters([`city:${cityLabel}`]);
+                                setStateDropdownOpen(false);
+                                setSelectedStateInDropdown(null);
+                                setBrowseAll(false);
+                              }}
+                              className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
+                                geoFilters.includes(`city:${cityLabel}`) ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                              }`}
+                            >
+                              {cityLabel}
+                              {geoFilters.includes(`city:${cityLabel}`) && (
+                                <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                </svg>
+                              )}
+                            </button>
+                          ))}
+                        </>
+                      ) : (
+                        <div className="px-4 py-3 text-sm text-gray-400 italic">No city data available for this state</div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {/* Type section */}
+                      <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider">Type</div>
+                      {TYPE_OPTIONS.map(item => (
+                        <button
+                          key={item.value}
+                          onClick={() => { setTypeFilter(item.value); }}
+                          className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
+                            typeFilter === item.value ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                          }`}
+                        >
+                          {item.label}
+                          {typeFilter === item.value && (
+                            <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                            </svg>
+                          )}
+                        </button>
+                      ))}
+
+                      {/* State/Location section */}
+                      <div className="px-4 py-2 bg-gray-50 border-y border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider">State / Location</div>
+
+                      {/* All option */}
+                      <button
+                        onClick={() => {
+                          setGeoFilters(geoFilters.filter(f => !f.startsWith('state:') && !f.startsWith('city:')));
+                          setShowStatesInDropdown(false);
+                        }}
+                        className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
+                          !geoFilters.some(f => f.startsWith('state:') || f.startsWith('city:')) ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                        }`}
+                      >
+                        All States
+                        {!geoFilters.some(f => f.startsWith('state:') || f.startsWith('city:')) && (
+                          <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                          </svg>
+                        )}
+                      </button>
+
+                      {/* Active state/city indicator (if one is selected) */}
+                      {geoFilters.some(f => f.startsWith('state:') || f.startsWith('city:')) && (
+                        <div className="px-4 py-2 text-sm bg-[#EFF6FF] text-[#5BA4E5] font-medium flex items-center justify-between">
+                          {getGeoFilterLabel(geoFilters.find(f => f.startsWith('state:') || f.startsWith('city:')) || '')}
+                          <button
+                            onClick={() => setGeoFilters(geoFilters.filter(f => !f.startsWith('state:') && !f.startsWith('city:')))}
+                            className="text-[#5BA4E5] hover:text-[#4A8FCC] p-0.5"
+                            title="Clear state filter"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Browse states toggle */}
+                      {!showStatesInDropdown ? (
+                        <button
+                          onClick={() => setShowStatesInDropdown(true)}
+                          className="w-full text-left px-4 py-2.5 text-sm text-[#5BA4E5] hover:bg-[#F8FAFB] transition-colors flex items-center justify-between font-medium border-t border-gray-100"
+                        >
+                          Browse all states
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                          </svg>
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => setShowStatesInDropdown(false)}
+                            className="w-full text-left px-4 py-2.5 text-sm text-gray-500 hover:bg-[#F8FAFB] transition-colors flex items-center justify-between font-medium border-t border-gray-100"
+                          >
+                            Hide states
+                            <svg className="w-4 h-4 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                            </svg>
+                          </button>
+                          {ALL_STATES.map(stateName => {
+                            const cityCount = (stateCitiesMap[stateName] || []).length;
+                            const isActive = geoFilters.includes(`state:${stateName}`);
+                            return (
+                              <button
+                                key={stateName}
+                                onClick={() => {
+                                  if (cityCount > 0) {
+                                    setSelectedStateInDropdown(stateName);
+                                  } else {
+                                    setGeoFilters([`state:${stateName}`]);
+                                    setStateDropdownOpen(false);
+                                    setShowStatesInDropdown(false);
+                                    setBrowseAll(false);
+                                  }
+                                }}
+                                className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
+                                  isActive ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                                }`}
+                              >
+                                <span>{stateName}</span>
+                                <span className="flex items-center gap-1.5">
+                                  {isActive && (
+                                    <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                    </svg>
+                                  )}
+                                  {cityCount > 0 && (
+                                    <span className="flex items-center gap-0.5 text-xs text-gray-400">
+                                      {cityCount} {cityCount === 1 ? 'city' : 'cities'}
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                                      </svg>
+                                    </span>
+                                  )}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -1088,7 +1756,7 @@ export default function MyLocationsPage() {
                 onChange={(e) => handleSearchInput(e.target.value)}
                 onFocus={() => { if (searchDropdown.length > 0) setShowSearchDropdown(true); }}
                 placeholder="Search any location..."
-                className="w-full pl-11 pr-4 py-2.5 bg-[#F8FAFB] border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#5BA4E5]/30 focus:border-[#5BA4E5] focus:bg-white outline-none transition-all"
+                className="w-full pl-11 pr-4 py-2.5 bg-[#F8FAFB] border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#7C3AED]/30 focus:border-[#7C3AED] focus:bg-white outline-none transition-all"
               />
               {searchLoading && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -1123,7 +1791,7 @@ export default function MyLocationsPage() {
       </div>
 
       {/* Results */}
-      {sortMode === 'default' && showMode === 'all' && !browseAll
+      {sortMode === 'default' && allFiltersDefault && !browseAll
         ? renderSections()
         : renderFlatGrid()}
     </div>

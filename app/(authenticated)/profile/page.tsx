@@ -8,6 +8,7 @@ import { formatCurrency, pluralize } from '@/lib/utils';
 import { normalizeOnboardingAnswers } from '@/lib/onboarding/normalize';
 import { getOnboardingAnswers } from '@/lib/storage';
 import { searchLocations, getAllLocationOptions } from '@/lib/locations';
+import { getPricePerSqft, getTypicalHomeValue } from '@/lib/home-value-lookup';
 import type { OnboardingAnswers } from '@/lib/onboarding/types';
 
 export default function ProfilePage() {
@@ -22,10 +23,10 @@ export default function ProfilePage() {
   const [show15YearHomes, setShow15YearHomes] = useState(false);
   const [showMaxHomes, setShowMaxHomes] = useState(false);
   const [showYearByYear, setShowYearByYear] = useState(false);
-  const [recalculating, setRecalculating] = useState(false);
   const [locationSearch, setLocationSearch] = useState('');
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [locationSearchLoading, setLocationSearchLoading] = useState(false);
+  const [onboardingProfile, setOnboardingProfile] = useState<ReturnType<typeof normalizeOnboardingAnswers> | null>(null);
   const locationDropdownRef = useRef<HTMLDivElement>(null);
 
   const loadResults = useCallback((stored: string | null, storedAnswers: string | null) => {
@@ -35,23 +36,38 @@ export default function ProfilePage() {
     }
 
     try {
-      const results: CalculationResult[] = JSON.parse(stored);
+      let results: CalculationResult[] = JSON.parse(stored);
 
       if (results.length === 0) {
         router.push('/onboarding');
         return;
       }
 
+      // Detect stale cached results (missing numericScore from 3-layer system)
+      const isStale = results.length > 0 && results[0].numericScore === undefined;
+      if (isStale && storedAnswers) {
+        try {
+          const answers = JSON.parse(storedAnswers);
+          const freshProfile = normalizeOnboardingAnswers(answers);
+          results = results.map(r => {
+            try {
+              const fresh = calculateAutoApproach(freshProfile, r.location, 30);
+              return fresh || r;
+            } catch {
+              return r;
+            }
+          });
+          localStorage.setItem('calculation-results', JSON.stringify(results));
+        } catch { /* use original results */ }
+      }
+
+      // Sort by numeric score (analog — 8.7 beats 8.6)
       const sortedResults = [...results].sort((a, b) => {
-        const scoreMap: Record<string, number> = {
-          'very-viable-stable': 6,
-          'viable': 5,
-          'viable-higher-allocation': 4,
-          'viable-extreme-care': 3,
-          'viable-when-renting': 2,
-          'no-viable-path': 1,
-        };
-        return (scoreMap[b.viabilityClassification] || 0) - (scoreMap[a.viabilityClassification] || 0);
+        const numDiff = (b.numericScore ?? 0) - (a.numericScore ?? 0);
+        if (Math.abs(numDiff) > 0.001) return numDiff;
+        const aYears = a.yearsToMortgage > 0 ? a.yearsToMortgage : 999;
+        const bYears = b.yearsToMortgage > 0 ? b.yearsToMortgage : 999;
+        return aYears - bYears;
       });
 
       setAllResults(sortedResults);
@@ -62,6 +78,7 @@ export default function ProfilePage() {
       if (storedAnswers) {
         try {
           const answers = JSON.parse(storedAnswers);
+          setOnboardingProfile(normalizeOnboardingAnswers(answers));
           // Only override default for users who specified a location preference
           // (not "no-idea" users — they should see the best fit)
           if (answers.locationSituation === 'know-exactly' && answers.exactLocation) {
@@ -83,50 +100,10 @@ export default function ProfilePage() {
       router.push('/onboarding');
     } finally {
       setLoading(false);
-      setRecalculating(false);
     }
   }, [router]);
 
-  const handleRecalculate = useCallback(() => {
-    const storedAnswers = getOnboardingAnswers<OnboardingAnswers>((d): d is OnboardingAnswers => d != null && typeof d === 'object');
-    if (!storedAnswers) {
-      router.push('/onboarding');
-      return;
-    }
 
-    setRecalculating(true);
-
-    // Use setTimeout to let the UI update before heavy computation
-    setTimeout(() => {
-      try {
-        const profile = normalizeOnboardingAnswers(storedAnswers);
-        const locations = profile.selectedLocations.length > 0
-          ? profile.selectedLocations
-          : getAllLocationOptions().filter(o => o.type === 'state').map(o => o.label);
-
-        const results = locations.map(loc => {
-          try {
-            return calculateAutoApproach(profile, loc, 30);
-          } catch (error) {
-            console.error(`Error calculating for ${loc}:`, error);
-            return null;
-          }
-        }).filter((r): r is CalculationResult => r !== null);
-
-        if (results.length > 0) {
-          localStorage.setItem('calculation-results', JSON.stringify(results));
-        }
-
-        loadResults(
-          localStorage.getItem('calculation-results'),
-          localStorage.getItem('onboarding-answers')
-        );
-      } catch (error) {
-        console.error('Recalculation error:', error);
-        setRecalculating(false);
-      }
-    }, 50);
-  }, [router, loadResults]);
 
   useEffect(() => {
     loadResults(
@@ -217,19 +194,48 @@ export default function ProfilePage() {
   const isViable = result.viabilityClassification !== 'no-viable-path';
   
   // Get viability label
-  const getViabilityLabel = (classification: string) => {
-    const labels: Record<string, { label: string; color: string; bgColor: string }> = {
-      'very-viable-stable': { label: 'Very Viable & Stable', color: '#10B981', bgColor: '#D1FAE5' },
-      'viable': { label: 'Viable', color: '#5BA4E5', bgColor: '#EFF6FF' },
-      'viable-higher-allocation': { label: 'Viable (Higher Allocation)', color: '#F59E0B', bgColor: '#FEF3C7' },
-      'viable-extreme-care': { label: 'Viable (Extreme Care)', color: '#EF4444', bgColor: '#FEE2E2' },
-      'viable-when-renting': { label: 'Viable When Renting', color: '#8B5CF6', bgColor: '#EDE9FE' },
-      'no-viable-path': { label: 'Not Viable', color: '#DC2626', bgColor: '#FEE2E2' },
+  const getViabilityLabel = (r: CalculationResult) => {
+    const houseClassification = r.houseClassification || 'viable-medium-house';
+    const houseLabels: Record<string, { label: string; color: string; bgColor: string }> = {
+      'very-viable-stable-large-house': { label: 'Very Viable and Stable: Large House', color: '#065F46', bgColor: '#A7F3D0' },
+      'viable-large-house': { label: 'Viable: Large House', color: '#10B981', bgColor: '#D1FAE5' },
+      'very-viable-stable-medium-house': { label: 'Very Viable and Stable: Medium House', color: '#10B981', bgColor: '#D1FAE5' },
+      'viable-medium-house': { label: 'Viable: Medium House', color: '#5BA4E5', bgColor: '#EFF6FF' },
+      'somewhat-viable-small-house': { label: 'Somewhat Viable: Small House', color: '#0891B2', bgColor: '#CFFAFE' },
     };
-    return labels[classification] || labels['no-viable-path'];
+
+    if (r.viabilityClassification === 'no-viable-path') {
+      return { label: 'Not Viable', color: '#DC2626', bgColor: '#FEE2E2' };
+    }
+    if (r.viabilityClassification === 'viable-when-renting') {
+      return { label: 'Viable When Renting', color: '#8B5CF6', bgColor: '#EDE9FE' };
+    }
+    if (r.viabilityClassification === 'viable-extreme-care') {
+      return { label: houseLabels[houseClassification]?.label || 'Viable (Extreme Care)', color: '#EF4444', bgColor: '#FEE2E2' };
+    }
+    if (r.viabilityClassification === 'viable-higher-allocation') {
+      return { label: houseLabels[houseClassification]?.label || 'Viable (Higher Allocation)', color: '#F59E0B', bgColor: '#FEF3C7' };
+    }
+
+    return houseLabels[houseClassification] || houseLabels['viable-medium-house'];
   };
 
-  const viabilityInfo = getViabilityLabel(result.viabilityClassification);
+  const viabilityInfo = getViabilityLabel(result);
+
+  // Simplified viability for the top badge (no house size)
+  const viabilityBadge = (() => {
+    if (result.viabilityClassification === 'no-viable-path')
+      return { label: 'Not Viable', color: '#DC2626', bgColor: '#FEE2E2' };
+    if (result.viabilityClassification === 'viable-when-renting')
+      return { label: 'Viable When Renting', color: '#8B5CF6', bgColor: '#EDE9FE' };
+    if (result.viabilityClassification === 'viable-extreme-care')
+      return { label: 'Viable (Extreme Care)', color: '#EF4444', bgColor: '#FEE2E2' };
+    if (result.viabilityClassification === 'viable-higher-allocation')
+      return { label: 'Viable (Higher Allocation)', color: '#F59E0B', bgColor: '#FEF3C7' };
+    return { label: 'Viable', color: '#065F46', bgColor: '#A7F3D0' };
+  })();
+
+  const starRating = Math.round(((result.numericScore ?? 0) / 10) * 5 * 2) / 2; // 0-5 half-star
 
   return (
     <div className="space-y-6">
@@ -283,9 +289,9 @@ export default function ProfilePage() {
                       <span>{r.location}</span>
                       <span
                         className="text-xs px-1.5 py-0.5 rounded-full font-medium"
-                        style={{ backgroundColor: getViabilityLabel(r.viabilityClassification).bgColor, color: getViabilityLabel(r.viabilityClassification).color }}
+                        style={{ backgroundColor: getViabilityLabel(r).bgColor, color: getViabilityLabel(r).color }}
                       >
-                        {getViabilityLabel(r.viabilityClassification).label}
+                        {getViabilityLabel(r).label} ({(r.numericScore ?? 0).toFixed(1)})
                       </span>
                     </button>
                   ))}
@@ -312,9 +318,9 @@ export default function ProfilePage() {
                           {alreadyCalc && (
                             <span
                               className="ml-auto text-xs px-1.5 py-0.5 rounded-full font-medium"
-                              style={{ backgroundColor: getViabilityLabel(alreadyCalc.viabilityClassification).bgColor, color: getViabilityLabel(alreadyCalc.viabilityClassification).color }}
+                              style={{ backgroundColor: getViabilityLabel(alreadyCalc).bgColor, color: getViabilityLabel(alreadyCalc).color }}
                             >
-                              {getViabilityLabel(alreadyCalc.viabilityClassification).label}
+                              {getViabilityLabel(alreadyCalc).label} ({(alreadyCalc.numericScore ?? 0).toFixed(1)})
                             </span>
                           )}
                         </button>
@@ -340,29 +346,16 @@ export default function ProfilePage() {
         </p>
       </div>
 
-      {/* Recalculate Button */}
+      {/* Adjust Strategy Button */}
       <div className="flex justify-end">
         <button
-          onClick={handleRecalculate}
-          disabled={recalculating}
-          className="flex items-center gap-2 px-4 py-2 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+          onClick={() => router.push('/adjust-strategy')}
+          className="flex items-center gap-2 px-4 py-2 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-colors text-sm font-medium"
         >
-          {recalculating ? (
-            <>
-              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              Recalculating...
-            </>
-          ) : (
-            <>
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Recalculate
-            </>
-          )}
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+          Adjust Strategy
         </button>
       </div>
 
@@ -371,40 +364,72 @@ export default function ProfilePage() {
         
         {/* TOP SECTION - Key Metrics */}
         <div className="bg-gradient-to-br from-[#5BA4E5] to-[#4A93D4] p-8 text-white">
-          <h1 className="text-3xl font-bold mb-2">{result.location}</h1>
-          <p className="text-white/80 mb-6">Your Financial Roadmap</p>
-          
+          <div className="flex items-start justify-between mb-1">
+            <h1 className="text-3xl font-bold">{result.location}</h1>
+            <span
+              className="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-semibold shrink-0 ml-3"
+              style={{ backgroundColor: viabilityBadge.bgColor, color: viabilityBadge.color }}
+            >
+              {viabilityBadge.label}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 mb-6">
+            <div className="flex items-center gap-0.5">
+              {[1, 2, 3, 4, 5].map(i => {
+                if (starRating >= i) {
+                  return <svg key={i} className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
+                } else if (starRating >= i - 0.5) {
+                  return <svg key={i} className="w-4 h-4" viewBox="0 0 24 24"><defs><linearGradient id={`pstar-${i}`}><stop offset="50%" stopColor="#FACC15" /><stop offset="50%" stopColor="rgba(255,255,255,0.3)" /></linearGradient></defs><path fill={`url(#pstar-${i})`} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
+                }
+                return <svg key={i} className="w-4 h-4 text-white/30" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
+              })}
+            </div>
+            <span className="text-white/70 text-sm font-semibold">{(result.numericScore ?? 0).toFixed(1)}/10</span>
+            <span className="text-white/40 mx-1">|</span>
+            <span className="text-white/80 text-sm">Your Financial Roadmap</span>
+          </div>
+
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             {/* Time to Home Ownership */}
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
               <p className="text-white/70 text-sm mb-1">Time to Homeownership</p>
               <p className="text-2xl font-bold">
-                {result.yearsToMortgage > 0 ? `${result.yearsToMortgage} years` : 'N/A'}
+                {result.yearsToMortgage > 0 ? pluralize(result.yearsToMortgage, 'year') : 'N/A'}
               </p>
               {result.ageMortgageAcquired > 0 && (
                 <p className="text-white/60 text-xs mt-1">At age {result.ageMortgageAcquired}</p>
               )}
             </div>
 
-            {/* Viability Classification */}
+            {/* Projected Home Value (max affordable) */}
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
-              <p className="text-white/70 text-sm mb-1">Status</p>
-              <p className="text-lg font-bold">{viabilityInfo.label}</p>
+              <p className="text-white/70 text-sm mb-1">Projected Home Value</p>
+              <p className="text-2xl font-bold">
+                {result.houseProjections.maxAffordable
+                  ? formatCurrency(result.houseProjections.maxAffordable.maxSustainableHousePrice)
+                  : 'N/A'}
+              </p>
+              {result.houseProjections.maxAffordable && (
+                <p className="text-white/60 text-xs mt-1">
+                  In {pluralize(result.houseProjections.maxAffordable.year, 'year')}{result.houseProjections.maxAffordable.age > 0 ? ` (age ${result.houseProjections.maxAffordable.age})` : ''}
+                </p>
+              )}
             </div>
 
-            {/* Estimated Home Value */}
+            {/* Required Home Value (kids-based sqft) */}
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
-              <p className="text-white/70 text-sm mb-1">Median Home Value</p>
+              <p className="text-white/70 text-sm mb-1">Required Home Value</p>
               <p className="text-2xl font-bold">
-                {formatCurrency(locationData.housing.medianHomeValue)}
+                {formatCurrency(result.requiredHousePrice || getTypicalHomeValue(result.location) || locationData.housing.medianHomeValue)}
               </p>
+              <p className="text-white/60 text-xs mt-1">{result.baselineSqFtLabel || '2,200 sqft home'}</p>
             </div>
 
             {/* Time to Debt Free */}
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
               <p className="text-white/70 text-sm mb-1">Time to Debt-Free</p>
               <p className="text-2xl font-bold">
-                {result.yearsToDebtFree > 0 ? `${result.yearsToDebtFree} years` : 'No debt'}
+                {result.yearsToDebtFree > 0 ? pluralize(result.yearsToDebtFree, 'year') : 'No debt'}
               </p>
               {result.ageDebtFree > 0 && (
                 <p className="text-white/60 text-xs mt-1">At age {result.ageDebtFree}</p>
@@ -415,7 +440,7 @@ export default function ProfilePage() {
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
               <p className="text-white/70 text-sm mb-1">Minimum Allocation</p>
               <p className="text-2xl font-bold">{result.minimumAllocationRequired}%</p>
-              <p className="text-white/60 text-xs mt-1">of disposable income</p>
+              <p className="text-white/60 text-xs mt-1">of discretionary income</p>
             </div>
           </div>
         </div>
@@ -464,6 +489,93 @@ export default function ProfilePage() {
                     {result.warnings.map((warn, i) => (
                       <li key={i} className="text-sm text-yellow-700">{warn}</li>
                     ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Your Inputs — formula inputs for testing */}
+              {onboardingProfile && (
+                <div className="bg-[#F8FAFB] border border-[#E5E7EB] rounded-lg p-4">
+                  <h3 className="font-semibold text-[#2C3E50] mb-3">Your Inputs</h3>
+                  <ul className="space-y-1.5 text-sm text-[#6B7280]">
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span>Occupation: <strong className="text-[#2C3E50]">{onboardingProfile.userOccupation}</strong></span>
+                    </li>
+                    {(onboardingProfile.userSalary ?? 0) > 0 && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span>Your salary override: <strong className="text-[#2C3E50]">${(onboardingProfile.userSalary ?? 0).toLocaleString()}/yr</strong></span>
+                      </li>
+                    )}
+                    {onboardingProfile.partnerOccupation && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span>Partner occupation: <strong className="text-[#2C3E50]">{onboardingProfile.partnerOccupation}</strong></span>
+                      </li>
+                    )}
+                    {onboardingProfile.usePartnerIncomeDoubling && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span>Partner income: <strong className="text-[#2C3E50]">Doubling rule applied</strong></span>
+                      </li>
+                    )}
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span>Age: <strong className="text-[#2C3E50]">{onboardingProfile.currentAge}</strong></span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span>Down payment: <strong className="text-[#2C3E50]">{((locationData.housing.downPaymentPercent || 0.107) * 100).toFixed(1)}%</strong></span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span>Discretionary income allocation: <strong className="text-[#2C3E50]">{onboardingProfile.disposableIncomeAllocation}%</strong></span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span>Current savings: <strong className="text-[#2C3E50]">${onboardingProfile.currentSavings.toLocaleString()}</strong></span>
+                    </li>
+                    {onboardingProfile.studentLoanDebt > 0 && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span>Student loans: <strong className="text-[#2C3E50]">${onboardingProfile.studentLoanDebt.toLocaleString()} @ {onboardingProfile.studentLoanRate}%</strong></span>
+                      </li>
+                    )}
+                    {onboardingProfile.creditCardDebt > 0 && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span>Credit card debt: <strong className="text-[#2C3E50]">${onboardingProfile.creditCardDebt.toLocaleString()} @ {onboardingProfile.creditCardAPR}%</strong></span>
+                      </li>
+                    )}
+                    {onboardingProfile.carDebt > 0 && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span>Car debt: <strong className="text-[#2C3E50]">${onboardingProfile.carDebt.toLocaleString()} @ {onboardingProfile.carDebtRate}%</strong></span>
+                      </li>
+                    )}
+                    {onboardingProfile.otherDebt > 0 && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span>Other debt: <strong className="text-[#2C3E50]">${onboardingProfile.otherDebt.toLocaleString()} @ {onboardingProfile.otherDebtRate}%</strong></span>
+                      </li>
+                    )}
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span>Planned kids: <strong className="text-[#2C3E50]">{onboardingProfile.numKids}</strong></span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span>Household: <strong className="text-[#2C3E50]">{onboardingProfile.householdType} ({onboardingProfile.numEarners} earner{onboardingProfile.numEarners !== 1 ? 's' : ''})</strong></span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span>Required sqft: <strong className="text-[#2C3E50]">{result.requiredSqFt.toLocaleString()}</strong></span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span>Minimum allocation required: <strong className="text-[#2C3E50]">{result.minimumAllocationRequired}%</strong></span>
+                    </li>
                   </ul>
                 </div>
               )}
@@ -605,7 +717,31 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* FAMILY PLANNING SECTION - Vertical Timeline */}
+        {/* MAX AFFORDABLE HOME - Standalone section */}
+        {result.houseProjections.maxAffordable && (
+          <div className="px-8 py-6 bg-white border-t border-[#E5E7EB]">
+            <div className="mb-4">
+              <h2 className="text-xl font-bold text-[#2C3E50] mb-1">Your Max Affordable Home</h2>
+              <p className="text-[#6B7280] text-sm">The most expensive home you can sustainably afford based on your income ceiling</p>
+            </div>
+            <div className="relative">
+              <div className="absolute -top-3 left-4 z-10">
+                <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm">
+                  INCOME CEILING
+                </span>
+              </div>
+              <HouseProjectionCard
+                title="Max Affordable (Sustainability Cap)"
+                projection={result.houseProjections.maxAffordable}
+                location={result.location}
+                showHomes={showMaxHomes}
+                onToggle={() => setShowMaxHomes(!showMaxHomes)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* FAMILY PLANNING SECTION - Vertical Timeline (only when user plans kids) */}
         {result.kidViability && result.kidViability.firstKid.reason !== 'User does not plan to have kids' && (() => {
           const currentAge = result.yearByYear[0]?.age ?? 0;
           const currentYear = new Date().getFullYear();
@@ -673,7 +809,7 @@ export default function ProfilePage() {
                         <ul className="space-y-1 text-xs text-gray-500">
                           <li className="flex items-center gap-2">
                             <span className="w-1 h-1 bg-gray-400 rounded-full flex-shrink-0" />
-                            Positive disposable income for 3 years after birth
+                            Positive discretionary income for 3 years after birth
                           </li>
                           <li className="flex items-center gap-2">
                             <span className="w-1 h-1 bg-gray-400 rounded-full flex-shrink-0" />
@@ -882,23 +1018,6 @@ export default function ProfilePage() {
               />
             )}
 
-            {/* Max Affordable (Sustainability Ceiling) */}
-            {result.houseProjections.maxAffordable && (
-              <div className="relative">
-                <div className="absolute -top-3 left-4 z-10">
-                  <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm">
-                    INCOME CEILING
-                  </span>
-                </div>
-                <HouseProjectionCard
-                  title="Max Affordable (Sustainability Cap)"
-                  projection={result.houseProjections.maxAffordable}
-                  location={result.location}
-                  showHomes={showMaxHomes}
-                  onToggle={() => setShowMaxHomes(!showMaxHomes)}
-                />
-              </div>
-            )}
           </div>
 
           {/* Show Your Work - Year-by-Year Breakdown */}
@@ -1023,6 +1142,51 @@ export default function ProfilePage() {
             </div>
           )}
         </div>
+
+        {/* FAMILY PLANNING SECTION - "What if" for users who don't plan kids */}
+        {result.kidViability && result.kidViability.firstKid.reason === 'User does not plan to have kids' && (() => {
+          const currentAge = result.yearByYear[0]?.age ?? 0;
+          const kv = result.kidViability;
+
+          return (
+            <div className="px-8 py-6 bg-white border-t border-[#E5E7EB]">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+                  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">What If You Had Kids?</h3>
+                  <p className="text-sm text-gray-500">You indicated no plans for children, but here&apos;s what it would look like</p>
+                </div>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-5 border border-gray-200">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <p className="text-sm text-gray-600 mb-2">
+                      Based on your finances in {result.location}, having a first child would be viable
+                      {kv.firstKid.isViable && kv.firstKid.minimumAge
+                        ? ` starting at age ${kv.firstKid.minimumAge} (in ${pluralize(Math.max(0, kv.firstKid.minimumAge - currentAge), 'year')}).`
+                        : ' — but is not currently feasible within the projection window.'}
+                    </p>
+                    {kv.firstKid.isViable && (
+                      <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+                        <span>1st child: age {kv.firstKid.minimumAge}</span>
+                        {kv.secondKid.isViable && <span>2nd child: age {kv.secondKid.minimumAge}</span>}
+                        {kv.thirdKid.isViable && <span>3rd child: age {kv.thirdKid.minimumAge}</span>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
       </div>
     </div>
   );
@@ -1039,7 +1203,8 @@ interface HouseProjectionCardProps {
 }
 
 function HouseProjectionCard({ title, projection, location, showHomes, onToggle }: HouseProjectionCardProps) {
-  const estimatedSqFt = Math.round((projection.maxSustainableHousePrice / 250)); // Rough estimate $250/sqft
+  const pricePerSqft = getPricePerSqft(location);
+  const estimatedSqFt = Math.round(projection.maxSustainableHousePrice / pricePerSqft);
   
   return (
     <div className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden">
@@ -1076,7 +1241,7 @@ function HouseProjectionCard({ title, projection, location, showHomes, onToggle 
             <p className="text-2xl font-bold text-[#2C3E50]">
               {estimatedSqFt.toLocaleString()} sqft
             </p>
-            <p className="text-xs text-[#9CA3AF] mt-1">~$250/sqft</p>
+            <p className="text-xs text-[#9CA3AF] mt-1">~${pricePerSqft}/sqft</p>
           </div>
         </div>
 

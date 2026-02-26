@@ -1,12 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname } from 'next/navigation';
-import { getSavedLocations } from '@/lib/storage';
-
 export default function AuthenticatedLayout({
   children,
 }: {
@@ -14,18 +10,6 @@ export default function AuthenticatedLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [hasSavedLocations, setHasSavedLocations] = useState(true);
-
-  useEffect(() => {
-    const check = () => setHasSavedLocations(getSavedLocations().length > 0);
-    check();
-    window.addEventListener('storage', check);
-    window.addEventListener('savedLocationsChanged', check);
-    return () => {
-      window.removeEventListener('storage', check);
-      window.removeEventListener('savedLocationsChanged', check);
-    };
-  }, []);
 
   const handleSignOut = () => {
     // Clear authentication
@@ -42,9 +26,7 @@ export default function AuthenticatedLayout({
     { href: '/job-finder', label: 'Job Finder', icon: 'chart' },
   ];
 
-  const navItems = hasSavedLocations
-    ? allNavItems
-    : allNavItems.filter(item => item.href !== '/my-locations');
+  const navItems = allNavItems;
 
   const isActive = (href: string) => pathname.startsWith(href);
 
@@ -52,7 +34,7 @@ export default function AuthenticatedLayout({
     <div className="min-h-screen bg-[#F7FAFC]">
       {/* Top Bar */}
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="w-full px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           {/* Logo */}
           <Link href="/profile" className="flex items-center shrink-0">
             <Image
@@ -79,7 +61,7 @@ export default function AuthenticatedLayout({
 
       {/* Main Navigation */}
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
           <nav className="flex items-center gap-1">
             {navItems.map((item) => (
               <Link
@@ -100,7 +82,7 @@ export default function AuthenticatedLayout({
       </div>
 
       {/* Page Content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="w-full px-4 sm:px-6 lg:px-8 py-8">
         {children}
       </main>
     </div>
