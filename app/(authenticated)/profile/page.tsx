@@ -450,7 +450,9 @@ export default function ProfilePage() {
                   : 'N/A'}
               </p>
               {result.houseProjections.maxAffordable && (
-                <p className="text-white/60 text-xs mt-1">Max sustainable</p>
+                <p className="text-white/60 text-xs mt-1">
+                  In {pluralize(result.houseProjections.maxAffordable.year, 'year')}{result.houseProjections.maxAffordable.age > 0 ? ` (age ${result.houseProjections.maxAffordable.age})` : ''}
+                </p>
               )}
             </div>
 
