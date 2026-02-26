@@ -404,9 +404,31 @@ export default function ProfilePage() {
         
         {/* TOP SECTION - Key Metrics */}
         <div className="bg-gradient-to-br from-[#5BA4E5] to-[#4A93D4] p-8 text-white">
-          <h1 className="text-3xl font-bold mb-2">{result.location}</h1>
-          <p className="text-white/80 mb-6">Your Financial Roadmap</p>
-          
+          <div className="flex items-start justify-between mb-1">
+            <h1 className="text-3xl font-bold">{result.location}</h1>
+            <span
+              className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold shrink-0 ml-3"
+              style={{ backgroundColor: viabilityInfo.bgColor, color: viabilityInfo.color }}
+            >
+              {viabilityInfo.label}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 mb-6">
+            <div className="flex items-center gap-0.5">
+              {[1, 2, 3, 4, 5].map(i => {
+                if (starRating >= i) {
+                  return <svg key={i} className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
+                } else if (starRating >= i - 0.5) {
+                  return <svg key={i} className="w-4 h-4" viewBox="0 0 24 24"><defs><linearGradient id={`pstar-${i}`}><stop offset="50%" stopColor="#FACC15" /><stop offset="50%" stopColor="rgba(255,255,255,0.3)" /></linearGradient></defs><path fill={`url(#pstar-${i})`} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
+                }
+                return <svg key={i} className="w-4 h-4 text-white/30" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
+              })}
+            </div>
+            <span className="text-white/70 text-sm font-semibold">{(result.numericScore ?? 0).toFixed(1)}/10</span>
+            <span className="text-white/40 mx-1">|</span>
+            <span className="text-white/80 text-sm">Your Financial Roadmap</span>
+          </div>
+
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             {/* Time to Home Ownership */}
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
@@ -419,23 +441,17 @@ export default function ProfilePage() {
               )}
             </div>
 
-            {/* Viability Classification + Score + Star Rating */}
+            {/* Projected Home Value (max affordable) */}
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
-              <p className="text-white/70 text-sm mb-1">Status</p>
-              <p className="text-lg font-bold">{viabilityInfo.label}</p>
-              <div className="flex items-center gap-2 mt-1">
-                <div className="flex items-center gap-0.5">
-                  {[1, 2, 3, 4, 5].map(i => {
-                    if (starRating >= i) {
-                      return <svg key={i} className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
-                    } else if (starRating >= i - 0.5) {
-                      return <svg key={i} className="w-4 h-4" viewBox="0 0 24 24"><defs><linearGradient id={`pstar-${i}`}><stop offset="50%" stopColor="#FACC15" /><stop offset="50%" stopColor="rgba(255,255,255,0.3)" /></linearGradient></defs><path fill={`url(#pstar-${i})`} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
-                    }
-                    return <svg key={i} className="w-4 h-4 text-white/30" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
-                  })}
-                </div>
-                <span className="text-white/70 text-sm font-semibold">{(result.numericScore ?? 0).toFixed(1)}/10</span>
-              </div>
+              <p className="text-white/70 text-sm mb-1">Projected Home Value</p>
+              <p className="text-2xl font-bold">
+                {result.houseProjections.maxAffordable
+                  ? formatCurrency(result.houseProjections.maxAffordable.maxSustainableHousePrice)
+                  : 'N/A'}
+              </p>
+              {result.houseProjections.maxAffordable && (
+                <p className="text-white/60 text-xs mt-1">Max sustainable</p>
+              )}
             </div>
 
             {/* Required Home Value (kids-based sqft) */}
