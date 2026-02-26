@@ -260,6 +260,7 @@ export default function ProfilePage() {
   };
 
   const viabilityInfo = getViabilityLabel(result);
+  const starRating = Math.round(((result.numericScore ?? 0) / 10) * 5 * 2) / 2; // 0-5 half-star
 
   return (
     <div className="space-y-6">
@@ -416,11 +417,23 @@ export default function ProfilePage() {
               )}
             </div>
 
-            {/* Viability Classification + Score */}
+            {/* Viability Classification + Score + Star Rating */}
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
               <p className="text-white/70 text-sm mb-1">Status</p>
               <p className="text-lg font-bold">{viabilityInfo.label}</p>
-              <p className="text-white/80 text-sm font-semibold">{(result.numericScore ?? 0).toFixed(1)}/10</p>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-0.5">
+                  {[1, 2, 3, 4, 5].map(i => {
+                    if (starRating >= i) {
+                      return <svg key={i} className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
+                    } else if (starRating >= i - 0.5) {
+                      return <svg key={i} className="w-4 h-4" viewBox="0 0 24 24"><defs><linearGradient id={`pstar-${i}`}><stop offset="50%" stopColor="#FACC15" /><stop offset="50%" stopColor="rgba(255,255,255,0.3)" /></linearGradient></defs><path fill={`url(#pstar-${i})`} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
+                    }
+                    return <svg key={i} className="w-4 h-4 text-white/30" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
+                  })}
+                </div>
+                <span className="text-white/70 text-sm font-semibold">{(result.numericScore ?? 0).toFixed(1)}/10</span>
+              </div>
             </div>
 
             {/* Required Home Value (kids-based sqft) */}
@@ -447,7 +460,7 @@ export default function ProfilePage() {
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
               <p className="text-white/70 text-sm mb-1">Minimum Allocation</p>
               <p className="text-2xl font-bold">{result.minimumAllocationRequired}%</p>
-              <p className="text-white/60 text-xs mt-1">of disposable income</p>
+              <p className="text-white/60 text-xs mt-1">of discretionary income</p>
             </div>
           </div>
         </div>
@@ -637,6 +650,30 @@ export default function ProfilePage() {
           </div>
         </div>
 
+        {/* MAX AFFORDABLE HOME - Standalone section */}
+        {result.houseProjections.maxAffordable && (
+          <div className="px-8 py-6 bg-white border-t border-[#E5E7EB]">
+            <div className="mb-4">
+              <h2 className="text-xl font-bold text-[#2C3E50] mb-1">Your Max Affordable Home</h2>
+              <p className="text-[#6B7280] text-sm">The most expensive home you can sustainably afford based on your income ceiling</p>
+            </div>
+            <div className="relative">
+              <div className="absolute -top-3 left-4 z-10">
+                <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm">
+                  INCOME CEILING
+                </span>
+              </div>
+              <HouseProjectionCard
+                title="Max Affordable (Sustainability Cap)"
+                projection={result.houseProjections.maxAffordable}
+                location={result.location}
+                showHomes={showMaxHomes}
+                onToggle={() => setShowMaxHomes(!showMaxHomes)}
+              />
+            </div>
+          </div>
+        )}
+
         {/* FAMILY PLANNING SECTION - Vertical Timeline (only when user plans kids) */}
         {result.kidViability && result.kidViability.firstKid.reason !== 'User does not plan to have kids' && (() => {
           const currentAge = result.yearByYear[0]?.age ?? 0;
@@ -705,7 +742,7 @@ export default function ProfilePage() {
                         <ul className="space-y-1 text-xs text-gray-500">
                           <li className="flex items-center gap-2">
                             <span className="w-1 h-1 bg-gray-400 rounded-full flex-shrink-0" />
-                            Positive disposable income for 3 years after birth
+                            Positive discretionary income for 3 years after birth
                           </li>
                           <li className="flex items-center gap-2">
                             <span className="w-1 h-1 bg-gray-400 rounded-full flex-shrink-0" />
@@ -914,23 +951,6 @@ export default function ProfilePage() {
               />
             )}
 
-            {/* Max Affordable (Sustainability Ceiling) */}
-            {result.houseProjections.maxAffordable && (
-              <div className="relative">
-                <div className="absolute -top-3 left-4 z-10">
-                  <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm">
-                    INCOME CEILING
-                  </span>
-                </div>
-                <HouseProjectionCard
-                  title="Max Affordable (Sustainability Cap)"
-                  projection={result.houseProjections.maxAffordable}
-                  location={result.location}
-                  showHomes={showMaxHomes}
-                  onToggle={() => setShowMaxHomes(!showMaxHomes)}
-                />
-              </div>
-            )}
           </div>
 
           {/* Show Your Work - Year-by-Year Breakdown */}

@@ -462,7 +462,7 @@ function LocationCard({
       {/* ===== MIDDLE SECTION: 2x2 Stats Grid ===== */}
       <div className="px-6 pb-4">
         <div className="grid grid-cols-2 gap-3">
-          {/* Estimated Salary — $ icon (Figma: green/teal) */}
+          {/* Estimated Salary — $ icon (green box) */}
           <div className="bg-[#F0FDF4] rounded-xl p-3.5">
             <div className="flex items-center gap-2 mb-1.5">
               <div className="w-7 h-7 rounded-lg bg-[#DCFCE7] flex items-center justify-center shrink-0">
@@ -470,10 +470,19 @@ function LocationCard({
               </div>
               <span className="text-xs font-medium text-gray-500">Est. Salary</span>
             </div>
-            <p className="text-sm font-bold text-gray-900 pl-9">{formatCurrency(salary)}/yr</p>
+            {result.yearByYear[0]?.partnerIncome > 0 ? (
+              <div className="pl-9">
+                <p className="text-sm font-bold text-gray-900">{formatCurrency(result.yearByYear[0].totalIncome)}/yr</p>
+                <p className="text-[10px] text-gray-400 leading-tight">
+                  {formatCurrency(result.yearByYear[0].userIncome)} + {formatCurrency(result.yearByYear[0].partnerIncome)}
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm font-bold text-gray-900 pl-9">{formatCurrency(salary)}/yr</p>
+            )}
           </div>
 
-          {/* Cost of Living — trend line icon (Figma: green) */}
+          {/* Cost of Living — trend line icon (green) */}
           <div className="bg-[#F0FDF4] rounded-xl p-3.5">
             <div className="flex items-center gap-2 mb-1.5">
               <div className="w-7 h-7 rounded-lg bg-[#DCFCE7] flex items-center justify-center shrink-0">
@@ -483,7 +492,12 @@ function LocationCard({
               </div>
               <span className="text-xs font-medium text-gray-500">Cost of Living</span>
             </div>
-            <p className="text-sm font-bold text-gray-900 pl-9">{formatCurrency(col)}/yr</p>
+            <div className="pl-9">
+              <p className="text-sm font-bold text-gray-900">{formatCurrency(col)}/yr</p>
+              <p className="text-[10px] text-gray-400 leading-tight">
+                incl. {formatCurrency(result.yearByYear[0]?.housingCost || 0)}/yr rent
+              </p>
+            </div>
           </div>
 
           {/* Quality of Life — heart/smile icon (Figma: warm brown/olive) */}

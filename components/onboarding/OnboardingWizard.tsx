@@ -938,7 +938,7 @@ function Step5Allocation({ answers, updateAnswer }: StepProps) {
   return (
     <div>
       <h1 className="text-3xl font-bold text-[#2C3E50] mb-3 text-center">
-        Disposable Income Allocation
+        Discretionary Income Allocation
       </h1>
       <p className="text-[#6B7280] mb-10 text-center">
         How much can you allocate toward debts and savings?
@@ -946,7 +946,7 @@ function Step5Allocation({ answers, updateAnswer }: StepProps) {
       
       <div className="max-w-3xl mx-auto">
         <p className="text-sm text-[#6B7280] mb-6">
-          How much of your annual disposable income are you willing to put towards debts and savings?
+          How much of your annual discretionary income are you willing to put towards debts and savings?
         </p>
 
         {/* Visual Display */}
@@ -956,7 +956,7 @@ function Step5Allocation({ answers, updateAnswer }: StepProps) {
               <div className="text-5xl font-bold text-[#5BA4E5] mb-1">
                 {allocation}%
               </div>
-              <div className="text-sm text-[#6B7280]">of disposable income</div>
+              <div className="text-sm text-[#6B7280]">of discretionary income</div>
             </div>
             
             <div className="flex items-center gap-2">

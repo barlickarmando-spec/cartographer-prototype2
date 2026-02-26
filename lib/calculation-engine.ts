@@ -337,7 +337,7 @@ function calculateAutoApproach(
     }
 
     // Dynamic baseline label (replaces hardcoded "2,200 sqft")
-    const baselineSqFtLabel = `${requiredSqFt.toLocaleString()} sqft home`;
+    const baselineSqFtLabel = `${requiredSqFt.toLocaleString()} sqft`;
 
     // Generate recommendations and warnings (now sqft-aware)
     const recommendations = generateRecommendations(
@@ -1746,7 +1746,7 @@ function generateWarnings(
   // Check for negative DI
   const negativeDIYears = simulation.filter(s => s.disposableIncome < 0).length;
   if (negativeDIYears > 0) {
-    warnings.push(`Negative disposable income for ${negativeDIYears} year(s)`);
+    warnings.push(`Negative discretionary income for ${negativeDIYears} year(s)`);
   }
 
   // Check for growing debt
