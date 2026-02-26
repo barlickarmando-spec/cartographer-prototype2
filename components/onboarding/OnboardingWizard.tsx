@@ -1358,4 +1358,4 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
   );
 }
 
-export { Step4FinancialPortfolio, Step5Allocation, Step6Location };
+export { Step2HouseholdType, Step3AgeOccupation, Step4FinancialPortfolio, Step5Allocation, Step6Location };
