@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { CalculationResult, HouseProjection, calculateAutoApproach } from '@/lib/calculation-engine';
+import { CalculationResult, HouseProjection, calculateAutoApproach, calculateProjectionForYear } from '@/lib/calculation-engine';
 import SimpleHomeCarousel from '@/components/SimpleHomeCarousel';
 import { formatCurrency, pluralize } from '@/lib/utils';
 import { normalizeOnboardingAnswers } from '@/lib/onboarding/normalize';
@@ -17,11 +17,14 @@ export default function ProfilePage() {
   const [selectedResult, setSelectedResult] = useState<CalculationResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [showNotes, setShowNotes] = useState(false);
-  const [show3YearHomes, setShow3YearHomes] = useState(false);
-  const [show5YearHomes, setShow5YearHomes] = useState(false);
-  const [show10YearHomes, setShow10YearHomes] = useState(false);
-  const [show15YearHomes, setShow15YearHomes] = useState(false);
   const [showMaxHomes, setShowMaxHomes] = useState(false);
+  const [showFastestHomes, setShowFastestHomes] = useState(false);
+  const [showCustomHomes, setShowCustomHomes] = useState(false);
+  const [customSearchValue, setCustomSearchValue] = useState('');
+  const [customSearchUnit, setCustomSearchUnit] = useState<'years' | 'months'>('years');
+  const [customSearchProjection, setCustomSearchProjection] = useState<HouseProjection | null>(null);
+  const [showNecessarySizeWork, setShowNecessarySizeWork] = useState(false);
+  const [showMaxValueWork, setShowMaxValueWork] = useState(false);
   const [showYearByYear, setShowYearByYear] = useState(false);
   const [locationSearch, setLocationSearch] = useState('');
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
@@ -390,15 +393,19 @@ export default function ProfilePage() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {/* Time to Home Ownership */}
+            {/* Time to Home Ownership - matches max home value timeline */}
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
               <p className="text-white/70 text-sm mb-1">Time to Homeownership</p>
               <p className="text-2xl font-bold">
-                {result.yearsToMortgage > 0 ? pluralize(result.yearsToMortgage, 'year') : 'N/A'}
+                {result.houseProjections.maxAffordable
+                  ? pluralize(result.houseProjections.maxAffordable.year, 'year')
+                  : result.yearsToMortgage > 0 ? pluralize(result.yearsToMortgage, 'year') : 'N/A'}
               </p>
-              {result.ageMortgageAcquired > 0 && (
+              {result.houseProjections.maxAffordable ? (
+                <p className="text-white/60 text-xs mt-1">At age {result.houseProjections.maxAffordable.age}</p>
+              ) : result.ageMortgageAcquired > 0 ? (
                 <p className="text-white/60 text-xs mt-1">At age {result.ageMortgageAcquired}</p>
-              )}
+              ) : null}
             </div>
 
             {/* Projected Home Value (max affordable) */}
@@ -966,181 +973,611 @@ export default function ProfilePage() {
           );
         })()}
 
-        {/* BOTTOM SECTION - House Projections */}
+        {/* BOTTOM SECTION - Three House Projections */}
         <div className="px-8 py-6">
           <div className="mb-6">
-            <h2 className="text-2xl font-bold text-[#2C3E50] mb-2">Your Homeownership Timeline</h2>
-            <p className="text-[#6B7280] text-sm">See what homes you can afford at different stages of your journey</p>
+            <h2 className="text-2xl font-bold text-[#2C3E50] mb-2">Your Homeownership Projections</h2>
+            <p className="text-[#6B7280] text-sm">Three ways to look at your path to owning a home</p>
           </div>
-          
+
           <div className="space-y-4">
-            {/* 3 Year Projection */}
-            {result.houseProjections.threeYears && (
+            {/* === SLIDER 1: MAX HOME VALUE === */}
+            {result.houseProjections.maxAffordable && (
               <HouseProjectionCard
-                title={`${pluralize(3, 'Year')} Projection`}
-                projection={result.houseProjections.threeYears}
+                title="Max Home Value"
+                subtitle="The most expensive home you can sustainably afford"
+                projection={result.houseProjections.maxAffordable}
                 location={result.location}
-                showHomes={show3YearHomes}
-                onToggle={() => setShow3YearHomes(!show3YearHomes)}
+                showHomes={showMaxHomes}
+                onToggle={() => setShowMaxHomes(!showMaxHomes)}
               />
             )}
 
-            {/* 5 Year Projection */}
-            {result.houseProjections.fiveYears && (
-              <HouseProjectionCard
-                title={`${pluralize(5, 'Year')} Projection`}
-                projection={result.houseProjections.fiveYears}
-                location={result.location}
-                showHomes={show5YearHomes}
-                onToggle={() => setShow5YearHomes(!show5YearHomes)}
-              />
-            )}
+            {/* === SLIDER 2: FASTEST TO HOMEOWNERSHIP === */}
+            {(() => {
+              const fastSqFt = result.fastestHomeSqFt;
+              const fastProj = result.fastestHomeProjection;
+              const kidLabel = result.requiredSqFt <= 1200 ? 'no kids planned'
+                : result.requiredSqFt <= 1600 ? 'kids planned'
+                : 'multiple kids planned';
 
-            {/* 10 Year Projection */}
-            {result.houseProjections.tenYears && (
-              <HouseProjectionCard
-                title={`${pluralize(10, 'Year')} Projection`}
-                projection={result.houseProjections.tenYears}
-                location={result.location}
-                showHomes={show10YearHomes}
-                onToggle={() => setShow10YearHomes(!show10YearHomes)}
-              />
-            )}
+              return (
+                <div className="bg-white border border-[#E5E7EB] rounded-xl overflow-hidden">
+                  <div className="px-6 py-5">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h3 className="font-bold text-[#2C3E50] text-lg">Fastest to Homeownership</h3>
+                        <p className="text-[#6B7280] text-sm">
+                          Fastest path to a {fastSqFt.toLocaleString()} sqft home ({kidLabel})
+                        </p>
+                      </div>
+                      {fastProj && (
+                        <span className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full">
+                          {pluralize(fastProj.year, 'year')}
+                        </span>
+                      )}
+                    </div>
 
-            {/* 15 Year Projection */}
-            {result.houseProjections.fifteenYears && (
-              <HouseProjectionCard
-                title={`${pluralize(15, 'Year')} Projection`}
-                projection={result.houseProjections.fifteenYears}
-                location={result.location}
-                showHomes={show15YearHomes}
-                onToggle={() => setShow15YearHomes(!show15YearHomes)}
-              />
-            )}
+                    {fastProj ? (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                        <div className="bg-[#F0F9FF] rounded-lg p-3">
+                          <p className="text-[#6B7280] text-xs mb-1">House Price</p>
+                          <p className="text-[#2C3E50] font-bold">${fastProj.maxSustainableHousePrice.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-[#F0F9FF] rounded-lg p-3">
+                          <p className="text-[#6B7280] text-xs mb-1">Down Payment</p>
+                          <p className="text-[#2C3E50] font-bold">${fastProj.downPaymentRequired.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-[#F0F9FF] rounded-lg p-3">
+                          <p className="text-[#6B7280] text-xs mb-1">Annual Cost</p>
+                          <p className="text-[#2C3E50] font-bold">${fastProj.sustainableAnnualPayment.toLocaleString()}/yr</p>
+                        </div>
+                        <div className="bg-[#F0F9FF] rounded-lg p-3">
+                          <p className="text-[#6B7280] text-xs mb-1">Your Age</p>
+                          <p className="text-[#2C3E50] font-bold">{fastProj.age}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
+                        <p className="text-amber-800 text-sm">
+                          A {fastSqFt.toLocaleString()} sqft home is not reachable within the simulation period.
+                          {result.houseProjections.maxAffordable && (
+                            <span> Your max affordable home is ${result.houseProjections.maxAffordable.maxSustainableHousePrice.toLocaleString()}.</span>
+                          )}
+                        </p>
+                      </div>
+                    )}
 
+                    {fastProj && (
+                      <button
+                        onClick={() => setShowFastestHomes(!showFastestHomes)}
+                        className="mt-3 text-sm text-[#5BA4E5] hover:text-[#3B82F6] font-medium flex items-center gap-1"
+                      >
+                        {showFastestHomes ? 'Hide' : 'Browse'} homes
+                        <svg className={`w-4 h-4 transition-transform ${showFastestHomes ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* === SLIDER 3: CUSTOM SEARCH === */}
+            <div className="bg-white border border-[#E5E7EB] rounded-xl overflow-hidden">
+              <div className="px-6 py-5">
+                <div className="mb-3">
+                  <h3 className="font-bold text-[#2C3E50] text-lg">Search by Time</h3>
+                  <p className="text-[#6B7280] text-sm">
+                    How big of a house can you get when saving for a certain amount of time?
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3 mt-4">
+                  <div className="flex items-center gap-2 flex-1">
+                    <input
+                      type="number"
+                      min="1"
+                      max={customSearchUnit === 'years' ? 30 : 360}
+                      value={customSearchValue}
+                      onChange={(e) => {
+                        setCustomSearchValue(e.target.value);
+                        setCustomSearchProjection(null);
+                      }}
+                      placeholder={customSearchUnit === 'years' ? 'e.g. 7' : 'e.g. 84'}
+                      className="w-24 px-3 py-2 border border-[#D1D5DB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#5BA4E5] focus:border-transparent"
+                    />
+                    <div className="flex bg-[#F3F4F6] rounded-lg p-0.5">
+                      <button
+                        onClick={() => { setCustomSearchUnit('years'); setCustomSearchProjection(null); }}
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                          customSearchUnit === 'years'
+                            ? 'bg-white text-[#2C3E50] shadow-sm'
+                            : 'text-[#6B7280] hover:text-[#2C3E50]'
+                        }`}
+                      >
+                        Years
+                      </button>
+                      <button
+                        onClick={() => { setCustomSearchUnit('months'); setCustomSearchProjection(null); }}
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                          customSearchUnit === 'months'
+                            ? 'bg-white text-[#2C3E50] shadow-sm'
+                            : 'text-[#6B7280] hover:text-[#2C3E50]'
+                        }`}
+                      >
+                        Months
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const val = parseFloat(customSearchValue);
+                        if (!val || val <= 0 || !onboardingProfile) return;
+                        const yearTarget = customSearchUnit === 'months' ? val / 12 : val;
+                        const proj = calculateProjectionForYear(
+                          yearTarget,
+                          onboardingProfile,
+                          result.locationData,
+                          result.yearByYear
+                        );
+                        setCustomSearchProjection(proj);
+                      }}
+                      className="px-4 py-2 bg-[#5BA4E5] text-white rounded-lg text-sm font-medium hover:bg-[#3B82F6] transition-colors"
+                    >
+                      Search
+                    </button>
+                  </div>
+                </div>
+
+                {customSearchProjection && (() => {
+                  const proj = customSearchProjection;
+                  const pricePerSqft = result.requiredHousePrice > 0 && result.requiredSqFt > 0
+                    ? result.requiredHousePrice / result.requiredSqFt
+                    : 0;
+                  const affordableSqFt = pricePerSqft > 0
+                    ? Math.round(proj.maxSustainableHousePrice / pricePerSqft)
+                    : 0;
+
+                  return (
+                    <div className="mt-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-[#F0F9FF] rounded-lg p-3">
+                          <p className="text-[#6B7280] text-xs mb-1">Max Home Value</p>
+                          <p className="text-[#2C3E50] font-bold">${proj.maxSustainableHousePrice.toLocaleString()}</p>
+                        </div>
+                        {affordableSqFt > 0 && (
+                          <div className="bg-[#F0F9FF] rounded-lg p-3">
+                            <p className="text-[#6B7280] text-xs mb-1">Approx. Size</p>
+                            <p className="text-[#2C3E50] font-bold">{affordableSqFt.toLocaleString()} sqft</p>
+                          </div>
+                        )}
+                        <div className="bg-[#F0F9FF] rounded-lg p-3">
+                          <p className="text-[#6B7280] text-xs mb-1">Down Payment</p>
+                          <p className="text-[#2C3E50] font-bold">${proj.downPaymentRequired.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-[#F0F9FF] rounded-lg p-3">
+                          <p className="text-[#6B7280] text-xs mb-1">Savings at {customSearchUnit === 'months' ? `${customSearchValue} mo` : `yr ${customSearchValue}`}</p>
+                          <p className="text-[#2C3E50] font-bold">${proj.totalSavings.toLocaleString()}</p>
+                        </div>
+                      </div>
+                      {proj.sustainabilityLimited && (
+                        <p className="text-amber-700 text-xs mt-2">
+                          Limited by your income, not savings. Even with more time saving, the max sustainable house stays around ${proj.maxSustainableHousePrice.toLocaleString()}.
+                        </p>
+                      )}
+                      <button
+                        onClick={() => setShowCustomHomes(!showCustomHomes)}
+                        className="mt-3 text-sm text-[#5BA4E5] hover:text-[#3B82F6] font-medium flex items-center gap-1"
+                      >
+                        {showCustomHomes ? 'Hide' : 'Browse'} homes
+                        <svg className={`w-4 h-4 transition-transform ${showCustomHomes ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                    </div>
+                  );
+                })()}
+
+                {customSearchValue && !customSearchProjection && (
+                  <p className="text-[#6B7280] text-xs mt-3">
+                    Press &quot;Search&quot; to see what you can afford after {customSearchValue} {customSearchUnit}.
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
-          {/* Show Your Work - Year-by-Year Breakdown */}
-          {result.yearByYear.length > 0 && (
-            <div className="mt-6">
+          {/* === SHOW YOUR WORK === */}
+          <div className="mt-8 space-y-4">
+            <h2 className="text-xl font-bold text-[#2C3E50] mb-2">Show Your Work</h2>
+
+            {/* Key Assumptions / Bullet Points */}
+            <div className="bg-[#F8FAFB] border border-[#E5E7EB] rounded-xl p-5">
+              <h3 className="font-semibold text-[#2C3E50] mb-3">How We Calculated This</h3>
+              <ul className="space-y-2 text-sm text-[#4B5563]">
+                {result.assumptions.map((a, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="text-[#5BA4E5] mt-0.5">&#8226;</span>
+                    <span>{a}</span>
+                  </li>
+                ))}
+                <li className="flex items-start gap-2">
+                  <span className="text-[#5BA4E5] mt-0.5">&#8226;</span>
+                  <span>Savings grow at 3% annually on existing balance</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-[#5BA4E5] mt-0.5">&#8226;</span>
+                  <span>Payment priority: Credit card debt &rarr; Student loans &rarr; Savings</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-[#5BA4E5] mt-0.5">&#8226;</span>
+                  <span>Mortgage threshold: Down payment ({((result.locationData.housing.downPaymentPercent || 0.107) * 100).toFixed(1)}%) + first year payment</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-[#5BA4E5] mt-0.5">&#8226;</span>
+                  <span>Sustainability cap: Max house where annual cost &le; allocated portion of worst-case disposable income</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-[#5BA4E5] mt-0.5">&#8226;</span>
+                  <span>Allocation: {onboardingProfile?.disposableIncomeAllocation ?? 75}% of disposable income directed toward financial goals</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* Table 1: Projected Necessary Size */}
+            <div className="bg-white border border-[#E5E7EB] rounded-xl overflow-hidden">
               <button
-                onClick={() => setShowYearByYear(!showYearByYear)}
-                className="w-full flex items-center justify-between px-6 py-4 bg-[#F8FAFB] border border-[#E5E7EB] rounded-xl hover:bg-[#EFF6FF] transition-colors"
+                onClick={() => setShowNecessarySizeWork(!showNecessarySizeWork)}
+                className="w-full flex items-center justify-between px-6 py-4 hover:bg-[#F8FAFB] transition-colors"
               >
                 <div className="flex items-center gap-3">
                   <svg className="w-5 h-5 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                   </svg>
-                  <span className="font-semibold text-[#2C3E50]">Show Your Work - Year-by-Year Breakdown</span>
+                  <span className="font-semibold text-[#2C3E50]">Projected Necessary Home Size</span>
                 </div>
                 <svg
-                  className={`w-5 h-5 text-[#6B7280] transition-transform ${showYearByYear ? 'rotate-180' : ''}`}
+                  className={`w-5 h-5 text-[#6B7280] transition-transform ${showNecessarySizeWork ? 'rotate-180' : ''}`}
                   fill="none" stroke="currentColor" viewBox="0 0 24 24"
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
 
-              {showYearByYear && (
-                <div className="mt-3 bg-white border border-[#E5E7EB] rounded-xl overflow-hidden">
-                  <div className="px-6 py-4 bg-[#F8FAFB] border-b border-[#E5E7EB]">
-                    <p className="text-sm text-[#6B7280]">
-                      This table shows the complete year-by-year simulation. &quot;No-Mtg Savings&quot; is used for house projections (what you&apos;d have if you kept saving without buying).
-                    </p>
-                  </div>
+              {showNecessarySizeWork && (
+                <div className="border-t border-[#E5E7EB]">
                   <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
+                    <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-[#F8FAFB] border-b border-[#E5E7EB]">
-                          <th className="px-3 py-2 text-left font-semibold text-[#2C3E50] sticky left-0 bg-[#F8FAFB] z-10">Year</th>
-                          <th className="px-3 py-2 text-left font-semibold text-[#2C3E50]">Age</th>
-                          <th className="px-3 py-2 text-left font-semibold text-[#2C3E50]">Event</th>
-                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Income</th>
-                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Adj COL</th>
-                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Housing</th>
-                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">DI</th>
-                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">EDI (70%)</th>
-                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Loan Debt</th>
-                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">CC Paid</th>
-                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Savings</th>
-                          <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">No-Mtg Savings</th>
+                          <th className="px-4 py-3 text-left font-semibold text-[#2C3E50]">Metric</th>
+                          <th className="px-4 py-3 text-right font-semibold text-[#2C3E50]">Value</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {result.yearByYear.map((snap, i) => {
-                          const event = snap.mortgageAcquiredThisYear ? 'Mortgage' :
-                            snap.kidBornThisYear > 0 ? `Kid #${snap.kidBornThisYear}` :
-                            snap.relationshipStartedThisYear ? 'Relationship' :
-                            (snap.loanDebtEnd === 0 && (i > 0 && result.yearByYear[i-1].loanDebtEnd > 0)) ? 'Debt-free' :
-                            '';
-                          const isHighlight = snap.year === 3 || snap.year === 5 || snap.year === 10 || snap.year === 15;
-                          return (
-                            <tr
-                              key={snap.year}
-                              className={`border-b border-[#F3F4F6] ${isHighlight ? 'bg-blue-50/50' : i % 2 === 0 ? 'bg-white' : 'bg-[#FAFBFC]'} ${event ? 'font-medium' : ''}`}
-                            >
-                              <td className={`px-3 py-2 sticky left-0 z-10 ${isHighlight ? 'bg-blue-50/50' : i % 2 === 0 ? 'bg-white' : 'bg-[#FAFBFC]'}`}>
-                                {snap.year}
-                              </td>
-                              <td className="px-3 py-2">{snap.age}</td>
-                              <td className="px-3 py-2">
-                                {event && (
-                                  <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                    event === 'Mortgage' ? 'bg-green-100 text-green-700' :
-                                    event.startsWith('Kid') ? 'bg-purple-100 text-purple-700' :
-                                    event === 'Debt-free' ? 'bg-blue-100 text-blue-700' :
-                                    'bg-gray-100 text-gray-700'
-                                  }`}>
-                                    {event}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-3 py-2 text-right">${snap.totalIncome.toLocaleString()}</td>
-                              <td className="px-3 py-2 text-right">${snap.adjustedCOL.toLocaleString()}</td>
-                              <td className="px-3 py-2 text-right">
-                                <span className={snap.hasMortgage ? 'text-green-600' : ''}>
-                                  ${snap.housingCost.toLocaleString()}
-                                </span>
-                              </td>
-                              <td className={`px-3 py-2 text-right ${snap.disposableIncome < 0 ? 'text-red-600' : ''}`}>
-                                ${snap.disposableIncome.toLocaleString()}
-                              </td>
-                              <td className="px-3 py-2 text-right">${Math.round(snap.effectiveDisposableIncome).toLocaleString()}</td>
-                              <td className={`px-3 py-2 text-right ${snap.loanDebtEnd > 0 ? 'text-red-500' : 'text-green-600'}`}>
-                                ${Math.round(snap.loanDebtEnd).toLocaleString()}
-                              </td>
-                              <td className="px-3 py-2 text-right">
-                                {snap.ccDebtPayment > 0 ? `$${snap.ccDebtPayment.toLocaleString()}` : ''}
-                              </td>
-                              <td className="px-3 py-2 text-right font-medium">${Math.round(snap.savingsEnd).toLocaleString()}</td>
-                              <td className="px-3 py-2 text-right text-[#5BA4E5] font-medium">${Math.round(snap.savingsNoMortgage).toLocaleString()}</td>
-                            </tr>
-                          );
-                        })}
+                        <tr className="border-b border-[#F3F4F6]">
+                          <td className="px-4 py-3 text-[#4B5563]">Required Home Size (based on family plan)</td>
+                          <td className="px-4 py-3 text-right font-medium text-[#2C3E50]">{result.requiredSqFt.toLocaleString()} sqft</td>
+                        </tr>
+                        <tr className="border-b border-[#F3F4F6] bg-[#FAFBFC]">
+                          <td className="px-4 py-3 text-[#4B5563]">Location Price per Sqft</td>
+                          <td className="px-4 py-3 text-right font-medium text-[#2C3E50]">
+                            ${result.requiredSqFt > 0 ? Math.round(result.requiredHousePrice / result.requiredSqFt).toLocaleString() : '\u2014'}/sqft
+                          </td>
+                        </tr>
+                        <tr className="border-b border-[#F3F4F6]">
+                          <td className="px-4 py-3 text-[#4B5563]">Required Home Price</td>
+                          <td className="px-4 py-3 text-right font-medium text-[#2C3E50]">${result.requiredHousePrice.toLocaleString()}</td>
+                        </tr>
+                        <tr className="border-b border-[#F3F4F6] bg-[#FAFBFC]">
+                          <td className="px-4 py-3 text-[#4B5563]">Projected Affordable Size</td>
+                          <td className="px-4 py-3 text-right font-medium text-[#2C3E50]">{result.projectedSqFt.toLocaleString()} sqft</td>
+                        </tr>
+                        <tr className="border-b border-[#F3F4F6]">
+                          <td className="px-4 py-3 text-[#4B5563]">Meets Family Need?</td>
+                          <td className={`px-4 py-3 text-right font-bold ${result.sqFtViable ? 'text-green-600' : 'text-red-600'}`}>
+                            {result.sqFtViable ? 'Yes' : 'No'}
+                            {!result.sqFtViable && result.projectedSqFt > 0 && (
+                              <span className="text-xs font-normal text-[#6B7280] ml-2">
+                                ({(result.requiredSqFt - result.projectedSqFt).toLocaleString()} sqft short)
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                        <tr className="bg-[#FAFBFC]">
+                          <td className="px-4 py-3 text-[#4B5563]">Fastest Path Target</td>
+                          <td className="px-4 py-3 text-right font-medium text-[#2C3E50]">{result.fastestHomeSqFt.toLocaleString()} sqft</td>
+                        </tr>
                       </tbody>
                     </table>
-                  </div>
-
-                  {/* Formula explanation */}
-                  <div className="px-6 py-4 bg-[#F8FAFB] border-t border-[#E5E7EB] space-y-2">
-                    <h4 className="font-semibold text-[#2C3E50] text-sm">How it works:</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-[#6B7280]">
-                      <div>
-                        <p><strong>DI</strong> = Income - (Adj COL + Housing)</p>
-                        <p><strong>EDI</strong> = DI x Allocation %</p>
-                        <p><strong>Priority Stack:</strong> CC Debt &rarr; Student Loans &rarr; Savings</p>
-                      </div>
-                      <div>
-                        <p><strong>Savings Growth:</strong> 3% annual on existing balance</p>
-                        <p><strong>Mortgage Threshold:</strong> Down Payment + 1st Year Payment</p>
-                        <p><strong>Sustainability Cap:</strong> Max house where annual cost &le; allocated worst-case DI</p>
-                      </div>
-                    </div>
                   </div>
                 </div>
               )}
             </div>
-          )}
+
+            {/* Table 2: Max Home Value Timeline & Savings */}
+            <div className="bg-white border border-[#E5E7EB] rounded-xl overflow-hidden">
+              <button
+                onClick={() => setShowMaxValueWork(!showMaxValueWork)}
+                className="w-full flex items-center justify-between px-6 py-4 hover:bg-[#F8FAFB] transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <svg className="w-5 h-5 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="font-semibold text-[#2C3E50]">Max Home Value Timeline &amp; Savings</span>
+                </div>
+                <svg
+                  className={`w-5 h-5 text-[#6B7280] transition-transform ${showMaxValueWork ? 'rotate-180' : ''}`}
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showMaxValueWork && (
+                <div className="border-t border-[#E5E7EB]">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-[#F8FAFB] border-b border-[#E5E7EB]">
+                          <th className="px-4 py-3 text-left font-semibold text-[#2C3E50]">Metric</th>
+                          <th className="px-4 py-3 text-right font-semibold text-[#2C3E50]">Value</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {result.houseProjections.maxAffordable && (
+                          <>
+                            <tr className="border-b border-[#F3F4F6]">
+                              <td className="px-4 py-3 text-[#4B5563]">Max Sustainable Home Price</td>
+                              <td className="px-4 py-3 text-right font-bold text-[#2C3E50]">
+                                ${result.houseProjections.maxAffordable.maxSustainableHousePrice.toLocaleString()}
+                              </td>
+                            </tr>
+                            <tr className="border-b border-[#F3F4F6] bg-[#FAFBFC]">
+                              <td className="px-4 py-3 text-[#4B5563]">Year Achieved</td>
+                              <td className="px-4 py-3 text-right font-medium text-[#2C3E50]">
+                                Year {result.houseProjections.maxAffordable.year} (age {result.houseProjections.maxAffordable.age})
+                              </td>
+                            </tr>
+                            <tr className="border-b border-[#F3F4F6]">
+                              <td className="px-4 py-3 text-[#4B5563]">Savings at That Point</td>
+                              <td className="px-4 py-3 text-right font-medium text-[#2C3E50]">
+                                ${result.houseProjections.maxAffordable.totalSavings.toLocaleString()}
+                              </td>
+                            </tr>
+                            <tr className="border-b border-[#F3F4F6] bg-[#FAFBFC]">
+                              <td className="px-4 py-3 text-[#4B5563]">Down Payment Required</td>
+                              <td className="px-4 py-3 text-right font-medium text-[#2C3E50]">
+                                ${result.houseProjections.maxAffordable.downPaymentRequired.toLocaleString()}
+                              </td>
+                            </tr>
+                            <tr className="border-b border-[#F3F4F6]">
+                              <td className="px-4 py-3 text-[#4B5563]">Annual Mortgage + Tax + Insurance</td>
+                              <td className="px-4 py-3 text-right font-medium text-[#2C3E50]">
+                                ${result.houseProjections.maxAffordable.sustainableAnnualPayment.toLocaleString()}/yr
+                              </td>
+                            </tr>
+                            <tr className="border-b border-[#F3F4F6] bg-[#FAFBFC]">
+                              <td className="px-4 py-3 text-[#4B5563]">Post-Mortgage Disposable Income</td>
+                              <td className={`px-4 py-3 text-right font-medium ${
+                                result.houseProjections.maxAffordable.postMortgageDisposableIncome >= 0
+                                  ? 'text-green-600'
+                                  : 'text-red-600'
+                              }`}>
+                                ${result.houseProjections.maxAffordable.postMortgageDisposableIncome.toLocaleString()}/yr
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="px-4 py-3 text-[#4B5563]">Limited By</td>
+                              <td className="px-4 py-3 text-right font-medium text-[#2C3E50]">
+                                {result.houseProjections.maxAffordable.sustainabilityLimited
+                                  ? 'Income (annual cost cap)'
+                                  : 'Savings (need more time)'}
+                              </td>
+                            </tr>
+                          </>
+                        )}
+                        {!result.houseProjections.maxAffordable && (
+                          <tr>
+                            <td colSpan={2} className="px-4 py-6 text-center text-[#6B7280]">
+                              No affordable home projection available for this location.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Savings milestones at key years */}
+                  {result.yearByYear.length > 0 && (
+                    <div className="px-6 py-4 bg-[#F8FAFB] border-t border-[#E5E7EB]">
+                      <h4 className="font-semibold text-[#2C3E50] text-sm mb-3">Savings Milestones</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {[3, 5, 10, 15].map(yr => {
+                          const snap = result.yearByYear.find(s => s.year === yr);
+                          if (!snap) return null;
+                          return (
+                            <div key={yr} className="bg-white rounded-lg border border-[#E5E7EB] p-3 text-center">
+                              <p className="text-xs text-[#6B7280]">Year {yr} (age {snap.age})</p>
+                              <p className="font-bold text-[#2C3E50] text-sm mt-1">${Math.round(snap.savingsNoMortgage).toLocaleString()}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Non-Viable Fallback: Show largest possible home with buffer */}
+            {!result.isViable && result.houseProjections.maxAffordable && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-5">
+                <h3 className="font-semibold text-red-800 mb-2">Your Situation Is Currently Not Viable</h3>
+                <p className="text-red-700 text-sm mb-4">
+                  Your cost of living exceeds your estimated salary in this location, meaning you would be losing money.
+                  {onboardingProfile?.kidsPlan === 'unsure' && (
+                    <span> This accounts for the possibility of having 1 child.</span>
+                  )}
+                </p>
+                <div className="bg-white rounded-lg border border-red-200 p-4">
+                  <h4 className="font-semibold text-[#2C3E50] text-sm mb-2">Largest Possible Home (with buffer)</h4>
+                  <p className="text-[#6B7280] text-xs mb-3">
+                    If conditions improve, the most you could aim for with a safety buffer:
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-[#6B7280]">Max Home Value</p>
+                      <p className="font-bold text-[#2C3E50]">
+                        ${Math.round(result.houseProjections.maxAffordable.maxSustainableHousePrice * 0.85).toLocaleString()}
+                      </p>
+                      <p className="text-[10px] text-[#9CA3AF]">85% of max (15% buffer)</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[#6B7280]">Approx. Size</p>
+                      <p className="font-bold text-[#2C3E50]">
+                        {result.requiredSqFt > 0
+                          ? `${Math.round((result.houseProjections.maxAffordable.maxSustainableHousePrice * 0.85) / (result.requiredHousePrice / result.requiredSqFt)).toLocaleString()} sqft`
+                          : '\u2014'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[#6B7280]">Timeline</p>
+                      <p className="font-bold text-[#2C3E50]">{pluralize(result.houseProjections.maxAffordable.year, 'year')}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[#6B7280]">Required Savings</p>
+                      <p className="font-bold text-[#2C3E50]">${result.houseProjections.maxAffordable.totalSavings.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Year-by-Year Breakdown */}
+            {result.yearByYear.length > 0 && (
+              <div>
+                <button
+                  onClick={() => setShowYearByYear(!showYearByYear)}
+                  className="w-full flex items-center justify-between px-6 py-4 bg-white border border-[#E5E7EB] rounded-xl hover:bg-[#F8FAFB] transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <svg className="w-5 h-5 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    <span className="font-semibold text-[#2C3E50]">Full Year-by-Year Breakdown</span>
+                  </div>
+                  <svg
+                    className={`w-5 h-5 text-[#6B7280] transition-transform ${showYearByYear ? 'rotate-180' : ''}`}
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {showYearByYear && (
+                  <div className="mt-3 bg-white border border-[#E5E7EB] rounded-xl overflow-hidden">
+                    <div className="px-6 py-4 bg-[#F8FAFB] border-b border-[#E5E7EB]">
+                      <p className="text-sm text-[#6B7280]">
+                        Complete year-by-year simulation. &quot;No-Mtg Savings&quot; shows what you&apos;d have if you kept saving without buying.
+                      </p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-[#F8FAFB] border-b border-[#E5E7EB]">
+                            <th className="px-3 py-2 text-left font-semibold text-[#2C3E50] sticky left-0 bg-[#F8FAFB] z-10">Year</th>
+                            <th className="px-3 py-2 text-left font-semibold text-[#2C3E50]">Age</th>
+                            <th className="px-3 py-2 text-left font-semibold text-[#2C3E50]">Event</th>
+                            <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Income</th>
+                            <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Adj COL</th>
+                            <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Housing</th>
+                            <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">DI</th>
+                            <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">EDI</th>
+                            <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Loan Debt</th>
+                            <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">CC Paid</th>
+                            <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Savings</th>
+                            <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">No-Mtg Savings</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {result.yearByYear.map((snap, i) => {
+                            const event = snap.mortgageAcquiredThisYear ? 'Mortgage' :
+                              snap.kidBornThisYear > 0 ? `Kid #${snap.kidBornThisYear}` :
+                              snap.relationshipStartedThisYear ? 'Relationship' :
+                              (snap.loanDebtEnd === 0 && (i > 0 && result.yearByYear[i-1].loanDebtEnd > 0)) ? 'Debt-free' :
+                              '';
+                            const isHighlight = snap.year === 3 || snap.year === 5 || snap.year === 10 || snap.year === 15;
+                            return (
+                              <tr
+                                key={snap.year}
+                                className={`border-b border-[#F3F4F6] ${isHighlight ? 'bg-blue-50/50' : i % 2 === 0 ? 'bg-white' : 'bg-[#FAFBFC]'} ${event ? 'font-medium' : ''}`}
+                              >
+                                <td className={`px-3 py-2 sticky left-0 z-10 ${isHighlight ? 'bg-blue-50/50' : i % 2 === 0 ? 'bg-white' : 'bg-[#FAFBFC]'}`}>
+                                  {snap.year}
+                                </td>
+                                <td className="px-3 py-2">{snap.age}</td>
+                                <td className="px-3 py-2">
+                                  {event && (
+                                    <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                      event === 'Mortgage' ? 'bg-green-100 text-green-700' :
+                                      event.startsWith('Kid') ? 'bg-purple-100 text-purple-700' :
+                                      event === 'Debt-free' ? 'bg-blue-100 text-blue-700' :
+                                      'bg-gray-100 text-gray-700'
+                                    }`}>
+                                      {event}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-right">${snap.totalIncome.toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right">${snap.adjustedCOL.toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right">
+                                  <span className={snap.hasMortgage ? 'text-green-600' : ''}>
+                                    ${snap.housingCost.toLocaleString()}
+                                  </span>
+                                </td>
+                                <td className={`px-3 py-2 text-right ${snap.disposableIncome < 0 ? 'text-red-600' : ''}`}>
+                                  ${snap.disposableIncome.toLocaleString()}
+                                </td>
+                                <td className="px-3 py-2 text-right">${Math.round(snap.effectiveDisposableIncome).toLocaleString()}</td>
+                                <td className={`px-3 py-2 text-right ${snap.loanDebtEnd > 0 ? 'text-red-500' : 'text-green-600'}`}>
+                                  ${Math.round(snap.loanDebtEnd).toLocaleString()}
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  {snap.ccDebtPayment > 0 ? `$${snap.ccDebtPayment.toLocaleString()}` : ''}
+                                </td>
+                                <td className="px-3 py-2 text-right font-medium">${Math.round(snap.savingsEnd).toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right text-[#5BA4E5] font-medium">${Math.round(snap.savingsNoMortgage).toLocaleString()}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Formula explanation */}
+                    <div className="px-6 py-4 bg-[#F8FAFB] border-t border-[#E5E7EB] space-y-2">
+                      <h4 className="font-semibold text-[#2C3E50] text-sm">How it works:</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-[#6B7280]">
+                        <div>
+                          <p><strong>DI</strong> = Income - (Adj COL + Housing)</p>
+                          <p><strong>EDI</strong> = DI x Allocation %</p>
+                          <p><strong>Priority Stack:</strong> CC Debt &rarr; Student Loans &rarr; Savings</p>
+                        </div>
+                        <div>
+                          <p><strong>Savings Growth:</strong> 3% annual on existing balance</p>
+                          <p><strong>Mortgage Threshold:</strong> Down Payment + 1st Year Payment</p>
+                          <p><strong>Sustainability Cap:</strong> Max house where annual cost &le; allocated worst-case DI</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* FAMILY PLANNING SECTION - "What if" for users who don't plan kids */}
@@ -1196,13 +1633,14 @@ export default function ProfilePage() {
 
 interface HouseProjectionCardProps {
   title: string;
+  subtitle?: string;
   projection: HouseProjection;
   location: string;
   showHomes: boolean;
   onToggle: () => void;
 }
 
-function HouseProjectionCard({ title, projection, location, showHomes, onToggle }: HouseProjectionCardProps) {
+function HouseProjectionCard({ title, subtitle, projection, location, showHomes, onToggle }: HouseProjectionCardProps) {
   const pricePerSqft = getPricePerSqft(location);
   const estimatedSqFt = Math.round(projection.maxSustainableHousePrice / pricePerSqft);
   
@@ -1213,6 +1651,7 @@ function HouseProjectionCard({ title, projection, location, showHomes, onToggle 
         <div className="flex items-start justify-between mb-4">
           <div>
             <h3 className="text-lg font-bold text-[#2C3E50] mb-1">{title}</h3>
+            {subtitle && <p className="text-sm text-[#6B7280] mb-0.5">{subtitle}</p>}
             <p className="text-sm text-[#9CA3AF]">Age {projection.age}</p>
           </div>
           <div className="text-right">
