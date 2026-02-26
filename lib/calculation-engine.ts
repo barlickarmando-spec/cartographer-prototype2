@@ -67,6 +67,20 @@ function getRequiredSqFt(plannedKids: number): number {
   return 2600; // 3+
 }
 
+/**
+ * Target sqft for the "fastest to homeownership" projection.
+ * These are the minimum livable targets for the quickest ownership path.
+ *
+ *   0 kids → 1,600 sqft
+ *   1 kid  → 1,800 sqft
+ *   2+ kids→ 2,200 sqft
+ */
+function getFastestHomeownershipSqFt(plannedKids: number): number {
+  if (plannedKids <= 0) return 1600;
+  if (plannedKids === 1) return 1800;
+  return 2200; // 2+
+}
+
 // ===== TYPES =====
 
 export interface YearSnapshot {
@@ -153,6 +167,10 @@ export interface CalculationResult {
   houseTag: string;                // Human-readable house size label
   assumptions: string[];           // Key assumptions used in the calculation
   baselineSqFtLabel: string;       // Dynamic label replacing "2,200 sqft" (e.g. "1,600 sqft for 1-kid family")
+
+  // Fastest to homeownership
+  fastestHomeSqFt: number;           // Target sqft for fastest path (1600/1800/2200)
+  fastestHomeProjection: HouseProjection | null; // Projection for fastest path
 
   // Simulation data
   yearByYear: YearSnapshot[];
@@ -312,7 +330,7 @@ function calculateAutoApproach(
     const projectedSqFt = locationPricePerSqft > 0 ? projectedMaxPrice / locationPricePerSqft : 0;
 
     // Unified viability + house size classification (benchmarked against kids-based required home)
-    const { viability, houseClassification, sqFtViable, houseTag } = classifyViabilityAndHouseSize(
+    let { viability, houseClassification, sqFtViable, houseTag } = classifyViabilityAndHouseSize(
       yearsToMortgage, simulation.snapshots, profile, minAllocation,
       houseProjections, locationPricePerSqft, requiredHousePrice, largeHousePrice, requiredSqFt
     );
@@ -338,6 +356,33 @@ function calculateAutoApproach(
 
     // Dynamic baseline label (replaces hardcoded "2,200 sqft")
     const baselineSqFtLabel = `${requiredSqFt.toLocaleString()} sqft`;
+
+    // === FASTEST TO HOMEOWNERSHIP ===
+    const fastestHomeSqFt = getFastestHomeownershipSqFt(plannedKids);
+    const fastestHomeProjection = calculateFastestToTarget(
+      fastestHomeSqFt, locationPricePerSqft, profile, locationData, simulation.snapshots
+    );
+
+    // === STRICT NON-VIABLE CHECK: "unsure" about kids → account for 1 kid ===
+    // If user is "unsure" about kids and not already flagged as no-viable-path,
+    // check if adding 1 kid would put them in the red (COL > income).
+    if (viability !== 'no-viable-path' && profile.kidsPlan === 'unsure' && (profile.numKids || 0) === 0) {
+      // Determine household type with 1 kid
+      const relStatus = profile.relationshipStatus === 'linked' ? 'linked' : 'single';
+      const withKidHousehold = determineHouseholdType(relStatus as any, profile.numEarners, 1);
+      const colKeyWithKid = getAdjustedCOLKey(withKidHousehold);
+      const adjustedCOLWithKid = locationData.adjustedCOL[colKeyWithKid] || 0;
+
+      // Check if COL with 1 kid + housing exceeds income
+      const year1Income = simulation.snapshots[0]?.totalIncome ?? 0;
+      const year1Housing = simulation.snapshots[0]?.housingCost ?? 0;
+      const totalCOLWithKid = adjustedCOLWithKid + year1Housing;
+
+      if (totalCOLWithKid > year1Income) {
+        // Adding 1 kid would put them in the red
+        viability = 'no-viable-path' as ViabilityClass;
+      }
+    }
 
     // Generate recommendations and warnings (now sqft-aware)
     const recommendations = generateRecommendations(
@@ -371,6 +416,8 @@ function calculateAutoApproach(
       houseTag,
       assumptions,
       baselineSqFtLabel,
+      fastestHomeSqFt,
+      fastestHomeProjection,
       yearByYear: simulation.snapshots,
       simulationStoppedEarly: simulation.stoppedEarly,
       stoppedReason: simulation.stopReason,
@@ -869,7 +916,7 @@ function downgradeTier(tier: ViabilityClass): ViabilityClass {
     case 'viable': return 'viable-extreme-care';
     case 'viable-higher-allocation': return 'viable-extreme-care';
     case 'viable-extreme-care': return 'viable-when-renting';
-    case 'viable-when-renting': return 'no-viable-path';
+    case 'viable-when-renting': return 'viable-when-renting'; // Never downgrade below renting — no-viable-path is reserved for truly "in the red"
     case 'no-viable-path': return 'no-viable-path';
   }
 }
@@ -966,6 +1013,13 @@ function classifyViabilityAndHouseSize(
     houseClassification = 'somewhat-viable-small-house';
   }
 
+  // --- "In the red" check: strictly COL > income ---
+  // Count years where disposable income is negative (losing money)
+  const negDIYears = simulation.filter(s => s.disposableIncome < 0).length;
+  const firstYearNegative = simulation.length > 0 && simulation[0].disposableIncome < 0;
+  // Truly "in the red" = first year is negative OR majority of years are negative
+  const isInTheRed = firstYearNegative || (negDIYears > simulation.length * 0.5);
+
   // --- Structural failure ---
   if (!lastYear) {
     return { viability: 'no-viable-path', houseClassification: 'somewhat-viable-small-house', sqFtViable: false, houseTag: 'Unknown' };
@@ -973,10 +1027,11 @@ function classifyViabilityAndHouseSize(
 
   // --- Never achieves mortgage ---
   if (yearsToMortgage < 0) {
-    if (lastYear.disposableIncome > 0 && !hasNegativeDI) {
-      return { viability: 'viable-when-renting', houseClassification, sqFtViable, houseTag };
+    // Only "no-viable-path" if truly in the red (losing money)
+    if (isInTheRed) {
+      return { viability: 'no-viable-path', houseClassification, sqFtViable, houseTag };
     }
-    return { viability: 'no-viable-path', houseClassification, sqFtViable, houseTag };
+    return { viability: 'viable-when-renting', houseClassification, sqFtViable, houseTag };
   }
 
   // --- Allocation below minimum ---
@@ -1027,10 +1082,11 @@ function classifyViabilityAndHouseSize(
   }
 
   // Very small (< 1,000 sqft): essentially renting territory
-  if (lastYear.disposableIncome > 0) {
-    return { viability: 'viable-when-renting', houseClassification, sqFtViable, houseTag };
+  // Only no-viable-path if truly in the red
+  if (isInTheRed) {
+    return { viability: 'no-viable-path', houseClassification, sqFtViable, houseTag };
   }
-  return { viability: 'no-viable-path', houseClassification, sqFtViable, houseTag };
+  return { viability: 'viable-when-renting', houseClassification, sqFtViable, houseTag };
 }
 
 // Keep backward-compatible wrappers for exports
@@ -1806,6 +1862,8 @@ function createErrorResult(
     houseTag: 'Unknown',
     assumptions: [],
     baselineSqFtLabel: 'home',
+    fastestHomeSqFt: 0,
+    fastestHomeProjection: null,
     yearByYear: [],
     simulationStoppedEarly: true,
     stoppedReason: errorMessage,
@@ -1826,6 +1884,151 @@ function createErrorResult(
   };
 }
 
+// ===== PROJECTION HELPERS (exported for UI) =====
+
+/**
+ * Calculate a house projection for an arbitrary year from existing simulation data.
+ * Used by the custom search feature on the profile page.
+ */
+function calculateProjectionForYear(
+  yearTarget: number,
+  profile: UserProfile,
+  locationData: LocationData,
+  simulation: YearSnapshot[]
+): HouseProjection | null {
+  // Find the snapshot closest to the target year (round up if between years)
+  const roundedYear = Math.max(1, Math.ceil(yearTarget));
+  const snapshot = simulation.find(s => s.year === roundedYear) || simulation[simulation.length - 1];
+  if (!snapshot || !locationData.housing) return null;
+
+  // If the requested year exceeds simulation length, use the last year
+  if (roundedYear > simulation.length) return null;
+
+  const savings = snapshot.savingsNoMortgage;
+  const downPaymentPercent = locationData.housing.downPaymentPercent || 0.107;
+  const mortgageRate = locationData.housing.mortgageRate || 0.065;
+  const annualCostFactor = calculateAnnualCostFactor(mortgageRate, downPaymentPercent);
+  const allocationPercent = profile.disposableIncomeAllocation / 100;
+
+  // Savings-based max
+  const totalCostFactor = downPaymentPercent + ((1 - downPaymentPercent) * annualCostFactor);
+  const maxPossibleHousePrice = savings / totalCostFactor;
+
+  // Sustainability-based max (worst-case future DI from this year onward)
+  const futureSnapshots = simulation.filter(s => s.year >= roundedYear);
+  let worstCaseIncome = snapshot.totalIncome;
+  let worstCaseAdjustedCOL = snapshot.adjustedCOL;
+  for (const future of futureSnapshots) {
+    const futureAvailable = future.totalIncome - future.adjustedCOL;
+    const currentWorstAvailable = worstCaseIncome - worstCaseAdjustedCOL;
+    if (futureAvailable < currentWorstAvailable) {
+      worstCaseIncome = future.totalIncome;
+      worstCaseAdjustedCOL = future.adjustedCOL;
+    }
+  }
+
+  const worstCaseDI = worstCaseIncome - worstCaseAdjustedCOL;
+  const maxAnnualPayment = Math.max(0, worstCaseDI * allocationPercent);
+
+  // Binary search for max sustainable price
+  let sustainablePrice = 0;
+  let low = 0;
+  let high = maxPossibleHousePrice * 2;
+  for (let i = 0; i < 20; i++) {
+    const mid = (low + high) / 2;
+    const annualPayment = calculateTotalAnnualCosts(mid, downPaymentPercent, annualCostFactor);
+    if (annualPayment <= maxAnnualPayment) {
+      sustainablePrice = mid;
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+
+  const sustainableDP = sustainablePrice * downPaymentPercent;
+  const sustainableAP = calculateTotalAnnualCosts(sustainablePrice, downPaymentPercent, annualCostFactor);
+  const postMortgageDI = worstCaseDI - sustainableAP;
+  const canAfford = savings >= (sustainableDP + sustainableAP);
+
+  return {
+    year: roundedYear,
+    age: snapshot.age,
+    totalSavings: Math.round(savings),
+    maxPossibleHousePrice: Math.round(maxPossibleHousePrice),
+    downPaymentRequired: Math.round(sustainablePrice * downPaymentPercent),
+    firstYearPaymentRequired: Math.round(sustainableAP),
+    maxSustainableHousePrice: Math.round(sustainablePrice),
+    sustainableDownPayment: Math.round(sustainableDP),
+    sustainableAnnualPayment: Math.round(sustainableAP),
+    postMortgageDisposableIncome: Math.round(postMortgageDI),
+    sustainabilityLimited: sustainablePrice < maxPossibleHousePrice,
+    canAfford,
+  };
+}
+
+/**
+ * Find the fastest path to affording a house of a given sqft target.
+ * Returns the projection for the earliest year where the user can afford it,
+ * or null if it's never reachable within the simulation.
+ */
+function calculateFastestToTarget(
+  targetSqFt: number,
+  pricePerSqft: number,
+  profile: UserProfile,
+  locationData: LocationData,
+  simulation: YearSnapshot[]
+): HouseProjection | null {
+  if (pricePerSqft <= 0 || targetSqFt <= 0 || simulation.length === 0) return null;
+
+  const targetPrice = targetSqFt * pricePerSqft;
+  const downPaymentPercent = locationData.housing.downPaymentPercent || 0.107;
+  const mortgageRate = locationData.housing.mortgageRate || 0.065;
+  const annualCostFactor = calculateAnnualCostFactor(mortgageRate, downPaymentPercent);
+  const allocationPercent = profile.disposableIncomeAllocation / 100;
+
+  // Check sustainability: can the user's worst-case DI sustain this house?
+  let worstDI = Infinity;
+  for (const snap of simulation) {
+    const di = snap.totalIncome - snap.adjustedCOL;
+    if (di < worstDI) worstDI = di;
+  }
+
+  const maxAnnualPayment = Math.max(0, worstDI * allocationPercent);
+  const annualPaymentForTarget = calculateTotalAnnualCosts(targetPrice, downPaymentPercent, annualCostFactor);
+
+  if (annualPaymentForTarget > maxAnnualPayment) {
+    // Can't sustain this house even with infinite savings
+    return null;
+  }
+
+  // Find the savings threshold
+  const totalCostFactor = downPaymentPercent + ((1 - downPaymentPercent) * annualCostFactor);
+  const savingsNeeded = targetPrice * totalCostFactor;
+
+  // Find the first year where savings meet the threshold
+  for (const snap of simulation) {
+    if (snap.savingsNoMortgage >= savingsNeeded) {
+      return {
+        year: snap.year,
+        age: snap.age,
+        totalSavings: Math.round(snap.savingsNoMortgage),
+        maxPossibleHousePrice: Math.round(snap.savingsNoMortgage / totalCostFactor),
+        downPaymentRequired: Math.round(targetPrice * downPaymentPercent),
+        firstYearPaymentRequired: Math.round(annualPaymentForTarget),
+        maxSustainableHousePrice: Math.round(targetPrice),
+        sustainableDownPayment: Math.round(targetPrice * downPaymentPercent),
+        sustainableAnnualPayment: Math.round(annualPaymentForTarget),
+        postMortgageDisposableIncome: Math.round(worstDI - annualPaymentForTarget),
+        sustainabilityLimited: false,
+        canAfford: true,
+      };
+    }
+  }
+
+  // Can't reach it within simulation period
+  return null;
+}
+
 // ===== EXPORTS =====
 
 export {
@@ -1837,6 +2040,8 @@ export {
   calculateMinimumAllocation,
   calculateHouseProjections,
   calculateKidViability,
+  calculateProjectionForYear,
+  calculateFastestToTarget,
   generateRecommendations,
   generateWarnings,
   validateProfile,
