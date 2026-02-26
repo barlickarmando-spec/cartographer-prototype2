@@ -416,20 +416,23 @@ export default function ProfilePage() {
               )}
             </div>
 
-            {/* Viability Classification + Score */}
+            {/* Viability Classification + Score + House Tag */}
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
               <p className="text-white/70 text-sm mb-1">Status</p>
               <p className="text-lg font-bold">{viabilityInfo.label}</p>
               <p className="text-white/80 text-sm font-semibold">{(result.numericScore ?? 0).toFixed(1)}/10</p>
+              {result.houseTag && result.houseTag !== 'Unknown' && (
+                <p className="text-white/60 text-xs mt-1">{result.houseTag}</p>
+              )}
             </div>
 
-            {/* Typical Home Value (2,200 sqft house) */}
+            {/* Required Home Value (kids-based sqft) */}
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
-              <p className="text-white/70 text-sm mb-1">Typical Home Value</p>
+              <p className="text-white/70 text-sm mb-1">Required Home Value</p>
               <p className="text-2xl font-bold">
-                {formatCurrency(getTypicalHomeValue(result.location) || locationData.housing.medianHomeValue)}
+                {formatCurrency(result.requiredHousePrice || getTypicalHomeValue(result.location) || locationData.housing.medianHomeValue)}
               </p>
-              <p className="text-white/60 text-xs mt-1">2,200 sqft home</p>
+              <p className="text-white/60 text-xs mt-1">{result.baselineSqFtLabel || '2,200 sqft home'}</p>
             </div>
 
             {/* Time to Debt Free */}

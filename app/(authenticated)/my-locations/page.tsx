@@ -435,6 +435,12 @@ function LocationCard({
                   <span className="text-xs font-semibold" style={{ color: viability.color }}>{viability.houseSize}</span>
                 </>
               )}
+              {result.houseTag && result.houseTag !== 'Unknown' && (
+                <>
+                  <span className="text-gray-300">|</span>
+                  <span className="text-xs text-gray-500">{result.houseTag}</span>
+                </>
+              )}
             </div>
           </div>
 
@@ -536,7 +542,7 @@ function LocationCard({
             <span className="text-sm font-bold text-[#5BA4E5]">{debtFree}</span>
           </div>
 
-          {/* Typical Home Value (2,200 sqft) */}
+          {/* Required Home Value (kids-based sqft) */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-[#FEF3C7] flex items-center justify-center shrink-0">
@@ -545,11 +551,11 @@ function LocationCard({
                 </svg>
               </div>
               <div>
-                <span className="text-sm font-medium text-gray-600">Typical Home Value</span>
-                <p className="text-[10px] text-gray-400 leading-tight">2,200 sqft home in this area</p>
+                <span className="text-sm font-medium text-gray-600">Required Home Value</span>
+                <p className="text-[10px] text-gray-400 leading-tight">{result.baselineSqFtLabel || '2,200 sqft home in this area'}</p>
               </div>
             </div>
-            <span className="text-sm font-bold text-[#D97706]">{formatCurrency(typicalHomeValue)}</span>
+            <span className="text-sm font-bold text-[#D97706]">{formatCurrency(result.requiredHousePrice || typicalHomeValue)}</span>
           </div>
 
           {/* Projected Home Value */}
