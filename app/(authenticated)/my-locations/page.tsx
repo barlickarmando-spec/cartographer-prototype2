@@ -471,11 +471,10 @@ function LocationCard({
               <span className="text-xs font-medium text-gray-500">Est. Salary</span>
             </div>
             {result.yearByYear[0]?.partnerIncome > 0 ? (
-              <div className="pl-9">
-                <p className="text-sm font-bold text-gray-900">{formatCurrency(result.yearByYear[0].totalIncome)}/yr</p>
-                <p className="text-[10px] text-gray-400 leading-tight">
-                  {formatCurrency(result.yearByYear[0].userIncome)} + {formatCurrency(result.yearByYear[0].partnerIncome)}
-                </p>
+              <div className="flex items-baseline gap-1.5 pl-9 flex-wrap">
+                <span className="text-[11px] font-semibold text-gray-500">{formatCurrency(result.yearByYear[0].userIncome)}</span>
+                <span className="text-[10px] text-gray-300">|</span>
+                <span className="text-sm font-bold text-gray-900">{formatCurrency(result.yearByYear[0].totalIncome)}/yr</span>
               </div>
             ) : (
               <p className="text-sm font-bold text-gray-900 pl-9">{formatCurrency(salary)}/yr</p>
@@ -492,12 +491,7 @@ function LocationCard({
               </div>
               <span className="text-xs font-medium text-gray-500">Cost of Living</span>
             </div>
-            <div className="pl-9">
-              <p className="text-sm font-bold text-gray-900">{formatCurrency(col)}/yr</p>
-              <p className="text-[10px] text-gray-400 leading-tight">
-                incl. {formatCurrency(result.yearByYear[0]?.housingCost || 0)}/yr rent
-              </p>
-            </div>
+            <p className="text-sm font-bold text-gray-900 pl-9">{formatCurrency(col + (result.yearByYear[0]?.housingCost || 0))}/yr</p>
           </div>
 
           {/* Quality of Life — heart/smile icon (Figma: warm brown/olive) */}

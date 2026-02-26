@@ -27,6 +27,7 @@ export default function ProfilePage() {
   const [locationSearch, setLocationSearch] = useState('');
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [locationSearchLoading, setLocationSearchLoading] = useState(false);
+  const [onboardingProfile, setOnboardingProfile] = useState<ReturnType<typeof normalizeOnboardingAnswers> | null>(null);
   const locationDropdownRef = useRef<HTMLDivElement>(null);
 
   const loadResults = useCallback((stored: string | null, storedAnswers: string | null) => {
@@ -78,6 +79,7 @@ export default function ProfilePage() {
       if (storedAnswers) {
         try {
           const answers = JSON.parse(storedAnswers);
+          setOnboardingProfile(normalizeOnboardingAnswers(answers));
           // Only override default for users who specified a location preference
           // (not "no-idea" users — they should see the best fit)
           if (answers.locationSituation === 'know-exactly' && answers.exactLocation) {
@@ -509,6 +511,93 @@ export default function ProfilePage() {
                     {result.warnings.map((warn, i) => (
                       <li key={i} className="text-sm text-yellow-700">{warn}</li>
                     ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Your Inputs — formula inputs for testing */}
+              {onboardingProfile && (
+                <div className="bg-[#F8FAFB] border border-[#E5E7EB] rounded-lg p-4">
+                  <h3 className="font-semibold text-[#2C3E50] mb-3">Your Inputs</h3>
+                  <ul className="space-y-1.5 text-sm text-[#6B7280]">
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span>Occupation: <strong className="text-[#2C3E50]">{onboardingProfile.userOccupation}</strong></span>
+                    </li>
+                    {(onboardingProfile.userSalary ?? 0) > 0 && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span>Your salary override: <strong className="text-[#2C3E50]">${(onboardingProfile.userSalary ?? 0).toLocaleString()}/yr</strong></span>
+                      </li>
+                    )}
+                    {onboardingProfile.partnerOccupation && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span>Partner occupation: <strong className="text-[#2C3E50]">{onboardingProfile.partnerOccupation}</strong></span>
+                      </li>
+                    )}
+                    {onboardingProfile.usePartnerIncomeDoubling && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span>Partner income: <strong className="text-[#2C3E50]">Doubling rule applied</strong></span>
+                      </li>
+                    )}
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span>Age: <strong className="text-[#2C3E50]">{onboardingProfile.currentAge}</strong></span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span>Down payment: <strong className="text-[#2C3E50]">{((locationData.housing.downPaymentPercent || 0.107) * 100).toFixed(1)}%</strong></span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span>Discretionary income allocation: <strong className="text-[#2C3E50]">{onboardingProfile.disposableIncomeAllocation}%</strong></span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span>Current savings: <strong className="text-[#2C3E50]">${onboardingProfile.currentSavings.toLocaleString()}</strong></span>
+                    </li>
+                    {onboardingProfile.studentLoanDebt > 0 && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span>Student loans: <strong className="text-[#2C3E50]">${onboardingProfile.studentLoanDebt.toLocaleString()} @ {onboardingProfile.studentLoanRate}%</strong></span>
+                      </li>
+                    )}
+                    {onboardingProfile.creditCardDebt > 0 && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span>Credit card debt: <strong className="text-[#2C3E50]">${onboardingProfile.creditCardDebt.toLocaleString()} @ {onboardingProfile.creditCardAPR}%</strong></span>
+                      </li>
+                    )}
+                    {onboardingProfile.carDebt > 0 && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span>Car debt: <strong className="text-[#2C3E50]">${onboardingProfile.carDebt.toLocaleString()} @ {onboardingProfile.carDebtRate}%</strong></span>
+                      </li>
+                    )}
+                    {onboardingProfile.otherDebt > 0 && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span>Other debt: <strong className="text-[#2C3E50]">${onboardingProfile.otherDebt.toLocaleString()} @ {onboardingProfile.otherDebtRate}%</strong></span>
+                      </li>
+                    )}
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span>Planned kids: <strong className="text-[#2C3E50]">{onboardingProfile.numKids}</strong></span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span>Household: <strong className="text-[#2C3E50]">{onboardingProfile.householdType} ({onboardingProfile.numEarners} earner{onboardingProfile.numEarners !== 1 ? 's' : ''})</strong></span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span>Required sqft: <strong className="text-[#2C3E50]">{result.requiredSqFt.toLocaleString()}</strong></span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span>Minimum allocation required: <strong className="text-[#2C3E50]">{result.minimumAllocationRequired}%</strong></span>
+                    </li>
                   </ul>
                 </div>
               )}
