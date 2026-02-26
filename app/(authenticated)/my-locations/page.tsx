@@ -11,7 +11,7 @@ import { getSalary } from '@/lib/data-extraction';
 import { getAdjustedCOLKey } from '@/lib/onboarding/types';
 import type { OnboardingAnswers, UserProfile } from '@/lib/onboarding/types';
 import { searchLocations, getAllLocationOptions } from '@/lib/locations';
-import { estimateHomeSizeSqft } from '@/lib/home-value-lookup';
+import { estimateHomeSizeSqft, getTypicalHomeValue } from '@/lib/home-value-lookup';
 
 // ===== TYPES =====
 
@@ -116,12 +116,12 @@ const TYPE_OPTIONS: FilterItem[] = [
 
 // Viability label derived from house size classification (the only displayed badge)
 function getViabilityLabel(result: CalculationResult): { label: string; viabilityStatus: string; houseSize: string; color: string; bgColor: string; barColor: string } {
-  const classification = result.houseClassification || 'viable-median-house';
+  const classification = result.houseClassification || 'viable-medium-house';
   const labels: Record<string, { label: string; viabilityStatus: string; houseSize: string; color: string; bgColor: string; barColor: string }> = {
     'very-viable-stable-large-house': { label: 'Very Viable and Stable: Large House', viabilityStatus: 'Very Viable and Stable', houseSize: 'Large House', color: '#065F46', bgColor: '#A7F3D0', barColor: '#059669' },
     'viable-large-house': { label: 'Viable: Large House', viabilityStatus: 'Viable', houseSize: 'Large House', color: '#059669', bgColor: '#D1FAE5', barColor: '#10B981' },
-    'very-viable-stable-median-house': { label: 'Very Viable and Stable: Median House', viabilityStatus: 'Very Viable and Stable', houseSize: 'Median House', color: '#059669', bgColor: '#D1FAE5', barColor: '#10B981' },
-    'viable-median-house': { label: 'Viable: Median House', viabilityStatus: 'Viable', houseSize: 'Median House', color: '#2563EB', bgColor: '#DBEAFE', barColor: '#3B82F6' },
+    'very-viable-stable-medium-house': { label: 'Very Viable and Stable: Medium House', viabilityStatus: 'Very Viable and Stable', houseSize: 'Medium House', color: '#059669', bgColor: '#D1FAE5', barColor: '#10B981' },
+    'viable-medium-house': { label: 'Viable: Medium House', viabilityStatus: 'Viable', houseSize: 'Medium House', color: '#2563EB', bgColor: '#DBEAFE', barColor: '#3B82F6' },
     'somewhat-viable-small-house': { label: 'Somewhat Viable: Small House', viabilityStatus: 'Somewhat Viable', houseSize: 'Small House', color: '#0891B2', bgColor: '#CFFAFE', barColor: '#06B6D4' },
   };
 
@@ -141,7 +141,7 @@ function getViabilityLabel(result: CalculationResult): { label: string; viabilit
     return { label: base?.label || 'Viable (Higher Allocation)', viabilityStatus: 'Viable (Higher Allocation)', houseSize: base?.houseSize || '', color: '#D97706', bgColor: '#FEF3C7', barColor: '#F59E0B' };
   }
 
-  return labels[classification] || labels['viable-median-house'];
+  return labels[classification] || labels['viable-medium-house'];
 }
 
 // Convert 0-10 score to 0-5 star rating
@@ -400,6 +400,7 @@ function LocationCard({
     || result.houseProjections.threeYears;
   const projectedHomeValue = maxProj?.canAfford ? maxProj.maxSustainableHousePrice : null;
   const projectedHomeSizeSqft = projectedHomeValue ? estimateHomeSizeSqft(projectedHomeValue, result.location) : null;
+  const typicalHomeValue = getTypicalHomeValue(result.location) || result.locationData.housing.medianHomeValue;
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col shadow-sm">
@@ -533,6 +534,22 @@ function LocationCard({
               <span className="text-sm font-medium text-gray-600">Time to Debt Free</span>
             </div>
             <span className="text-sm font-bold text-[#5BA4E5]">{debtFree}</span>
+          </div>
+
+          {/* Typical Home Value (2,200 sqft) */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-[#FEF3C7] flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-[#D97706]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+                </svg>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-gray-600">Typical Home Value</span>
+                <p className="text-[10px] text-gray-400 leading-tight">2,200 sqft home in this area</p>
+              </div>
+            </div>
+            <span className="text-sm font-bold text-[#D97706]">{formatCurrency(typicalHomeValue)}</span>
           </div>
 
           {/* Projected Home Value */}

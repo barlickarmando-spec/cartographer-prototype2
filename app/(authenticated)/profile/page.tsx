@@ -8,7 +8,7 @@ import { formatCurrency, pluralize } from '@/lib/utils';
 import { normalizeOnboardingAnswers } from '@/lib/onboarding/normalize';
 import { getOnboardingAnswers } from '@/lib/storage';
 import { searchLocations, getAllLocationOptions } from '@/lib/locations';
-import { getPricePerSqft } from '@/lib/home-value-lookup';
+import { getPricePerSqft, getTypicalHomeValue } from '@/lib/home-value-lookup';
 import type { OnboardingAnswers } from '@/lib/onboarding/types';
 
 export default function ProfilePage() {
@@ -234,12 +234,12 @@ export default function ProfilePage() {
   
   // Get viability label
   const getViabilityLabel = (r: CalculationResult) => {
-    const houseClassification = r.houseClassification || 'viable-median-house';
+    const houseClassification = r.houseClassification || 'viable-medium-house';
     const houseLabels: Record<string, { label: string; color: string; bgColor: string }> = {
       'very-viable-stable-large-house': { label: 'Very Viable and Stable: Large House', color: '#065F46', bgColor: '#A7F3D0' },
       'viable-large-house': { label: 'Viable: Large House', color: '#10B981', bgColor: '#D1FAE5' },
-      'very-viable-stable-median-house': { label: 'Very Viable and Stable: Median House', color: '#10B981', bgColor: '#D1FAE5' },
-      'viable-median-house': { label: 'Viable: Median House', color: '#5BA4E5', bgColor: '#EFF6FF' },
+      'very-viable-stable-medium-house': { label: 'Very Viable and Stable: Medium House', color: '#10B981', bgColor: '#D1FAE5' },
+      'viable-medium-house': { label: 'Viable: Medium House', color: '#5BA4E5', bgColor: '#EFF6FF' },
       'somewhat-viable-small-house': { label: 'Somewhat Viable: Small House', color: '#0891B2', bgColor: '#CFFAFE' },
     };
 
@@ -256,7 +256,7 @@ export default function ProfilePage() {
       return { label: houseLabels[houseClassification]?.label || 'Viable (Higher Allocation)', color: '#F59E0B', bgColor: '#FEF3C7' };
     }
 
-    return houseLabels[houseClassification] || houseLabels['viable-median-house'];
+    return houseLabels[houseClassification] || houseLabels['viable-medium-house'];
   };
 
   const viabilityInfo = getViabilityLabel(result);
@@ -423,12 +423,13 @@ export default function ProfilePage() {
               <p className="text-white/80 text-sm font-semibold">{(result.numericScore ?? 0).toFixed(1)}/10</p>
             </div>
 
-            {/* Estimated Home Value */}
+            {/* Typical Home Value (2,200 sqft house) */}
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
-              <p className="text-white/70 text-sm mb-1">Median Home Value</p>
+              <p className="text-white/70 text-sm mb-1">Typical Home Value</p>
               <p className="text-2xl font-bold">
-                {formatCurrency(locationData.housing.medianHomeValue)}
+                {formatCurrency(getTypicalHomeValue(result.location) || locationData.housing.medianHomeValue)}
               </p>
+              <p className="text-white/60 text-xs mt-1">2,200 sqft home</p>
             </div>
 
             {/* Time to Debt Free */}

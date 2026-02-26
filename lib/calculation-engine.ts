@@ -10,6 +10,7 @@
 
 import { UserProfile, HouseholdTypeEnum, determineHouseholdType, getAdjustedCOLKey, getRentType } from './onboarding/types';
 import { getLocationData, getSalary, LocationData } from './data-extraction';
+import { getTypicalHomeValue, getPricePerSqft } from './home-value-lookup';
 
 // ===== CONSTANTS =====
 const SAVINGS_GROWTH_RATE = 0.03; // 3% annual growth on savings
@@ -131,8 +132,8 @@ export type ViabilityClass =
 export type HouseSizeClassification =
   | 'very-viable-stable-large-house'
   | 'viable-large-house'
-  | 'viable-median-house'
-  | 'very-viable-stable-median-house'
+  | 'viable-medium-house'
+  | 'very-viable-stable-medium-house'
   | 'somewhat-viable-small-house';
 
 export interface HouseProjection {
@@ -241,9 +242,9 @@ function calculateAutoApproach(
     // Layer 2 — Numeric Score (0-10 precision)
     const numericScore = calculateNumericScore(viability, yearsToMortgage, simulation.snapshots, minAllocation, kidViability);
 
-    // Layer 3 — House Size Classification (relative to median)
-    const medianHomeValue = locationData.housing?.medianHomeValue || 0;
-    const houseClassification = classifyHouseSize(houseProjections, medianHomeValue, yearsToMortgage, profile.disposableIncomeAllocation, simulation.snapshots);
+    // Layer 3 — House Size Classification (sqft-based: Small 1000-1500, Medium 1501-3000, Large 3000+)
+    const locationPricePerSqft = getPricePerSqft(locationName);
+    const houseClassification = classifyHouseSize(houseProjections, locationPricePerSqft, yearsToMortgage, profile.disposableIncomeAllocation, simulation.snapshots);
 
     // Generate recommendations and warnings
     const recommendations = generateRecommendations(profile, viability, minAllocation, yearsToMortgage, simulation.snapshots);
@@ -376,7 +377,9 @@ function runYearByYearSimulation(
   
   // Pre-calculate mortgage costs using proper mortgage formula (not pre-calculated location data)
   // This ensures TotalCOL = nonHousingCOL + housingCost with proper mortgage math
-  const medianHomePrice = locationData.housing.medianHomeValue || 0;
+  // Use typical home value (2,200 sqft house) from our price-per-sqft data as the target
+  const typicalValue = getTypicalHomeValue(locationData.name);
+  const medianHomePrice = typicalValue > 0 ? typicalValue : (locationData.housing.medianHomeValue || 0);
   const downPaymentPct = locationData.housing.downPaymentPercent || 0.107;
   const mortgageRateVal = locationData.housing.mortgageRate || 0.065;
   const annualCostFac = calculateAnnualCostFactor(mortgageRateVal, downPaymentPct);
@@ -890,26 +893,27 @@ function calculateNumericScore(
 }
 
 /**
- * Classify house size relative to location median (Layer 3)
+ * Classify house size by projected square footage (Layer 3)
  *
- * Rules:
- *   projected < median - 50k  → 'somewhat-viable-small-house'
- *   projected within ±50k     → 'viable-median-house'
- *   projected ≥ median + 50k AND mortgage ≤6yr → 'very-viable-stable-median-house'
- *   projected ≥ median + 100k → 'viable-large-house'
- *   projected ≥ median + 100k AND mortgage ≤5yr AND allocation ≤75% → 'very-viable-stable-large-house'
+ * Sqft ranges:
+ *   < 1000 sqft               → 'somewhat-viable-small-house'
+ *   1,000 – 1,500 sqft        → 'somewhat-viable-small-house'
+ *   1,501 – 3,000 sqft        → 'viable-medium-house'
+ *   1,501 – 3,000 sqft + fast → 'very-viable-stable-medium-house'
+ *   > 3,000 sqft              → 'viable-large-house'
+ *   > 3,000 sqft + fast       → 'very-viable-stable-large-house'
  *
  * Guardrail: Large house blocked if post-mortgage margin < 5% of income
  */
 function classifyHouseSize(
   houseProjections: { threeYears: HouseProjection | null; fiveYears: HouseProjection | null; tenYears: HouseProjection | null; fifteenYears: HouseProjection | null; maxAffordable: HouseProjection | null },
-  medianHomeValue: number,
+  pricePerSqft: number,
   yearsToMortgage: number,
   allocationPercent: number,
   simulation: YearSnapshot[]
 ): HouseSizeClassification {
-  if (medianHomeValue <= 0) {
-    return 'viable-median-house';
+  if (pricePerSqft <= 0) {
+    return 'viable-medium-house';
   }
 
   // Best projected house price
@@ -919,13 +923,11 @@ function classifyHouseSize(
     || houseProjections.fiveYears
     || houseProjections.threeYears;
   const projectedHouse = bestProjection?.maxSustainableHousePrice ?? 0;
-  const delta = projectedHouse - medianHomeValue;
+  const projectedSqft = projectedHouse / pricePerSqft;
 
   // Guardrail: check if post-mortgage margin is too thin for large house label
-  // Find worst-case income year and check if (income - nonHousingCOL - mortgagePayment) < 5% of income
   let largeHouseBlocked = false;
-  if (delta >= 100000 && bestProjection && simulation.length > 0) {
-    // Use worst-case year's income
+  if (projectedSqft > 3000 && bestProjection && simulation.length > 0) {
     let worstIncome = Infinity;
     let worstCOL = 0;
     for (const snap of simulation) {
@@ -943,20 +945,20 @@ function classifyHouseSize(
     }
   }
 
-  // Classification logic (check most specific first)
-  if (!largeHouseBlocked && delta >= 100000 && yearsToMortgage > 0 && yearsToMortgage <= 5 && allocationPercent <= 75) {
+  // Classification logic by sqft (check most specific first)
+  if (!largeHouseBlocked && projectedSqft > 3000 && yearsToMortgage > 0 && yearsToMortgage <= 5 && allocationPercent <= 75) {
     return 'very-viable-stable-large-house';
   }
-  if (!largeHouseBlocked && delta >= 100000) {
+  if (!largeHouseBlocked && projectedSqft > 3000) {
     return 'viable-large-house';
   }
-  if (delta >= 50000 && yearsToMortgage > 0 && yearsToMortgage <= 6) {
-    return 'very-viable-stable-median-house';
+  if (projectedSqft >= 1501 && yearsToMortgage > 0 && yearsToMortgage <= 6) {
+    return 'very-viable-stable-medium-house';
   }
-  if (delta < -50000) {
-    return 'somewhat-viable-small-house';
+  if (projectedSqft >= 1501) {
+    return 'viable-medium-house';
   }
-  return 'viable-median-house';
+  return 'somewhat-viable-small-house';
 }
 
 /**
