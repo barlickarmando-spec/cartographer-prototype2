@@ -309,51 +309,59 @@ function sortByViability(a: CalculationResult, b: CalculationResult): number {
 }
 
 function applySortMode(results: CalculationResult[], mode: SortMode, colKey: string): CalculationResult[] {
+  // Helper: wrap any comparator so non-viable locations always sink to the bottom
+  const viableFirst = (cmp: (a: CalculationResult, b: CalculationResult) => number) =>
+    (a: CalculationResult, b: CalculationResult): number => {
+      const aViable = a.viabilityClassification !== 'no-viable-path' ? 0 : 1;
+      const bViable = b.viabilityClassification !== 'no-viable-path' ? 0 : 1;
+      if (aViable !== bViable) return aViable - bViable;
+      return cmp(a, b);
+    };
+
   switch (mode) {
     case 'most-viable':
     case 'most-recommended':
-      return [...results].sort(sortByViability);
+      return [...results].sort(viableFirst(sortByViability));
     case 'most-affordable':
-      return [...results].sort((a, b) => {
+      return [...results].sort(viableFirst((a, b) => {
         const aCOL = (a.locationData.adjustedCOL as Record<string, number>)[colKey] || 0;
         const bCOL = (b.locationData.adjustedCOL as Record<string, number>)[colKey] || 0;
         return aCOL - bCOL;
-      });
+      }));
     case 'greatest-value':
-      return [...results].sort((a, b) => {
+      return [...results].sort(viableFirst((a, b) => {
         const aQoL = a.yearByYear[0]?.disposableIncome ?? 0;
         const bQoL = b.yearByYear[0]?.disposableIncome ?? 0;
         const aCOL = (a.locationData.adjustedCOL as Record<string, number>)[colKey] || 1;
         const bCOL = (b.locationData.adjustedCOL as Record<string, number>)[colKey] || 1;
         return (bQoL / bCOL) - (aQoL / aCOL);
-      });
+      }));
     case 'quality-of-life':
-      return [...results].sort((a, b) => {
+      return [...results].sort(viableFirst((a, b) => {
         return (b.yearByYear[0]?.disposableIncome ?? 0) - (a.yearByYear[0]?.disposableIncome ?? 0);
-      });
+      }));
     case 'fastest-home-ownership':
-      return [...results].sort((a, b) => {
+      return [...results].sort(viableFirst((a, b) => {
         const aYears = a.yearsToMortgage > 0 ? a.yearsToMortgage : 999;
         const bYears = b.yearsToMortgage > 0 ? b.yearsToMortgage : 999;
         return aYears - bYears;
-      });
+      }));
     case 'largest-home-size': {
       const getMaxSqft = (r: CalculationResult) => {
         if (r.projectedSqFt > 0) return r.projectedSqFt;
         const proj = r.houseProjections.maxAffordable || r.houseProjections.fifteenYears || r.houseProjections.tenYears || r.houseProjections.fiveYears || r.houseProjections.threeYears;
         return proj?.canAfford ? estimateHomeSizeSqft(proj.maxSustainableHousePrice, r.location) : 0;
       };
-      return [...results].sort((a, b) => getMaxSqft(b) - getMaxSqft(a));
+      return [...results].sort(viableFirst((a, b) => getMaxSqft(b) - getMaxSqft(a)));
     }
     case 'fastest-debt-free':
-      return [...results].sort((a, b) => {
+      return [...results].sort(viableFirst((a, b) => {
         const aYears = a.yearsToDebtFree > 0 ? a.yearsToDebtFree : 999;
         const bYears = b.yearsToDebtFree > 0 ? b.yearsToDebtFree : 999;
         return aYears - bYears;
-      });
+      }));
     case 'most-viable-raising-kids':
-      return [...results].sort((a, b) => {
-        // Combine numeric viability score with DI and mortgage speed for kid-raising
+      return [...results].sort(viableFirst((a, b) => {
         const aScore = (a.numericScore ?? 0) * 2
           + (a.yearByYear[0]?.disposableIncome ?? 0) / 10000
           + (a.yearsToMortgage > 0 ? (30 - a.yearsToMortgage) / 30 : 0);
@@ -361,7 +369,7 @@ function applySortMode(results: CalculationResult[], mode: SortMode, colKey: str
           + (b.yearByYear[0]?.disposableIncome ?? 0) / 10000
           + (b.yearsToMortgage > 0 ? (30 - b.yearsToMortgage) / 30 : 0);
         return bScore - aScore;
-      });
+      }));
     default:
       return results;
   }
@@ -930,12 +938,18 @@ export default function MyLocationsPage() {
     visibleResults = visibleResults.filter(r => matchesAnyGeoFilter(r.location, geoFilters));
   }
 
-  // Step 2: Apply sort mode
+  // Step 2: Apply sort mode (non-viable always sink to the bottom)
+  const pushNonViableToBottom = (arr: CalculationResult[]) => {
+    const viable = arr.filter(r => r.viabilityClassification !== 'no-viable-path');
+    const nonViable = arr.filter(r => r.viabilityClassification === 'no-viable-path');
+    return [...viable, ...nonViable];
+  };
+
   let finalResults: CalculationResult[];
   if (sortMode === 'saved') {
-    finalResults = visibleResults.filter(r => savedLocationNames.includes(r.location));
+    finalResults = pushNonViableToBottom(visibleResults.filter(r => savedLocationNames.includes(r.location)));
   } else if (sortMode === 'default') {
-    finalResults = visibleResults;
+    finalResults = pushNonViableToBottom(visibleResults);
   } else {
     finalResults = applySortMode(visibleResults, sortMode, colKey);
   }

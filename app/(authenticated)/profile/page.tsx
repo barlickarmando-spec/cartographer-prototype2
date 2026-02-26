@@ -221,6 +221,20 @@ export default function ProfilePage() {
   };
 
   const viabilityInfo = getViabilityLabel(result);
+
+  // Simplified viability for the top badge (no house size)
+  const viabilityBadge = (() => {
+    if (result.viabilityClassification === 'no-viable-path')
+      return { label: 'Not Viable', color: '#DC2626', bgColor: '#FEE2E2' };
+    if (result.viabilityClassification === 'viable-when-renting')
+      return { label: 'Viable When Renting', color: '#8B5CF6', bgColor: '#EDE9FE' };
+    if (result.viabilityClassification === 'viable-extreme-care')
+      return { label: 'Viable (Extreme Care)', color: '#EF4444', bgColor: '#FEE2E2' };
+    if (result.viabilityClassification === 'viable-higher-allocation')
+      return { label: 'Viable (Higher Allocation)', color: '#F59E0B', bgColor: '#FEF3C7' };
+    return { label: 'Viable', color: '#065F46', bgColor: '#A7F3D0' };
+  })();
+
   const starRating = Math.round(((result.numericScore ?? 0) / 10) * 5 * 2) / 2; // 0-5 half-star
 
   return (
@@ -354,9 +368,9 @@ export default function ProfilePage() {
             <h1 className="text-3xl font-bold">{result.location}</h1>
             <span
               className="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-semibold shrink-0 ml-3"
-              style={{ backgroundColor: viabilityInfo.bgColor, color: viabilityInfo.color }}
+              style={{ backgroundColor: viabilityBadge.bgColor, color: viabilityBadge.color }}
             >
-              {viabilityInfo.label}
+              {viabilityBadge.label}
             </span>
           </div>
           <div className="flex items-center gap-2 mb-6">
