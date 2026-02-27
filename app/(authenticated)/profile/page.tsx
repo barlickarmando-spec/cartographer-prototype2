@@ -112,7 +112,7 @@ export default function ProfilePage() {
   useEffect(() => {
     loadResults(
       localStorage.getItem('calculation-results'),
-      localStorage.getItem('onboarding-answers')
+      localStorage.getItem('onboardingAnswers') || localStorage.getItem('onboarding-answers')
     );
   }, [loadResults]);
 
@@ -1017,6 +1017,19 @@ export default function ProfilePage() {
                 : reqSqFt <= 1800 ? 'kids planned'
                 : 'multiple kids planned';
 
+              if (fastProj) {
+                return (
+                  <HouseProjectionCard
+                    title="Fastest to Homeownership"
+                    subtitle={`Fastest path to a ${fastSqFt.toLocaleString()} sqft home (${kidLabel})`}
+                    projection={fastProj}
+                    location={result.location}
+                    showHomes={showFastestHomes}
+                    onToggle={() => setShowFastestHomes(!showFastestHomes)}
+                  />
+                );
+              }
+
               return (
                 <div className="bg-white border border-[#E5E7EB] rounded-xl overflow-hidden">
                   <div className="px-6 py-5">
@@ -1027,54 +1040,15 @@ export default function ProfilePage() {
                           Fastest path to a {fastSqFt.toLocaleString()} sqft home ({kidLabel})
                         </p>
                       </div>
-                      {fastProj && (
-                        <span className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full">
-                          {pluralize(fastProj.year, 'year')}
-                        </span>
-                      )}
                     </div>
-
-                    {fastProj ? (
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-                        <div className="bg-[#F0F9FF] rounded-lg p-3">
-                          <p className="text-[#6B7280] text-xs mb-1">House Price</p>
-                          <p className="text-[#2C3E50] font-bold">${fastProj.maxSustainableHousePrice.toLocaleString()}</p>
-                        </div>
-                        <div className="bg-[#F0F9FF] rounded-lg p-3">
-                          <p className="text-[#6B7280] text-xs mb-1">Down Payment</p>
-                          <p className="text-[#2C3E50] font-bold">${fastProj.downPaymentRequired.toLocaleString()}</p>
-                        </div>
-                        <div className="bg-[#F0F9FF] rounded-lg p-3">
-                          <p className="text-[#6B7280] text-xs mb-1">Annual Cost</p>
-                          <p className="text-[#2C3E50] font-bold">${fastProj.sustainableAnnualPayment.toLocaleString()}/yr</p>
-                        </div>
-                        <div className="bg-[#F0F9FF] rounded-lg p-3">
-                          <p className="text-[#6B7280] text-xs mb-1">Your Age</p>
-                          <p className="text-[#2C3E50] font-bold">{fastProj.age}</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
-                        <p className="text-amber-800 text-sm">
-                          A {fastSqFt.toLocaleString()} sqft home is not reachable within the simulation period.
-                          {result.houseProjections.maxAffordable && (
-                            <span> Your max affordable home is ${result.houseProjections.maxAffordable.maxSustainableHousePrice.toLocaleString()}.</span>
-                          )}
-                        </p>
-                      </div>
-                    )}
-
-                    {fastProj && (
-                      <button
-                        onClick={() => setShowFastestHomes(!showFastestHomes)}
-                        className="mt-3 text-sm text-[#5BA4E5] hover:text-[#3B82F6] font-medium flex items-center gap-1"
-                      >
-                        {showFastestHomes ? 'Hide' : 'Browse'} homes
-                        <svg className={`w-4 h-4 transition-transform ${showFastestHomes ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-                    )}
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
+                      <p className="text-amber-800 text-sm">
+                        A {fastSqFt.toLocaleString()} sqft home is not reachable within the simulation period.
+                        {result.houseProjections.maxAffordable && (
+                          <span> Your max affordable home is ${result.houseProjections.maxAffordable.maxSustainableHousePrice.toLocaleString()}.</span>
+                        )}
+                      </p>
+                    </div>
                   </div>
                 </div>
               );
@@ -1131,21 +1105,28 @@ export default function ProfilePage() {
                       onClick={() => {
                         const val = parseFloat(customSearchValue);
                         if (!val || val <= 0) return;
-                        if (!onboardingProfile || result.yearByYear.length === 0) {
-                          console.warn('Custom search: missing profile or yearByYear', { hasProfile: !!onboardingProfile, yearByYearLen: result.yearByYear.length });
+                        // Try to use cached profile, fall back to reading from localStorage
+                        let profile = onboardingProfile;
+                        if (!profile) {
+                          const storedAnswers = getOnboardingAnswers<OnboardingAnswers>((d): d is OnboardingAnswers => d != null && typeof d === 'object');
+                          if (storedAnswers) {
+                            profile = normalizeOnboardingAnswers(storedAnswers);
+                            setOnboardingProfile(profile);
+                          }
+                        }
+                        if (!profile || result.yearByYear.length === 0) {
+                          console.warn('Custom search: missing profile or yearByYear', { hasProfile: !!profile, yearByYearLen: result.yearByYear.length });
                           setCustomSearchAttempted(true);
                           setCustomSearchProjection(null);
                           return;
                         }
                         const yearTarget = customSearchUnit === 'months' ? val / 12 : val;
-                        console.log('Custom search:', { yearTarget, hasHousing: !!result.locationData?.housing, simYears: result.yearByYear.length, allocation: onboardingProfile.disposableIncomeAllocation });
                         const proj = calculateProjectionForYear(
                           yearTarget,
-                          onboardingProfile,
+                          profile,
                           result.locationData,
                           result.yearByYear
                         );
-                        console.log('Custom search result:', proj);
                         setCustomSearchAttempted(true);
                         setCustomSearchProjection(proj);
                       }}
