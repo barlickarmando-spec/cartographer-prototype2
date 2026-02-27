@@ -115,20 +115,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Data Sources Trust Bar */}
-      <section className="py-12 border-y border-slate-100">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-center text-sm text-slate-400 mb-6">Built on authoritative data sources</p>
-          <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-slate-300">
-            <span className="text-sm font-semibold tracking-wide uppercase">IRS Tax Data</span>
-            <span className="text-sm font-semibold tracking-wide uppercase">Bureau of Labor Statistics</span>
-            <span className="text-sm font-semibold tracking-wide uppercase">US Census</span>
-            <span className="text-sm font-semibold tracking-wide uppercase">Zillow</span>
-            <span className="text-sm font-semibold tracking-wide uppercase">HUD</span>
-          </div>
-        </div>
-      </section>
-
       {/* Feature Section 1 - Debt Payoff */}
       <section className="py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
@@ -336,25 +322,6 @@ export default function Home() {
                   </div>
                 </div>
               </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Stats Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 border-y border-slate-100">
-        <div className="max-w-5xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-            {[
-              { value: "70", label: "Cities analyzed" },
-              { value: "51", label: "State tax engines" },
-              { value: "22", label: "Occupations tracked" },
-              { value: "30 yr", label: "Projection depth" },
-            ].map((stat) => (
-              <div key={stat.label}>
-                <p className="text-3xl sm:text-4xl font-bold text-slate-900 mb-1">{stat.value}</p>
-                <p className="text-sm text-slate-500">{stat.label}</p>
-              </div>
             ))}
           </div>
         </div>
