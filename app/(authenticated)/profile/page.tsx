@@ -10,6 +10,7 @@ import { getOnboardingAnswers } from '@/lib/storage';
 import { searchLocations, getAllLocationOptions } from '@/lib/locations';
 import { getPricePerSqft, getTypicalHomeValue } from '@/lib/home-value-lookup';
 import type { OnboardingAnswers } from '@/lib/onboarding/types';
+import { getStateFlagPath, getStateNameFromLocation } from '@/lib/state-flags';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -216,9 +217,9 @@ export default function ProfilePage() {
     const houseClassification = r.houseClassification || 'viable-medium-house';
     const houseLabels: Record<string, { label: string; color: string; bgColor: string }> = {
       'very-viable-stable-large-house': { label: 'Very Viable and Stable: Large House', color: '#065F46', bgColor: '#A7F3D0' },
-      'viable-large-house': { label: 'Viable: Large House', color: '#10B981', bgColor: '#D1FAE5' },
-      'very-viable-stable-medium-house': { label: 'Very Viable and Stable: Medium House', color: '#10B981', bgColor: '#D1FAE5' },
-      'viable-medium-house': { label: 'Viable: Medium House', color: '#5BA4E5', bgColor: '#EFF6FF' },
+      'viable-large-house': { label: 'Viable: Large House', color: '#059669', bgColor: '#D1FAE5' },
+      'very-viable-stable-medium-house': { label: 'Very Viable and Stable: Medium House', color: '#059669', bgColor: '#D1FAE5' },
+      'viable-medium-house': { label: 'Viable: Medium House', color: '#2563EB', bgColor: '#DBEAFE' },
       'somewhat-viable-small-house': { label: 'Somewhat Viable: Small House', color: '#0891B2', bgColor: '#CFFAFE' },
     };
 
@@ -226,13 +227,15 @@ export default function ProfilePage() {
       return { label: 'Not Viable', color: '#DC2626', bgColor: '#FEE2E2' };
     }
     if (r.viabilityClassification === 'viable-when-renting') {
-      return { label: 'Viable When Renting', color: '#8B5CF6', bgColor: '#EDE9FE' };
+      return { label: 'Viable When Renting', color: '#7C3AED', bgColor: '#EDE9FE' };
     }
     if (r.viabilityClassification === 'viable-extreme-care') {
-      return { label: houseLabels[houseClassification]?.label || 'Viable (Extreme Care)', color: '#EF4444', bgColor: '#FEE2E2' };
+      const base = houseLabels[houseClassification];
+      return { label: base?.label || 'Viable (Extreme Care)', color: '#D97706', bgColor: '#FEF3C7' };
     }
     if (r.viabilityClassification === 'viable-higher-allocation') {
-      return { label: houseLabels[houseClassification]?.label || 'Viable (Higher Allocation)', color: '#F59E0B', bgColor: '#FEF3C7' };
+      const base = houseLabels[houseClassification];
+      return { label: base?.label || 'Viable (Higher Allocation)', color: '#D97706', bgColor: '#FEF3C7' };
     }
 
     return houseLabels[houseClassification] || houseLabels['viable-medium-house'];
@@ -245,12 +248,14 @@ export default function ProfilePage() {
     if (result.viabilityClassification === 'no-viable-path')
       return { label: 'Not Viable', color: '#DC2626', bgColor: '#FEE2E2' };
     if (result.viabilityClassification === 'viable-when-renting')
-      return { label: 'Viable When Renting', color: '#8B5CF6', bgColor: '#EDE9FE' };
+      return { label: 'Viable When Renting', color: '#7C3AED', bgColor: '#EDE9FE' };
     if (result.viabilityClassification === 'viable-extreme-care')
-      return { label: 'Viable (Extreme Care)', color: '#EF4444', bgColor: '#FEE2E2' };
+      return { label: 'Viable (Extreme Care)', color: '#D97706', bgColor: '#FEF3C7' };
     if (result.viabilityClassification === 'viable-higher-allocation')
-      return { label: 'Viable (Higher Allocation)', color: '#F59E0B', bgColor: '#FEF3C7' };
-    return { label: 'Viable', color: '#065F46', bgColor: '#A7F3D0' };
+      return { label: 'Viable (Higher Allocation)', color: '#D97706', bgColor: '#FEF3C7' };
+    if (result.viabilityClassification === 'very-viable-stable')
+      return { label: 'Very Viable', color: '#065F46', bgColor: '#A7F3D0' };
+    return { label: 'Viable', color: '#059669', bgColor: '#D1FAE5' };
   })();
 
   const starRating = Math.round(((result.numericScore ?? 0) / 10) * 5 * 2) / 2; // 0-5 half-star
@@ -384,12 +389,27 @@ export default function ProfilePage() {
         <div className="bg-gradient-to-br from-[#5BA4E5] to-[#4A93D4] p-8 text-white">
           <div className="flex items-start justify-between mb-1">
             <h1 className="text-3xl font-bold">{result.location}</h1>
-            <span
-              className="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-semibold shrink-0 ml-3"
-              style={{ backgroundColor: viabilityBadge.bgColor, color: viabilityBadge.color }}
-            >
-              {viabilityBadge.label}
-            </span>
+            <div className="flex items-center gap-3 shrink-0 ml-3">
+              <span
+                className="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-semibold"
+                style={{ backgroundColor: viabilityBadge.bgColor, color: viabilityBadge.color }}
+              >
+                {viabilityBadge.label}
+              </span>
+              {(() => {
+                const stateName = getStateNameFromLocation(result.location);
+                if (!stateName) return null;
+                return (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={getStateFlagPath(stateName)}
+                    alt={`${stateName} flag`}
+                    className="w-12 h-8 object-cover rounded border-2 border-white/30"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                );
+              })()}
+            </div>
           </div>
           <div className="flex items-center gap-2 mb-6">
             <div className="flex items-center gap-0.5">

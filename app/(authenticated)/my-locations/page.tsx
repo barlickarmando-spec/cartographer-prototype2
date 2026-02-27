@@ -12,6 +12,7 @@ import { getAdjustedCOLKey } from '@/lib/onboarding/types';
 import type { OnboardingAnswers, UserProfile } from '@/lib/onboarding/types';
 import { searchLocations, getAllLocationOptions } from '@/lib/locations';
 import { estimateHomeSizeSqft } from '@/lib/home-value-lookup';
+import { getStateFlagPath, getStateNameFromLocation } from '@/lib/state-flags';
 
 // ===== TYPES =====
 
@@ -134,7 +135,7 @@ function getViabilityLabel(result: CalculationResult): { label: string; viabilit
   }
   if (result.viabilityClassification === 'viable-extreme-care') {
     const base = labels[classification];
-    return { label: base?.label || 'Viable (Extreme Care)', viabilityStatus: 'Viable (Extreme Care)', houseSize: base?.houseSize || '', color: '#DC2626', bgColor: '#FEE2E2', barColor: '#EF4444' };
+    return { label: base?.label || 'Viable (Extreme Care)', viabilityStatus: 'Viable (Extreme Care)', houseSize: base?.houseSize || '', color: '#D97706', bgColor: '#FEF3C7', barColor: '#F59E0B' };
   }
   if (result.viabilityClassification === 'viable-higher-allocation') {
     const base = labels[classification];
@@ -447,10 +448,25 @@ function LocationCard({
             </div>
           </div>
 
+          {/* State Flag */}
+          {(() => {
+            const stateName = getStateNameFromLocation(result.location);
+            if (!stateName) return null;
+            return (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={getStateFlagPath(stateName)}
+                alt={`${stateName} flag`}
+                className="ml-3 shrink-0 w-10 h-7 object-cover rounded border border-gray-200"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
+            );
+          })()}
+
           {/* Wishlist Heart */}
           <button
             onClick={(e) => { e.preventDefault(); onToggleSave(); }}
-            className="ml-3 shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-110"
+            className="ml-2 shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-110"
             style={{ backgroundColor: isSaved ? '#FEE2E2' : '#F3F4F6' }}
             title={isSaved ? 'Remove from saved' : 'Save location'}
           >

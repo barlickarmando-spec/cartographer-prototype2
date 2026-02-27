@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { OnboardingAnswers } from "@/lib/onboarding/types";
 import { getAllLocations, getOccupationList } from "@/lib/data-extraction";
+import { STATE_CODES, STATE_NAMES, getStateFlagPath } from "@/lib/state-flags";
 
 interface OnboardingWizardProps {
   initialAnswers?: Partial<OnboardingAnswers>;
@@ -1032,23 +1033,6 @@ function Step5Allocation({ answers, updateAnswer }: StepProps) {
 
 // ===== STEP 6: LOCATION (WITH STATE FLAGS) =====
 
-// State code mapping for flags
-const STATE_CODES: Record<string, string> = {
-  'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR',
-  'California': 'CA', 'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE',
-  'Florida': 'FL', 'Georgia': 'GA', 'Hawaii': 'HI', 'Idaho': 'ID',
-  'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA', 'Kansas': 'KS',
-  'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
-  'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS',
-  'Missouri': 'MO', 'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV',
-  'New Hampshire': 'NH', 'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY',
-  'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH', 'Oklahoma': 'OK',
-  'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
-  'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT',
-  'Vermont': 'VT', 'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV',
-  'Wisconsin': 'WI', 'Wyoming': 'WY', 'District of Columbia': 'DC'
-};
-
 // Helper to get state code from city location data
 function getStateCodeForLocation(loc: any): string {
   if (loc.type === 'state') {
@@ -1057,18 +1041,6 @@ function getStateCodeForLocation(loc: any): string {
   // For cities, extract state from displayName like "Austin, TX"
   const parts = loc.displayName.split(', ');
   return (parts[1] || '').trim();
-}
-
-// Reverse lookup: state code -> state name
-const STATE_NAMES: Record<string, string> = Object.fromEntries(
-  Object.entries(STATE_CODES).map(([name, code]) => [code, name])
-);
-
-// Get the flag image path for a state name
-function getStateFlagPath(stateName: string): string {
-  const jpgStates = ['Illinois', 'New Jersey', 'New York'];
-  const ext = jpgStates.includes(stateName) ? 'jpg' : 'png';
-  return `/flags/${stateName} Flag.${ext}`;
 }
 
 // Reusable searchable location dropdown
