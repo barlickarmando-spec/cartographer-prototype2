@@ -1982,43 +1982,42 @@ function calculateFastestToTarget(
   const mortgageRate = locationData.housing.mortgageRate || 0.065;
   const annualCostFactor = calculateAnnualCostFactor(mortgageRate, downPaymentPercent);
   const allocationPercent = profile.disposableIncomeAllocation / 100;
-
-  // Check sustainability: can the user's worst-case DI sustain this house?
-  let worstDI = Infinity;
-  for (const snap of simulation) {
-    const di = snap.totalIncome - snap.adjustedCOL;
-    if (di < worstDI) worstDI = di;
-  }
-
-  const maxAnnualPayment = Math.max(0, worstDI * allocationPercent);
   const annualPaymentForTarget = calculateTotalAnnualCosts(targetPrice, downPaymentPercent, annualCostFactor);
 
-  if (annualPaymentForTarget > maxAnnualPayment) {
-    // Can't sustain this house even with infinite savings
-    return null;
-  }
+  // Savings needed: down payment + first year mortgage payment (same formula as calculateHouseProjections)
+  const downPayment = targetPrice * downPaymentPercent;
+  const savingsNeeded = downPayment + annualPaymentForTarget;
 
-  // Find the savings threshold
-  const totalCostFactor = downPaymentPercent + ((1 - downPaymentPercent) * annualCostFactor);
-  const savingsNeeded = targetPrice * totalCostFactor;
-
-  // Find the first year where savings meet the threshold
+  // Find the first year where:
+  // 1. Savings cover down payment + first year payment
+  // 2. Future worst-case DI can sustain the annual cost (checked from that year onward, not globally)
   for (const snap of simulation) {
     if (snap.savingsNoMortgage >= savingsNeeded) {
-      return {
-        year: snap.year,
-        age: snap.age,
-        totalSavings: Math.round(snap.savingsNoMortgage),
-        maxPossibleHousePrice: Math.round(snap.savingsNoMortgage / totalCostFactor),
-        downPaymentRequired: Math.round(targetPrice * downPaymentPercent),
-        firstYearPaymentRequired: Math.round(annualPaymentForTarget),
-        maxSustainableHousePrice: Math.round(targetPrice),
-        sustainableDownPayment: Math.round(targetPrice * downPaymentPercent),
-        sustainableAnnualPayment: Math.round(annualPaymentForTarget),
-        postMortgageDisposableIncome: Math.round(worstDI - annualPaymentForTarget),
-        sustainabilityLimited: false,
-        canAfford: true,
-      };
+      // Check sustainability from THIS year onward (not global worst-case)
+      const futureSnapshots = simulation.filter(s => s.year >= snap.year);
+      let worstFutureDI = snap.totalIncome - snap.adjustedCOL;
+      for (const future of futureSnapshots) {
+        const di = future.totalIncome - future.adjustedCOL;
+        if (di < worstFutureDI) worstFutureDI = di;
+      }
+      const maxAnnualPayment = Math.max(0, worstFutureDI * allocationPercent);
+
+      if (annualPaymentForTarget <= maxAnnualPayment) {
+        return {
+          year: snap.year,
+          age: snap.age,
+          totalSavings: Math.round(snap.savingsNoMortgage),
+          maxPossibleHousePrice: Math.round(snap.savingsNoMortgage / (downPaymentPercent + ((1 - downPaymentPercent) * annualCostFactor))),
+          downPaymentRequired: Math.round(downPayment),
+          firstYearPaymentRequired: Math.round(annualPaymentForTarget),
+          maxSustainableHousePrice: Math.round(targetPrice),
+          sustainableDownPayment: Math.round(downPayment),
+          sustainableAnnualPayment: Math.round(annualPaymentForTarget),
+          postMortgageDisposableIncome: Math.round(worstFutureDI - annualPaymentForTarget),
+          sustainabilityLimited: false,
+          canAfford: true,
+        };
+      }
     }
   }
 

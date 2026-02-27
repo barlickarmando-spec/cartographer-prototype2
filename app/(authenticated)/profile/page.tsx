@@ -1132,17 +1132,20 @@ export default function ProfilePage() {
                         const val = parseFloat(customSearchValue);
                         if (!val || val <= 0) return;
                         if (!onboardingProfile || result.yearByYear.length === 0) {
+                          console.warn('Custom search: missing profile or yearByYear', { hasProfile: !!onboardingProfile, yearByYearLen: result.yearByYear.length });
                           setCustomSearchAttempted(true);
                           setCustomSearchProjection(null);
                           return;
                         }
                         const yearTarget = customSearchUnit === 'months' ? val / 12 : val;
+                        console.log('Custom search:', { yearTarget, hasHousing: !!result.locationData?.housing, simYears: result.yearByYear.length, allocation: onboardingProfile.disposableIncomeAllocation });
                         const proj = calculateProjectionForYear(
                           yearTarget,
                           onboardingProfile,
                           result.locationData,
                           result.yearByYear
                         );
+                        console.log('Custom search result:', proj);
                         setCustomSearchAttempted(true);
                         setCustomSearchProjection(proj);
                       }}
@@ -1212,7 +1215,11 @@ export default function ProfilePage() {
                     <p className="text-amber-800 text-sm">
                       {result.yearByYear.length === 0
                         ? 'No simulation data available. Try recalculating from My Locations.'
-                        : `No projection available for ${customSearchValue} ${customSearchUnit}. The simulation only covers ${result.yearByYear.length} years — try a shorter timeframe.`}
+                        : !onboardingProfile
+                        ? 'Profile data not found. Try going through onboarding again.'
+                        : !result.locationData?.housing
+                        ? 'Location housing data missing. Try recalculating from My Locations.'
+                        : `Could not compute a projection for ${customSearchValue} ${customSearchUnit}. Try recalculating from My Locations to refresh your data.`}
                     </p>
                   </div>
                 )}
