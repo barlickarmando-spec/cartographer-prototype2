@@ -655,6 +655,7 @@ export default function MyLocationsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchDropdown, setSearchDropdown] = useState<{ label: string; rawName: string }[]>([]);
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const [activeSearchLocation, setActiveSearchLocation] = useState<string | null>(null);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [showDropdownOpen, setShowDropdownOpen] = useState(false);
   const [stateDropdownOpen, setStateDropdownOpen] = useState(false);
@@ -774,8 +775,8 @@ export default function MyLocationsPage() {
 
   // ===== CALCULATE ALL LOCATIONS (for full-dataset sorting or browse) =====
   useEffect(() => {
-    // Calculate when an active sort is selected, browse mode is on, or geographic filter is active
-    const needsFullCalc = browseAll || (sortMode !== 'default' && sortMode !== 'saved') || hasAnyGeoFilter(typeFilter, geoFilters);
+    // Calculate when an active sort is selected, browse mode is on, geographic filter is active, or a search location is focused
+    const needsFullCalc = browseAll || (sortMode !== 'default' && sortMode !== 'saved') || hasAnyGeoFilter(typeFilter, geoFilters) || !!activeSearchLocation;
     if (!needsFullCalc || !profile) return;
     if (allCalculatedResults.length > 0) return;
 
@@ -812,7 +813,7 @@ export default function MyLocationsPage() {
       }
       setAllCalcLoading(false);
     }, 50);
-  }, [sortMode, showFilter, typeFilter, geoFilters, browseAll, allCalculatedResults.length, profile]);
+  }, [sortMode, showFilter, typeFilter, geoFilters, browseAll, activeSearchLocation, allCalculatedResults.length, profile]);
 
   // Reset pagination when sort or filter changes
   useEffect(() => {
@@ -849,6 +850,8 @@ export default function MyLocationsPage() {
       setShowSearchDropdown(false);
       return;
     }
+    // Clear active search filter when user starts a new search
+    setActiveSearchLocation(null);
     const matches = searchLocations(query, 8);
     setSearchDropdown(matches.map(m => ({ label: m.label, rawName: m.rawName })));
     setShowSearchDropdown(matches.length > 0);
@@ -857,10 +860,13 @@ export default function MyLocationsPage() {
   const handleSelectSearchResult = useCallback((locationLabel: string) => {
     setShowSearchDropdown(false);
     setSearchQuery('');
+    setActiveSearchLocation(locationLabel);
 
+    // Check if already calculated somewhere
     const alreadyExists = userResults.find(r => r.location === locationLabel)
       || suggestedResults.find(r => r.location === locationLabel)
-      || searchResultsList.find(r => r.location === locationLabel);
+      || searchResultsList.find(r => r.location === locationLabel)
+      || allCalculatedResults.find(r => r.location === locationLabel);
     if (alreadyExists) return;
 
     const cached = searchCacheRef.current.get(locationLabel);
@@ -879,7 +885,11 @@ export default function MyLocationsPage() {
     } catch (error) {
       console.error('Error calculating search result:', error);
     }
-  }, [profile, userResults, suggestedResults, searchResultsList]);
+  }, [profile, userResults, suggestedResults, searchResultsList, allCalculatedResults]);
+
+  const clearSearchFilter = useCallback(() => {
+    setActiveSearchLocation(null);
+  }, []);
 
   // ===== SAVE/UNSAVE TOGGLE =====
   const toggleSave = useCallback((location: string) => {
@@ -1154,6 +1164,105 @@ export default function MyLocationsPage() {
           ) : (
             <div className="text-center py-8 bg-[#F8FAFB] rounded-xl border border-dashed border-gray-200">
               <p className="text-gray-400 text-sm">No other locations to show.</p>
+            </div>
+          )}
+        </section>
+      </div>
+    );
+  };
+
+  // Search result focused view: shows the selected location + similar locations
+  const renderSearchView = () => {
+    if (!activeSearchLocation) return null;
+
+    // Find the result for the actively searched location from all available data
+    const searchedResult = fullDataset.find(r => r.location === activeSearchLocation)
+      || searchResultsList.find(r => r.location === activeSearchLocation);
+
+    if (!searchedResult) return null;
+
+    // Determine the state of the searched location for finding similar ones
+    const searchedState = getLocationState(activeSearchLocation);
+    const searchedFullState = ABBREV_TO_STATE[searchedState] || searchedState;
+
+    // Find the region(s) this location belongs to
+    const locationRegions = Object.entries(REGIONS).filter(([, states]) =>
+      states.includes(searchedFullState)
+    ).map(([name]) => name);
+
+    // Find similar locations: same state first, then same region(s)
+    const sameStateResults = fullDataset.filter(r =>
+      r.location !== activeSearchLocation && (() => {
+        const rState = getLocationState(r.location);
+        const rFullState = ABBREV_TO_STATE[rState] || rState;
+        return rFullState === searchedFullState || rState === searchedFullState;
+      })()
+    );
+
+    const sameRegionResults = fullDataset.filter(r =>
+      r.location !== activeSearchLocation
+      && !sameStateResults.find(s => s.location === r.location)
+      && (() => {
+        const rState = getLocationState(r.location);
+        const rFullState = ABBREV_TO_STATE[rState] || rState;
+        return locationRegions.some(region => (REGIONS[region] || []).includes(rFullState));
+      })()
+    );
+
+    const similarResults = [...sameStateResults, ...sameRegionResults].slice(0, 6);
+
+    return (
+      <div className="space-y-10">
+        {/* Active Search Result */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] flex items-center justify-center">
+              <svg className="w-4 h-4 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+              </svg>
+            </div>
+            <h2 className="text-base font-semibold text-gray-800">Search Result</h2>
+            <button
+              onClick={clearSearchFilter}
+              className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-gray-700 transition-all"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Clear search
+            </button>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {renderCard(searchedResult)}
+          </div>
+        </section>
+
+        {/* Similar Locations */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-[#F5F3FF] flex items-center justify-center">
+              <svg className="w-4 h-4 text-[#7C3AED]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+              </svg>
+            </div>
+            <h2 className="text-base font-semibold text-gray-800">Similar Locations</h2>
+            {similarResults.length > 0 && (
+              <span className="text-xs text-gray-400 ml-1">({similarResults.length})</span>
+            )}
+          </div>
+          {allCalcLoading ? (
+            <div className="flex items-center gap-3 py-12 justify-center">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#7C3AED]"></div>
+              <span className="text-gray-500 text-sm">Finding similar locations...</span>
+            </div>
+          ) : similarResults.length > 0 ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {similarResults.map(renderCard)}
+            </div>
+          ) : (
+            <div className="text-center py-8 bg-[#F8FAFB] rounded-xl border border-dashed border-gray-200">
+              <p className="text-gray-400 text-sm">No similar locations found.</p>
             </div>
           )}
         </section>
@@ -1809,9 +1918,11 @@ export default function MyLocationsPage() {
       </div>
 
       {/* Results */}
-      {sortMode === 'default' && allFiltersDefault && !browseAll
-        ? renderSections()
-        : renderFlatGrid()}
+      {activeSearchLocation
+        ? renderSearchView()
+        : sortMode === 'default' && allFiltersDefault && !browseAll
+          ? renderSections()
+          : renderFlatGrid()}
     </div>
   );
 }
