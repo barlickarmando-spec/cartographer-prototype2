@@ -192,7 +192,21 @@ export default function ProfilePage() {
     );
   }
 
-  const result = selectedResult;
+  const result = {
+    ...selectedResult,
+    // Safe defaults for new fields (handles cached results from before these were added)
+    requiredSqFt: selectedResult.requiredSqFt || 1500,
+    largeSqFt: selectedResult.largeSqFt || 2200,
+    requiredHousePrice: selectedResult.requiredHousePrice || 0,
+    largeHousePrice: selectedResult.largeHousePrice || 0,
+    sqFtViable: selectedResult.sqFtViable ?? false,
+    houseTag: selectedResult.houseTag || '',
+    assumptions: selectedResult.assumptions || [],
+    projectedSqFt: selectedResult.projectedSqFt || 0,
+    fastestHomeSqFt: selectedResult.fastestHomeSqFt || 1600,
+    fastestHomeProjection: selectedResult.fastestHomeProjection || null,
+    baselineSqFtLabel: selectedResult.baselineSqFtLabel || '',
+  };
   const locationData = result.locationData;
   const isViable = result.viabilityClassification !== 'no-viable-path';
   
@@ -995,10 +1009,11 @@ export default function ProfilePage() {
 
             {/* === SLIDER 2: FASTEST TO HOMEOWNERSHIP === */}
             {(() => {
-              const fastSqFt = result.fastestHomeSqFt;
-              const fastProj = result.fastestHomeProjection;
-              const kidLabel = result.requiredSqFt <= 1200 ? 'no kids planned'
-                : result.requiredSqFt <= 1600 ? 'kids planned'
+              const fastSqFt = result.fastestHomeSqFt || 1600;
+              const fastProj = result.fastestHomeProjection || null;
+              const reqSqFt = result.requiredSqFt || 1500;
+              const kidLabel = reqSqFt <= 1500 ? 'no kids planned'
+                : reqSqFt <= 1800 ? 'kids planned'
                 : 'multiple kids planned';
 
               return (
