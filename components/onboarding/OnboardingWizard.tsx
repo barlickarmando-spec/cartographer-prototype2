@@ -1061,7 +1061,7 @@ function getStateCodeForLocation(loc: any): string {
 
 // Get the flag image path for a state name
 function getStateFlagPath(stateName: string): string {
-  const jpgStates = ['Illinois', 'New Jersey'];
+  const jpgStates = ['Illinois', 'New Jersey', 'New York'];
   const ext = jpgStates.includes(stateName) ? 'jpg' : 'png';
   return `/flags/${stateName} Flag.${ext}`;
 }
