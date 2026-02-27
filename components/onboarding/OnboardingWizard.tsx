@@ -1056,8 +1056,13 @@ function getStateCodeForLocation(loc: any): string {
   }
   // For cities, extract state from displayName like "Austin, TX"
   const parts = loc.displayName.split(', ');
-  return parts[1] || '';
+  return (parts[1] || '').trim();
 }
+
+// Reverse lookup: state code -> state name
+const STATE_NAMES: Record<string, string> = Object.fromEntries(
+  Object.entries(STATE_CODES).map(([name, code]) => [code, name])
+);
 
 // Get the flag image path for a state name
 function getStateFlagPath(stateName: string): string {
@@ -1314,29 +1319,23 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
                               }}
                               className="sr-only"
                             />
-                            <span className="ml-3 font-medium text-[#2C3E50] flex-1">{loc.name}</span>
-                            <span className="text-sm text-[#9CA3AF] mx-3">{stateCode}</span>
+                            <span className="ml-3 font-medium text-[#2C3E50] flex-1">
+                              {loc.name}{STATE_NAMES[stateCode] ? `, ${STATE_NAMES[stateCode]}` : ''}
+                            </span>
                           </div>
-                          {(() => {
-                            const stateName = Object.entries(STATE_CODES).find(([, code]) => code === stateCode)?.[0];
-                            return stateName ? (
-                              <>
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={getStateFlagPath(stateName)}
-                                  alt={`${stateName} flag`}
-                                  className="w-8 h-6 object-cover rounded border border-[#E5E7EB] ml-2"
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
-                                    if (e.currentTarget.nextElementSibling) (e.currentTarget.nextElementSibling as HTMLElement).classList.remove('hidden');
-                                  }}
-                                />
-                                <span className="hidden text-xs font-mono text-[#9CA3AF] bg-[#F8FAFB] px-2 py-1 rounded ml-2 font-medium">
-                                  {stateCode}
-                                </span>
-                              </>
-                            ) : null;
-                          })()}
+                          {STATE_NAMES[stateCode] && (
+                            <>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={getStateFlagPath(STATE_NAMES[stateCode])}
+                                alt={`${STATE_NAMES[stateCode]} flag`}
+                                className="w-8 h-6 object-cover rounded border border-[#E5E7EB] ml-2"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                }}
+                              />
+                            </>
+                          )}
                         </label>
                       );
                     })}
