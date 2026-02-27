@@ -178,28 +178,28 @@ function projectHouseAtYear(
     }
   }
 
-  const sustainableDownPayment = sustainablePrice * downPaymentPercent;
-  const sustainableAnnualPayment = calculateTotalAnnualCosts(sustainablePrice, downPaymentPercent, annualCostFactor);
-  const postMortgageDisposableIncome = worstCaseIncome - (worstCaseAdjustedCOL + sustainableAnnualPayment);
-  
   // === FINAL DETERMINATION ===
+  // Use the LOWER of savings-based and income-based max — what you can
+  // actually afford at this point with your current savings.
   const actualMaxPrice = Math.min(maxPossibleHousePrice, sustainablePrice);
+  const actualDP = actualMaxPrice * downPaymentPercent;
+  const actualAP = calculateTotalAnnualCosts(actualMaxPrice, downPaymentPercent, annualCostFactor);
+  const actualPostMortgageDI = worstCaseIncome - (worstCaseAdjustedCOL + actualAP);
   const sustainabilityLimited = sustainablePrice < maxPossibleHousePrice;
-  const canAfford = savings >= (sustainableDownPayment + sustainableAnnualPayment);
-  
+
   return {
     year: targetYear,
     age: snapshot.age,
     totalSavings: savings,
     maxPossibleHousePrice,
-    downPaymentRequired,
-    firstYearPaymentRequired,
-    maxSustainableHousePrice: sustainablePrice,
-    sustainableDownPayment,
-    sustainableAnnualPayment,
-    postMortgageDisposableIncome,
+    downPaymentRequired: actualDP,
+    firstYearPaymentRequired: actualAP,
+    maxSustainableHousePrice: actualMaxPrice,
+    sustainableDownPayment: actualDP,
+    sustainableAnnualPayment: actualAP,
+    postMortgageDisposableIncome: actualPostMortgageDI,
     sustainabilityLimited,
-    canAfford,
+    canAfford: true,
   };
 }
 

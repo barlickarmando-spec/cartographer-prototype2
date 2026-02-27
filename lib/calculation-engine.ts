@@ -1462,23 +1462,27 @@ function calculateHouseProjections(
     const postMortgageDisposableIncome = worstCaseDI - sustainableAnnualPayment;
     
     // === FINAL VALUES ===
+    // Use the LOWER of savings-based and income-based max — this is what
+    // the user can actually afford RIGHT NOW at this point in the timeline.
     const actualMaxPrice = Math.min(maxPossibleHousePrice, sustainablePrice);
+    const actualDP = actualMaxPrice * downPaymentPercent;
+    const actualAP = calculateTotalAnnualCosts(actualMaxPrice, downPaymentPercent, annualCostFactor);
+    const actualPostMortgageDI = worstCaseDI - actualAP;
     const sustainabilityLimited = sustainablePrice < maxPossibleHousePrice;
-    const canAfford = savings >= (sustainableDownPayment + sustainableAnnualPayment);
-    
+
     projections[key] = {
       year: targetYear,
       age: snapshot.age,
       totalSavings: Math.round(savings),
       maxPossibleHousePrice: Math.round(maxPossibleHousePrice),
-      downPaymentRequired: Math.round(downPaymentRequired),
-      firstYearPaymentRequired: Math.round(firstYearPaymentRequired),
-      maxSustainableHousePrice: Math.round(sustainablePrice),
-      sustainableDownPayment: Math.round(sustainableDownPayment),
-      sustainableAnnualPayment: Math.round(sustainableAnnualPayment),
-      postMortgageDisposableIncome: Math.round(postMortgageDisposableIncome),
+      downPaymentRequired: Math.round(actualDP),
+      firstYearPaymentRequired: Math.round(actualAP),
+      maxSustainableHousePrice: Math.round(actualMaxPrice),
+      sustainableDownPayment: Math.round(actualDP),
+      sustainableAnnualPayment: Math.round(actualAP),
+      postMortgageDisposableIncome: Math.round(actualPostMortgageDI),
       sustainabilityLimited,
-      canAfford,
+      canAfford: true,
     };
   }
 
@@ -1536,24 +1540,24 @@ function calculateHouseProjections(
     const maxPossibleHousePrice = maxSavings / totalCostFactor;
     const actualMax = Math.min(maxPossibleHousePrice, sustainablePrice);
 
-    const sustainableDP = sustainablePrice * downPaymentPercent;
-    const sustainableAP = calculateTotalAnnualCosts(sustainablePrice, downPaymentPercent, annualCostFactor);
-    const postMortgageDI = worstCaseDI - sustainableAP;
-    const canAfford = maxSavings >= (sustainableDP + sustainableAP);
+    // Use the LOWER of savings-based and income-based max
+    const actualMaxDP = actualMax * downPaymentPercent;
+    const actualMaxAP = calculateTotalAnnualCosts(actualMax, downPaymentPercent, annualCostFactor);
+    const actualMaxPostDI = worstCaseDI - actualMaxAP;
 
     projections.maxAffordable = {
       year: refSnapshot.year,
       age: refSnapshot.age,
       totalSavings: Math.round(maxSavings),
       maxPossibleHousePrice: Math.round(maxPossibleHousePrice),
-      downPaymentRequired: Math.round(actualMax * downPaymentPercent),
-      firstYearPaymentRequired: Math.round(calculateTotalAnnualCosts(actualMax, downPaymentPercent, annualCostFactor)),
-      maxSustainableHousePrice: Math.round(sustainablePrice),
-      sustainableDownPayment: Math.round(sustainableDP),
-      sustainableAnnualPayment: Math.round(sustainableAP),
-      postMortgageDisposableIncome: Math.round(postMortgageDI),
+      downPaymentRequired: Math.round(actualMaxDP),
+      firstYearPaymentRequired: Math.round(actualMaxAP),
+      maxSustainableHousePrice: Math.round(actualMax),
+      sustainableDownPayment: Math.round(actualMaxDP),
+      sustainableAnnualPayment: Math.round(actualMaxAP),
+      postMortgageDisposableIncome: Math.round(actualMaxPostDI),
       sustainabilityLimited: sustainablePrice < maxPossibleHousePrice,
-      canAfford,
+      canAfford: true,
     };
   }
 
@@ -1942,24 +1946,26 @@ function calculateProjectionForYear(
     }
   }
 
-  const sustainableDP = sustainablePrice * downPaymentPercent;
-  const sustainableAP = calculateTotalAnnualCosts(sustainablePrice, downPaymentPercent, annualCostFactor);
-  const postMortgageDI = worstCaseDI - sustainableAP;
-  const canAfford = savings >= (sustainableDP + sustainableAP);
+  // Use the LOWER of savings-based and income-based max — what you can
+  // actually afford at this point with your current savings.
+  const actualMax = Math.min(maxPossibleHousePrice, sustainablePrice);
+  const actualDP = actualMax * downPaymentPercent;
+  const actualAP = calculateTotalAnnualCosts(actualMax, downPaymentPercent, annualCostFactor);
+  const actualPostDI = worstCaseDI - actualAP;
 
   return {
     year: roundedYear,
     age: snapshot.age,
     totalSavings: Math.round(savings),
     maxPossibleHousePrice: Math.round(maxPossibleHousePrice),
-    downPaymentRequired: Math.round(sustainablePrice * downPaymentPercent),
-    firstYearPaymentRequired: Math.round(sustainableAP),
-    maxSustainableHousePrice: Math.round(sustainablePrice),
-    sustainableDownPayment: Math.round(sustainableDP),
-    sustainableAnnualPayment: Math.round(sustainableAP),
-    postMortgageDisposableIncome: Math.round(postMortgageDI),
+    downPaymentRequired: Math.round(actualDP),
+    firstYearPaymentRequired: Math.round(actualAP),
+    maxSustainableHousePrice: Math.round(actualMax),
+    sustainableDownPayment: Math.round(actualDP),
+    sustainableAnnualPayment: Math.round(actualAP),
+    postMortgageDisposableIncome: Math.round(actualPostDI),
     sustainabilityLimited: sustainablePrice < maxPossibleHousePrice,
-    canAfford,
+    canAfford: true,
   };
 }
 

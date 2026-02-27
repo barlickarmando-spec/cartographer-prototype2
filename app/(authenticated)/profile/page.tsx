@@ -1146,9 +1146,7 @@ export default function ProfilePage() {
                   <div className="mt-4">
                     <HouseProjectionCard
                       title={`After ${customSearchValue} ${customSearchUnit}`}
-                      subtitle={customSearchProjection.sustainabilityLimited
-                        ? 'Limited by income — even with more time, the max sustainable price stays similar'
-                        : `What you can afford after saving for ${customSearchValue} ${customSearchUnit}`}
+                      subtitle={`What you can afford after saving for ${customSearchValue} ${customSearchUnit}`}
                       projection={customSearchProjection}
                       location={result.location}
                       showHomes={showCustomHomes}
@@ -1358,14 +1356,6 @@ export default function ProfilePage() {
                                   : 'text-red-600'
                               }`}>
                                 ${result.houseProjections.maxAffordable.postMortgageDisposableIncome.toLocaleString()}/yr
-                              </td>
-                            </tr>
-                            <tr>
-                              <td className="px-4 py-3 text-[#4B5563]">Limited By</td>
-                              <td className="px-4 py-3 text-right font-medium text-[#2C3E50]">
-                                {result.houseProjections.maxAffordable.sustainabilityLimited
-                                  ? 'Income (annual cost cap)'
-                                  : 'Savings (need more time)'}
                               </td>
                             </tr>
                           </>
@@ -1660,9 +1650,6 @@ function HouseProjectionCard({ title, subtitle, projection, location, showHomes,
             <p className="text-2xl font-bold text-[#2C3E50]">
               {formatCurrency(projection.maxSustainableHousePrice)}
             </p>
-            {projection.sustainabilityLimited && (
-              <p className="text-xs text-[#EF4444] mt-1">Limited by income</p>
-            )}
           </div>
 
           {/* Estimated Size */}
@@ -1697,14 +1684,6 @@ function HouseProjectionCard({ title, subtitle, projection, location, showHomes,
           </div>
         </div>
 
-        {/* Affordability Status */}
-        {!projection.canAfford && (
-          <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-            <p className="text-sm text-yellow-800">
-              You&apos;ll need to save longer to afford the down payment
-            </p>
-          </div>
-        )}
       </div>
 
       {/* See Potential Homes Button */}
