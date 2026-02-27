@@ -434,13 +434,14 @@ export default function ProfilePage() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {/* Time to Home Ownership - matches max home value timeline */}
+            {/* Time to Home Ownership - only show if calculable */}
+            {(result.houseProjections.maxAffordable || result.yearsToMortgage > 0) && (
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
               <p className="text-white/70 text-sm mb-1">Time to Homeownership</p>
               <p className="text-2xl font-bold">
                 {result.houseProjections.maxAffordable
                   ? pluralize(result.houseProjections.maxAffordable.year, 'year')
-                  : result.yearsToMortgage > 0 ? pluralize(result.yearsToMortgage, 'year') : 'N/A'}
+                  : pluralize(result.yearsToMortgage, 'year')}
               </p>
               {result.houseProjections.maxAffordable ? (
                 <p className="text-white/60 text-xs mt-1">At age {result.houseProjections.maxAffordable.age}</p>
@@ -448,6 +449,7 @@ export default function ProfilePage() {
                 <p className="text-white/60 text-xs mt-1">At age {result.ageMortgageAcquired}</p>
               ) : null}
             </div>
+            )}
 
             {/* Projected Home Value (max affordable) */}
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
@@ -1043,40 +1045,17 @@ export default function ProfilePage() {
                 : reqSqFt <= 1800 ? 'kids planned'
                 : 'multiple kids planned';
 
-              if (fastProj) {
-                return (
-                  <HouseProjectionCard
-                    title="Fastest to Homeownership"
-                    subtitle={`Fastest path to a ${fastSqFt.toLocaleString()} sqft home (${kidLabel})`}
-                    projection={fastProj}
-                    location={result.location}
-                    showHomes={showFastestHomes}
-                    onToggle={() => setShowFastestHomes(!showFastestHomes)}
-                  />
-                );
-              }
+              if (!fastProj) return null;
 
               return (
-                <div className="bg-white border border-[#E5E7EB] rounded-xl overflow-hidden">
-                  <div className="px-6 py-5">
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <h3 className="font-bold text-[#2C3E50] text-lg">Fastest to Homeownership</h3>
-                        <p className="text-[#6B7280] text-sm">
-                          Fastest path to a {fastSqFt.toLocaleString()} sqft home ({kidLabel})
-                        </p>
-                      </div>
-                    </div>
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
-                      <p className="text-amber-800 text-sm">
-                        A {fastSqFt.toLocaleString()} sqft home is not reachable within the simulation period.
-                        {result.houseProjections.maxAffordable && (
-                          <span> Your max affordable home is ${result.houseProjections.maxAffordable.maxSustainableHousePrice.toLocaleString()}.</span>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <HouseProjectionCard
+                  title="Fastest to Homeownership"
+                  subtitle={`Fastest path to a ${fastSqFt.toLocaleString()} sqft home (${kidLabel})`}
+                  projection={fastProj}
+                  location={result.location}
+                  showHomes={showFastestHomes}
+                  onToggle={() => setShowFastestHomes(!showFastestHomes)}
+                />
               );
             })()}
 
