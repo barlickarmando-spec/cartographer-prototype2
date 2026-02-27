@@ -43,7 +43,7 @@ export default function Home() {
               </Link>
               <Link
                 href="/signup"
-                className="bg-slate-900 text-white text-sm px-5 py-2 rounded-lg hover:bg-slate-800 transition-colors"
+                className="bg-[#5BA4E5] text-white text-sm px-5 py-2 rounded-lg hover:bg-[#4A93D4] transition-colors"
               >
                 Sign Up
               </Link>
@@ -77,7 +77,7 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row gap-3 justify-center mb-6">
             <Link
               href="/signup"
-              className="bg-slate-900 text-white px-8 py-3.5 rounded-xl text-base font-medium hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10 inline-flex items-center justify-center gap-2 group"
+              className="bg-[#5BA4E5] text-white px-8 py-3.5 rounded-xl text-base font-medium hover:bg-[#4A93D4] transition-all shadow-lg shadow-[#5BA4E5]/20 inline-flex items-center justify-center gap-2 group"
             >
               Start for free
               <svg className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -95,120 +95,21 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Product Preview - Realistic Dashboard Mockup */}
+      {/* Product Preview - Actual Screenshot */}
       <section className="px-4 sm:px-6 lg:px-8 pb-24">
         <div className="max-w-6xl mx-auto">
           <div className="relative">
-            {/* Glow effect behind the mockup */}
+            {/* Glow effect behind the screenshot */}
             <div className="absolute -inset-4 bg-gradient-to-r from-blue-500/20 via-cyan-500/10 to-blue-500/20 rounded-3xl blur-3xl" />
 
-            {/* Browser frame */}
-            <div className="relative bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-200 overflow-hidden">
-              {/* Browser chrome */}
-              <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 border-b border-slate-200">
-                <div className="flex gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-slate-200" />
-                  <div className="w-3 h-3 rounded-full bg-slate-200" />
-                  <div className="w-3 h-3 rounded-full bg-slate-200" />
-                </div>
-                <div className="flex-1 flex justify-center">
-                  <div className="bg-white rounded-md px-4 py-1 text-xs text-slate-400 border border-slate-200 max-w-xs w-full text-center">
-                    cartographer.app/profile
-                  </div>
-                </div>
-              </div>
-
-              {/* App Header */}
-              <div className="border-b border-gray-200 bg-white px-6 py-3 flex items-center justify-between">
-                <Image
-                  src="/Icons/Icons Transparent/Logo_transparent.png"
-                  alt="Cartographer"
-                  width={140}
-                  height={36}
-                  className="h-8 w-auto"
-                />
-                <span className="text-xs text-slate-400 bg-slate-100 px-3 py-1 rounded-md">Sign Out</span>
-              </div>
-
-              {/* App Nav Tabs */}
-              <div className="border-b border-gray-200 bg-white px-6">
-                <div className="flex gap-6 text-sm">
-                  <span className="py-3 border-b-2 border-[#5BA4E5] text-[#5BA4E5] font-medium">Your Profile</span>
-                  <span className="py-3 text-slate-400">Debt Payoff</span>
-                  <span className="py-3 text-slate-400">My Locations</span>
-                  <span className="py-3 text-slate-400">Rent vs Buy</span>
-                  <span className="py-3 text-slate-400 hidden sm:block">Home Affordability</span>
-                  <span className="py-3 text-slate-400 hidden sm:block">Job Finder</span>
-                </div>
-              </div>
-
-              {/* Dashboard Content */}
-              <div className="bg-[#F7FAFC] p-6">
-                {/* Location Header */}
-                <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <p className="text-xs text-slate-400 mb-1">Currently viewing</p>
-                    <p className="text-lg font-semibold text-slate-800">Austin, Texas</p>
-                  </div>
-                  <span className="inline-flex items-center gap-1.5 bg-green-100 text-green-800 text-sm font-medium px-3 py-1.5 rounded-full w-fit">
-                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-                    Very Viable &amp; Stable
-                  </span>
-                </div>
-
-                {/* Stats Cards Row */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
-                  <div className="bg-[#5BA4E5] rounded-xl p-4 text-white">
-                    <p className="text-xs text-blue-100 mb-1">Max Home Price</p>
-                    <p className="text-xl font-bold">$425,000</p>
-                  </div>
-                  <div className="bg-[#4DB6AC] rounded-xl p-4 text-white">
-                    <p className="text-xs text-teal-100 mb-1">Monthly Payment</p>
-                    <p className="text-xl font-bold">$2,180</p>
-                  </div>
-                  <div className="bg-[#E76F51] rounded-xl p-4 text-white">
-                    <p className="text-xs text-orange-100 mb-1">Debt Payoff</p>
-                    <p className="text-xl font-bold">3.2 yrs</p>
-                  </div>
-                  <div className="bg-slate-700 rounded-xl p-4 text-white">
-                    <p className="text-xs text-slate-300 mb-1">Take-Home</p>
-                    <p className="text-xl font-bold">$5,420/mo</p>
-                  </div>
-                </div>
-
-                {/* Bottom Detail Row */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <p className="text-sm font-semibold text-slate-700 mb-3">Year-by-Year Projection</p>
-                    {/* Simple chart representation */}
-                    <div className="flex items-end gap-1.5 h-24">
-                      {[30, 38, 48, 55, 62, 70, 78, 85, 90, 96].map((h, i) => (
-                        <div key={i} className="flex-1 rounded-t" style={{ height: `${h}%`, background: i < 7 ? '#5BA4E5' : '#4DB6AC' }} />
-                      ))}
-                    </div>
-                    <div className="flex justify-between text-xs text-slate-400 mt-2">
-                      <span>2025</span>
-                      <span>2030</span>
-                      <span>2035</span>
-                    </div>
-                  </div>
-                  <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <p className="text-sm font-semibold text-slate-700 mb-3">Top Recommended Cities</p>
-                    <div className="space-y-2.5">
-                      {[
-                        { city: "Austin, TX", score: "Very Viable", color: "bg-green-100 text-green-800" },
-                        { city: "Raleigh, NC", score: "Viable", color: "bg-blue-100 text-blue-700" },
-                        { city: "Denver, CO", score: "Viable", color: "bg-blue-100 text-blue-700" },
-                      ].map((item) => (
-                        <div key={item.city} className="flex items-center justify-between py-1.5">
-                          <span className="text-sm text-slate-700">{item.city}</span>
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${item.color}`}>{item.score}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div className="relative rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-200 overflow-hidden">
+              <Image
+                src="/screenshots/profile-dashboard.png"
+                alt="Cartographer dashboard showing financial roadmap for Utah"
+                width={1440}
+                height={900}
+                className="w-full h-auto"
+              />
             </div>
           </div>
         </div>
@@ -253,49 +154,15 @@ export default function Home() {
               </ul>
             </div>
 
-            {/* Debt Payoff Mockup */}
-            <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-              <div className="bg-[#F7FAFC] p-6">
-                <div className="grid grid-cols-2 gap-3 mb-5">
-                  <div className="bg-[#E76F51] rounded-xl p-4 text-white">
-                    <p className="text-xs text-orange-100">Total Debt</p>
-                    <p className="text-2xl font-bold">$30,000</p>
-                  </div>
-                  <div className="bg-[#5BA4E5] rounded-xl p-4 text-white">
-                    <p className="text-xs text-blue-100">Time to Payoff</p>
-                    <p className="text-2xl font-bold">5.0 years</p>
-                    <p className="text-xs text-blue-200">60 months</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 mb-5">
-                  <div className="bg-slate-700 rounded-xl p-4 text-white">
-                    <p className="text-xs text-slate-300">Total Interest</p>
-                    <p className="text-2xl font-bold">$8,250</p>
-                  </div>
-                  <div className="bg-[#4DB6AC] rounded-xl p-4 text-white">
-                    <p className="text-xs text-teal-100">Monthly Payment</p>
-                    <p className="text-2xl font-bold">$500</p>
-                  </div>
-                </div>
-                <div className="bg-white rounded-xl border border-gray-200 p-4">
-                  <p className="text-sm font-semibold text-slate-700 mb-3">Relocation Savings</p>
-                  <div className="space-y-3">
-                    {[
-                      { city: "Austin, TX", time: "4.1 yrs", save: "Save $2,400" },
-                      { city: "Raleigh, NC", time: "3.8 yrs", save: "Save $3,100" },
-                      { city: "Nashville, TN", time: "4.3 yrs", save: "Save $1,800" },
-                    ].map((item) => (
-                      <div key={item.city} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50">
-                        <div>
-                          <p className="text-sm font-medium text-slate-700">{item.city}</p>
-                          <p className="text-xs text-[#4DB6AC]">{item.save}</p>
-                        </div>
-                        <span className="text-lg font-bold text-[#5BA4E5]">{item.time}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+            {/* Debt Payoff Screenshot */}
+            <div className="rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+              <Image
+                src="/screenshots/debt-payoff.png"
+                alt="Cartographer debt payoff calculator showing repayment timeline"
+                width={1440}
+                height={900}
+                className="w-full h-auto"
+              />
             </div>
           </div>
         </div>
@@ -305,85 +172,15 @@ export default function Home() {
       <section className="py-24 px-4 sm:px-6 lg:px-8 bg-slate-50/50">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-            {/* Rent vs Buy Mockup */}
-            <div className="order-2 lg:order-1 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-              <div className="bg-[#F7FAFC] p-6">
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Renting Card */}
-                  <div className="bg-white rounded-xl border border-gray-200 p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
-                        <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                      </div>
-                      <span className="text-sm font-semibold text-slate-700">Renting</span>
-                    </div>
-                    <div className="mb-3">
-                      <p className="text-xs text-slate-400">Monthly Cost</p>
-                      <p className="text-xl font-bold text-slate-800">$2,000</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-400">5-Year Total</p>
-                      <p className="text-lg font-bold text-slate-800">$120,000</p>
-                    </div>
-                    <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5">
-                      <div className="flex items-center gap-1.5 text-xs text-green-600">
-                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-                        Flexibility to move
-                      </div>
-                      <div className="flex items-center gap-1.5 text-xs text-red-500">
-                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-                        No equity building
-                      </div>
-                    </div>
-                  </div>
-                  {/* Buying Card */}
-                  <div className="bg-white rounded-xl border-2 border-[#5BA4E5] p-4 relative">
-                    <span className="absolute -top-2.5 left-3 bg-[#5BA4E5] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">RECOMMENDED</span>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                        <svg className="w-4 h-4 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
-                      </div>
-                      <span className="text-sm font-semibold text-slate-700">Buying</span>
-                    </div>
-                    <div className="mb-3">
-                      <p className="text-xs text-slate-400">Monthly Cost</p>
-                      <p className="text-xl font-bold text-slate-800">$2,500</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-400">5-Year Net Cost</p>
-                      <p className="text-lg font-bold text-slate-800">$90,000</p>
-                      <p className="text-xs text-green-600 font-medium">After equity: $30K saved</p>
-                    </div>
-                    <div className="mt-3 pt-3 border-t border-blue-100 space-y-1.5">
-                      <div className="flex items-center gap-1.5 text-xs text-green-600">
-                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-                        Build equity
-                      </div>
-                      <div className="flex items-center gap-1.5 text-xs text-green-600">
-                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-                        Predictable costs
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* City Analysis */}
-                <div className="mt-4 bg-white rounded-xl border border-gray-200 p-4">
-                  <p className="text-sm font-semibold text-slate-700 mb-3">Location-Based Verdict</p>
-                  <div className="space-y-2">
-                    {[
-                      { city: "Austin, TX", rec: "Buy", badge: "bg-green-100 text-green-800" },
-                      { city: "San Francisco, CA", rec: "Rent", badge: "bg-purple-100 text-purple-700" },
-                      { city: "Raleigh, NC", rec: "Buy", badge: "bg-green-100 text-green-800" },
-                    ].map((item) => (
-                      <div key={item.city} className="flex items-center justify-between py-1.5">
-                        <span className="text-sm text-slate-600">{item.city}</span>
-                        <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${item.badge}`}>{item.rec} Recommended</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+            {/* Rent vs Buy Screenshot */}
+            <div className="order-2 lg:order-1 rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+              <Image
+                src="/screenshots/rent-vs-buy.png"
+                alt="Cartographer rent vs buy analysis comparing costs"
+                width={1440}
+                height={900}
+                className="w-full h-auto"
+              />
             </div>
 
             <div className="order-1 lg:order-2">
@@ -435,55 +232,15 @@ export default function Home() {
               </ul>
             </div>
 
-            {/* Home Affordability Mockup */}
-            <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-              <div className="bg-[#F7FAFC] p-6">
-                <div className="grid grid-cols-3 gap-3 mb-5">
-                  <div className="bg-[#5BA4E5] rounded-xl p-4 text-white text-center">
-                    <p className="text-[10px] text-blue-100 mb-0.5">Max Home Price</p>
-                    <p className="text-xl font-bold">$425K</p>
-                    <p className="text-[10px] text-blue-200">Based on income</p>
-                  </div>
-                  <div className="bg-[#4DB6AC] rounded-xl p-4 text-white text-center">
-                    <p className="text-[10px] text-teal-100 mb-0.5">Monthly</p>
-                    <p className="text-xl font-bold">$2,180</p>
-                    <p className="text-[10px] text-teal-200">Incl. taxes &amp; ins.</p>
-                  </div>
-                  <div className="bg-[#E76F51] rounded-xl p-4 text-white text-center">
-                    <p className="text-[10px] text-orange-100 mb-0.5">Down Payment</p>
-                    <p className="text-xl font-bold">$85K</p>
-                    <p className="text-[10px] text-orange-200">20% recommended</p>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
-                  <p className="text-sm font-semibold text-slate-700 mb-3">Monthly Breakdown</p>
-                  <div className="space-y-2">
-                    {[
-                      { label: "Principal & Interest", value: "$1,680" },
-                      { label: "Property Taxes", value: "$290" },
-                      { label: "Home Insurance", value: "$145" },
-                      { label: "HOA Fees", value: "$65" },
-                    ].map((row) => (
-                      <div key={row.label} className="flex items-center justify-between text-sm py-1 border-b border-gray-50 last:border-0">
-                        <span className="text-slate-500">{row.label}</span>
-                        <span className="text-slate-700 font-medium">{row.value}</span>
-                      </div>
-                    ))}
-                    <div className="flex items-center justify-between pt-2 border-t border-gray-200">
-                      <span className="text-sm font-semibold text-slate-700">Total Monthly</span>
-                      <span className="text-lg font-bold text-[#5BA4E5]">$2,180</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-blue-50 rounded-xl border border-blue-100 p-4">
-                  <div className="flex items-start gap-2">
-                    <svg className="w-4 h-4 text-[#5BA4E5] mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" /></svg>
-                    <p className="text-xs text-blue-700">A larger down payment reduces your monthly costs and eliminates PMI. Consider targeting 20% to maximize savings.</p>
-                  </div>
-                </div>
-              </div>
+            {/* Home Affordability Screenshot */}
+            <div className="rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+              <Image
+                src="/screenshots/home-affordability.png"
+                alt="Cartographer home affordability calculator"
+                width={1440}
+                height={900}
+                className="w-full h-auto"
+              />
             </div>
           </div>
         </div>
@@ -614,7 +371,7 @@ export default function Home() {
           </p>
           <Link
             href="/signup"
-            className="bg-slate-900 text-white px-10 py-4 rounded-xl text-base font-medium hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10 inline-flex items-center gap-2 group"
+            className="bg-[#5BA4E5] text-white px-10 py-4 rounded-xl text-base font-medium hover:bg-[#4A93D4] transition-all shadow-lg shadow-[#5BA4E5]/20 inline-flex items-center gap-2 group"
           >
             Get started for free
             <svg className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
