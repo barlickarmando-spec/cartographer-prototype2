@@ -23,6 +23,7 @@ export default function ProfilePage() {
   const [customSearchValue, setCustomSearchValue] = useState('');
   const [customSearchUnit, setCustomSearchUnit] = useState<'years' | 'months'>('years');
   const [customSearchProjection, setCustomSearchProjection] = useState<HouseProjection | null>(null);
+  const [customSearchAttempted, setCustomSearchAttempted] = useState(false);
   const [showNecessarySizeWork, setShowNecessarySizeWork] = useState(false);
   const [showMaxValueWork, setShowMaxValueWork] = useState(false);
   const [showYearByYear, setShowYearByYear] = useState(false);
@@ -1099,13 +1100,14 @@ export default function ProfilePage() {
                       onChange={(e) => {
                         setCustomSearchValue(e.target.value);
                         setCustomSearchProjection(null);
+                        setCustomSearchAttempted(false);
                       }}
                       placeholder={customSearchUnit === 'years' ? 'e.g. 7' : 'e.g. 84'}
                       className="w-24 px-3 py-2 border border-[#D1D5DB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#5BA4E5] focus:border-transparent"
                     />
                     <div className="flex bg-[#F3F4F6] rounded-lg p-0.5">
                       <button
-                        onClick={() => { setCustomSearchUnit('years'); setCustomSearchProjection(null); }}
+                        onClick={() => { setCustomSearchUnit('years'); setCustomSearchProjection(null); setCustomSearchAttempted(false); }}
                         className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                           customSearchUnit === 'years'
                             ? 'bg-white text-[#2C3E50] shadow-sm'
@@ -1115,7 +1117,7 @@ export default function ProfilePage() {
                         Years
                       </button>
                       <button
-                        onClick={() => { setCustomSearchUnit('months'); setCustomSearchProjection(null); }}
+                        onClick={() => { setCustomSearchUnit('months'); setCustomSearchProjection(null); setCustomSearchAttempted(false); }}
                         className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                           customSearchUnit === 'months'
                             ? 'bg-white text-[#2C3E50] shadow-sm'
@@ -1128,7 +1130,12 @@ export default function ProfilePage() {
                     <button
                       onClick={() => {
                         const val = parseFloat(customSearchValue);
-                        if (!val || val <= 0 || !onboardingProfile) return;
+                        if (!val || val <= 0) return;
+                        if (!onboardingProfile || result.yearByYear.length === 0) {
+                          setCustomSearchAttempted(true);
+                          setCustomSearchProjection(null);
+                          return;
+                        }
                         const yearTarget = customSearchUnit === 'months' ? val / 12 : val;
                         const proj = calculateProjectionForYear(
                           yearTarget,
@@ -1136,6 +1143,7 @@ export default function ProfilePage() {
                           result.locationData,
                           result.yearByYear
                         );
+                        setCustomSearchAttempted(true);
                         setCustomSearchProjection(proj);
                       }}
                       className="px-4 py-2 bg-[#5BA4E5] text-white rounded-lg text-sm font-medium hover:bg-[#3B82F6] transition-colors"
@@ -1194,10 +1202,19 @@ export default function ProfilePage() {
                   );
                 })()}
 
-                {customSearchValue && !customSearchProjection && (
+                {customSearchValue && !customSearchProjection && !customSearchAttempted && (
                   <p className="text-[#6B7280] text-xs mt-3">
                     Press &quot;Search&quot; to see what you can afford after {customSearchValue} {customSearchUnit}.
                   </p>
+                )}
+                {customSearchAttempted && !customSearchProjection && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
+                    <p className="text-amber-800 text-sm">
+                      {result.yearByYear.length === 0
+                        ? 'No simulation data available. Try recalculating from My Locations.'
+                        : `No projection available for ${customSearchValue} ${customSearchUnit}. The simulation only covers ${result.yearByYear.length} years — try a shorter timeframe.`}
+                    </p>
+                  </div>
                 )}
               </div>
             </div>

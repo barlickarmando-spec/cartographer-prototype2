@@ -1901,9 +1901,6 @@ function calculateProjectionForYear(
   const snapshot = simulation.find(s => s.year === roundedYear) || simulation[simulation.length - 1];
   if (!snapshot || !locationData.housing) return null;
 
-  // If the requested year exceeds simulation length, use the last year
-  if (roundedYear > simulation.length) return null;
-
   const savings = snapshot.savingsNoMortgage;
   const downPaymentPercent = locationData.housing.downPaymentPercent || 0.107;
   const mortgageRate = locationData.housing.mortgageRate || 0.065;
