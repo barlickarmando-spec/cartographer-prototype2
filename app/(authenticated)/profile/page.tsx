@@ -23,6 +23,7 @@ export default function ProfilePage() {
   const [customSearchValue, setCustomSearchValue] = useState('');
   const [customSearchUnit, setCustomSearchUnit] = useState<'years' | 'months'>('years');
   const [customSearchProjection, setCustomSearchProjection] = useState<HouseProjection | null>(null);
+  const [customSearchAttempted, setCustomSearchAttempted] = useState(false);
   const [showNecessarySizeWork, setShowNecessarySizeWork] = useState(false);
   const [showMaxValueWork, setShowMaxValueWork] = useState(false);
   const [showYearByYear, setShowYearByYear] = useState(false);
@@ -111,7 +112,7 @@ export default function ProfilePage() {
   useEffect(() => {
     loadResults(
       localStorage.getItem('calculation-results'),
-      localStorage.getItem('onboarding-answers')
+      localStorage.getItem('onboardingAnswers') || localStorage.getItem('onboarding-answers')
     );
   }, [loadResults]);
 
@@ -1016,6 +1017,19 @@ export default function ProfilePage() {
                 : reqSqFt <= 1800 ? 'kids planned'
                 : 'multiple kids planned';
 
+              if (fastProj) {
+                return (
+                  <HouseProjectionCard
+                    title="Fastest to Homeownership"
+                    subtitle={`Fastest path to a ${fastSqFt.toLocaleString()} sqft home (${kidLabel})`}
+                    projection={fastProj}
+                    location={result.location}
+                    showHomes={showFastestHomes}
+                    onToggle={() => setShowFastestHomes(!showFastestHomes)}
+                  />
+                );
+              }
+
               return (
                 <div className="bg-white border border-[#E5E7EB] rounded-xl overflow-hidden">
                   <div className="px-6 py-5">
@@ -1026,54 +1040,15 @@ export default function ProfilePage() {
                           Fastest path to a {fastSqFt.toLocaleString()} sqft home ({kidLabel})
                         </p>
                       </div>
-                      {fastProj && (
-                        <span className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full">
-                          {pluralize(fastProj.year, 'year')}
-                        </span>
-                      )}
                     </div>
-
-                    {fastProj ? (
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-                        <div className="bg-[#F0F9FF] rounded-lg p-3">
-                          <p className="text-[#6B7280] text-xs mb-1">House Price</p>
-                          <p className="text-[#2C3E50] font-bold">${fastProj.maxSustainableHousePrice.toLocaleString()}</p>
-                        </div>
-                        <div className="bg-[#F0F9FF] rounded-lg p-3">
-                          <p className="text-[#6B7280] text-xs mb-1">Down Payment</p>
-                          <p className="text-[#2C3E50] font-bold">${fastProj.downPaymentRequired.toLocaleString()}</p>
-                        </div>
-                        <div className="bg-[#F0F9FF] rounded-lg p-3">
-                          <p className="text-[#6B7280] text-xs mb-1">Annual Cost</p>
-                          <p className="text-[#2C3E50] font-bold">${fastProj.sustainableAnnualPayment.toLocaleString()}/yr</p>
-                        </div>
-                        <div className="bg-[#F0F9FF] rounded-lg p-3">
-                          <p className="text-[#6B7280] text-xs mb-1">Your Age</p>
-                          <p className="text-[#2C3E50] font-bold">{fastProj.age}</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
-                        <p className="text-amber-800 text-sm">
-                          A {fastSqFt.toLocaleString()} sqft home is not reachable within the simulation period.
-                          {result.houseProjections.maxAffordable && (
-                            <span> Your max affordable home is ${result.houseProjections.maxAffordable.maxSustainableHousePrice.toLocaleString()}.</span>
-                          )}
-                        </p>
-                      </div>
-                    )}
-
-                    {fastProj && (
-                      <button
-                        onClick={() => setShowFastestHomes(!showFastestHomes)}
-                        className="mt-3 text-sm text-[#5BA4E5] hover:text-[#3B82F6] font-medium flex items-center gap-1"
-                      >
-                        {showFastestHomes ? 'Hide' : 'Browse'} homes
-                        <svg className={`w-4 h-4 transition-transform ${showFastestHomes ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-                    )}
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
+                      <p className="text-amber-800 text-sm">
+                        A {fastSqFt.toLocaleString()} sqft home is not reachable within the simulation period.
+                        {result.houseProjections.maxAffordable && (
+                          <span> Your max affordable home is ${result.houseProjections.maxAffordable.maxSustainableHousePrice.toLocaleString()}.</span>
+                        )}
+                      </p>
+                    </div>
                   </div>
                 </div>
               );
@@ -1099,13 +1074,14 @@ export default function ProfilePage() {
                       onChange={(e) => {
                         setCustomSearchValue(e.target.value);
                         setCustomSearchProjection(null);
+                        setCustomSearchAttempted(false);
                       }}
                       placeholder={customSearchUnit === 'years' ? 'e.g. 7' : 'e.g. 84'}
                       className="w-24 px-3 py-2 border border-[#D1D5DB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#5BA4E5] focus:border-transparent"
                     />
                     <div className="flex bg-[#F3F4F6] rounded-lg p-0.5">
                       <button
-                        onClick={() => { setCustomSearchUnit('years'); setCustomSearchProjection(null); }}
+                        onClick={() => { setCustomSearchUnit('years'); setCustomSearchProjection(null); setCustomSearchAttempted(false); }}
                         className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                           customSearchUnit === 'years'
                             ? 'bg-white text-[#2C3E50] shadow-sm'
@@ -1115,7 +1091,7 @@ export default function ProfilePage() {
                         Years
                       </button>
                       <button
-                        onClick={() => { setCustomSearchUnit('months'); setCustomSearchProjection(null); }}
+                        onClick={() => { setCustomSearchUnit('months'); setCustomSearchProjection(null); setCustomSearchAttempted(false); }}
                         className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                           customSearchUnit === 'months'
                             ? 'bg-white text-[#2C3E50] shadow-sm'
@@ -1128,14 +1104,30 @@ export default function ProfilePage() {
                     <button
                       onClick={() => {
                         const val = parseFloat(customSearchValue);
-                        if (!val || val <= 0 || !onboardingProfile) return;
+                        if (!val || val <= 0) return;
+                        // Try to use cached profile, fall back to reading from localStorage
+                        let profile = onboardingProfile;
+                        if (!profile) {
+                          const storedAnswers = getOnboardingAnswers<OnboardingAnswers>((d): d is OnboardingAnswers => d != null && typeof d === 'object');
+                          if (storedAnswers) {
+                            profile = normalizeOnboardingAnswers(storedAnswers);
+                            setOnboardingProfile(profile);
+                          }
+                        }
+                        if (!profile || result.yearByYear.length === 0) {
+                          console.warn('Custom search: missing profile or yearByYear', { hasProfile: !!profile, yearByYearLen: result.yearByYear.length });
+                          setCustomSearchAttempted(true);
+                          setCustomSearchProjection(null);
+                          return;
+                        }
                         const yearTarget = customSearchUnit === 'months' ? val / 12 : val;
                         const proj = calculateProjectionForYear(
                           yearTarget,
-                          onboardingProfile,
+                          profile,
                           result.locationData,
                           result.yearByYear
                         );
+                        setCustomSearchAttempted(true);
                         setCustomSearchProjection(proj);
                       }}
                       className="px-4 py-2 bg-[#5BA4E5] text-white rounded-lg text-sm font-medium hover:bg-[#3B82F6] transition-colors"
@@ -1145,59 +1137,38 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                {customSearchProjection && (() => {
-                  const proj = customSearchProjection;
-                  const pricePerSqft = result.requiredHousePrice > 0 && result.requiredSqFt > 0
-                    ? result.requiredHousePrice / result.requiredSqFt
-                    : 0;
-                  const affordableSqFt = pricePerSqft > 0
-                    ? Math.round(proj.maxSustainableHousePrice / pricePerSqft)
-                    : 0;
+                {customSearchProjection && (
+                  <div className="mt-4">
+                    <HouseProjectionCard
+                      title={`After ${customSearchValue} ${customSearchUnit}`}
+                      subtitle={customSearchProjection.sustainabilityLimited
+                        ? 'Limited by income — even with more time, the max sustainable price stays similar'
+                        : `What you can afford after saving for ${customSearchValue} ${customSearchUnit}`}
+                      projection={customSearchProjection}
+                      location={result.location}
+                      showHomes={showCustomHomes}
+                      onToggle={() => setShowCustomHomes(!showCustomHomes)}
+                    />
+                  </div>
+                )}
 
-                  return (
-                    <div className="mt-4">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-[#F0F9FF] rounded-lg p-3">
-                          <p className="text-[#6B7280] text-xs mb-1">Max Home Value</p>
-                          <p className="text-[#2C3E50] font-bold">${proj.maxSustainableHousePrice.toLocaleString()}</p>
-                        </div>
-                        {affordableSqFt > 0 && (
-                          <div className="bg-[#F0F9FF] rounded-lg p-3">
-                            <p className="text-[#6B7280] text-xs mb-1">Approx. Size</p>
-                            <p className="text-[#2C3E50] font-bold">{affordableSqFt.toLocaleString()} sqft</p>
-                          </div>
-                        )}
-                        <div className="bg-[#F0F9FF] rounded-lg p-3">
-                          <p className="text-[#6B7280] text-xs mb-1">Down Payment</p>
-                          <p className="text-[#2C3E50] font-bold">${proj.downPaymentRequired.toLocaleString()}</p>
-                        </div>
-                        <div className="bg-[#F0F9FF] rounded-lg p-3">
-                          <p className="text-[#6B7280] text-xs mb-1">Savings at {customSearchUnit === 'months' ? `${customSearchValue} mo` : `yr ${customSearchValue}`}</p>
-                          <p className="text-[#2C3E50] font-bold">${proj.totalSavings.toLocaleString()}</p>
-                        </div>
-                      </div>
-                      {proj.sustainabilityLimited && (
-                        <p className="text-amber-700 text-xs mt-2">
-                          Limited by your income, not savings. Even with more time saving, the max sustainable house stays around ${proj.maxSustainableHousePrice.toLocaleString()}.
-                        </p>
-                      )}
-                      <button
-                        onClick={() => setShowCustomHomes(!showCustomHomes)}
-                        className="mt-3 text-sm text-[#5BA4E5] hover:text-[#3B82F6] font-medium flex items-center gap-1"
-                      >
-                        {showCustomHomes ? 'Hide' : 'Browse'} homes
-                        <svg className={`w-4 h-4 transition-transform ${showCustomHomes ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-                    </div>
-                  );
-                })()}
-
-                {customSearchValue && !customSearchProjection && (
+                {customSearchValue && !customSearchProjection && !customSearchAttempted && (
                   <p className="text-[#6B7280] text-xs mt-3">
                     Press &quot;Search&quot; to see what you can afford after {customSearchValue} {customSearchUnit}.
                   </p>
+                )}
+                {customSearchAttempted && !customSearchProjection && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
+                    <p className="text-amber-800 text-sm">
+                      {result.yearByYear.length === 0
+                        ? 'No simulation data available. Try recalculating from My Locations.'
+                        : !onboardingProfile
+                        ? 'Profile data not found. Try going through onboarding again.'
+                        : !result.locationData?.housing
+                        ? 'Location housing data missing. Try recalculating from My Locations.'
+                        : `Could not compute a projection for ${customSearchValue} ${customSearchUnit}. Try recalculating from My Locations to refresh your data.`}
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
