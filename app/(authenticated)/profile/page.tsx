@@ -387,7 +387,7 @@ export default function ProfilePage() {
         
         {/* TOP SECTION - Key Metrics */}
         <div className="bg-gradient-to-br from-[#5BA4E5] to-[#4A93D4] p-8 text-white">
-          <div className="flex items-start justify-between mb-1">
+          <div className="flex items-center justify-between mb-1">
             <h1 className="text-3xl font-bold">{result.location}</h1>
             <div className="flex items-center gap-3 shrink-0 ml-3">
               <span
@@ -404,7 +404,7 @@ export default function ProfilePage() {
                   <img
                     src={getStateFlagPath(stateName)}
                     alt={`${stateName} flag`}
-                    className="w-12 h-8 object-cover rounded border-2 border-white/30"
+                    className="h-9 w-auto object-cover rounded-md border-2 border-white/30"
                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
                   />
                 );

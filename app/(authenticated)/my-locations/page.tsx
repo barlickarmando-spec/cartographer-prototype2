@@ -457,7 +457,7 @@ function LocationCard({
               <img
                 src={getStateFlagPath(stateName)}
                 alt={`${stateName} flag`}
-                className="ml-3 shrink-0 w-10 h-7 object-cover rounded border border-gray-200"
+                className="ml-3 shrink-0 w-10 h-10 object-cover rounded border border-gray-200 self-center"
                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
               />
             );
