@@ -417,56 +417,58 @@ function LocationCard({
       {/* ===== TOP SECTION ===== */}
       <div className="px-6 pt-5 pb-4">
         <div className="flex items-start justify-between">
-          <div className="flex-1 min-w-0">
-            {/* Row 1: Location name + Viability status badge */}
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <h3 className="text-lg font-bold text-gray-900 truncate">{result.location}</h3>
-              {isCurrent && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EFF6FF] text-[#5BA4E5] uppercase tracking-wider shrink-0">
-                  Current
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            <div className="flex-1 min-w-0">
+              {/* Row 1: Location name + Viability status badge */}
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                <h3 className="text-lg font-bold text-gray-900 truncate">{result.location}</h3>
+                {isCurrent && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EFF6FF] text-[#5BA4E5] uppercase tracking-wider shrink-0">
+                    Current
+                  </span>
+                )}
+                <span
+                  className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold shrink-0"
+                  style={{ backgroundColor: viability.bgColor, color: viability.color }}
+                >
+                  {viability.viabilityStatus}
                 </span>
-              )}
-              <span
-                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold shrink-0"
-                style={{ backgroundColor: viability.bgColor, color: viability.color }}
-              >
-                {viability.viabilityStatus}
-              </span>
-            </div>
-            {/* Row 2: Star rating + House size classification */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                <StarRating rating={starRating} />
-                <span className="text-xs font-medium text-gray-400">{starRating.toFixed(1)}</span>
               </div>
-              {viability.houseSize && (
-                <>
-                  <span className="text-gray-300">|</span>
-                  <span className="text-xs font-semibold" style={{ color: viability.color }}>{viability.houseSize}</span>
-                </>
-              )}
+              {/* Row 2: Star rating + House size classification */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <StarRating rating={starRating} />
+                  <span className="text-xs font-medium text-gray-400">{starRating.toFixed(1)}</span>
+                </div>
+                {viability.houseSize && (
+                  <>
+                    <span className="text-gray-300">|</span>
+                    <span className="text-xs font-semibold" style={{ color: viability.color }}>{viability.houseSize}</span>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* State Flag */}
-          {(() => {
-            const stateName = getStateNameFromLocation(result.location);
-            if (!stateName) return null;
-            return (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={getStateFlagPath(stateName)}
-                alt={`${stateName} flag`}
-                className="ml-3 shrink-0 w-10 h-10 object-cover rounded border border-gray-200 self-center"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            );
-          })()}
+            {/* State Flag */}
+            {(() => {
+              const stateName = getStateNameFromLocation(result.location);
+              if (!stateName) return null;
+              return (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={getStateFlagPath(stateName)}
+                  alt={`${stateName} flag`}
+                  className="shrink-0 w-14 h-9 object-cover rounded border border-gray-200 mt-1"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+              );
+            })()}
+          </div>
 
           {/* Wishlist Heart */}
           <button
             onClick={(e) => { e.preventDefault(); onToggleSave(); }}
-            className="ml-2 shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-110"
+            className="ml-3 shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-110"
             style={{ backgroundColor: isSaved ? '#FEE2E2' : '#F3F4F6' }}
             title={isSaved ? 'Remove from saved' : 'Save location'}
           >

@@ -387,15 +387,30 @@ export default function ProfilePage() {
         
         {/* TOP SECTION - Key Metrics */}
         <div className="bg-gradient-to-br from-[#5BA4E5] to-[#4A93D4] p-8 text-white">
-          <div className="flex items-center justify-between mb-1">
-            <h1 className="text-3xl font-bold">{result.location}</h1>
-            <div className="flex items-center gap-3 shrink-0 ml-3">
-              <span
-                className="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-semibold"
-                style={{ backgroundColor: viabilityBadge.bgColor, color: viabilityBadge.color }}
-              >
-                {viabilityBadge.label}
-              </span>
+          <div className="flex items-start justify-between mb-6">
+            {/* Left: text column */}
+            <div className="flex-1 min-w-0">
+              <h1 className="text-3xl font-bold mb-2">{result.location}</h1>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-0.5">
+                  {[1, 2, 3, 4, 5].map(i => {
+                    if (starRating >= i) {
+                      return <svg key={i} className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
+                    } else if (starRating >= i - 0.5) {
+                      return <svg key={i} className="w-4 h-4" viewBox="0 0 24 24"><defs><linearGradient id={`pstar-${i}`}><stop offset="50%" stopColor="#FACC15" /><stop offset="50%" stopColor="rgba(255,255,255,0.3)" /></linearGradient></defs><path fill={`url(#pstar-${i})`} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
+                    }
+                    return <svg key={i} className="w-4 h-4 text-white/30" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
+                  })}
+                </div>
+                <span className="text-white/70 text-sm font-semibold">{(result.numericScore ?? 0).toFixed(1)}/10</span>
+                <span className="text-white/40 mx-1">|</span>
+                <span className="text-white/80 text-sm">Your Financial Roadmap</span>
+              </div>
+            </div>
+
+            {/* Right: flag + viability badge */}
+            <div className="flex items-center gap-3 shrink-0 ml-4">
+              {/* State Flag — spans both text lines */}
               {(() => {
                 const stateName = getStateNameFromLocation(result.location);
                 if (!stateName) return null;
@@ -404,27 +419,18 @@ export default function ProfilePage() {
                   <img
                     src={getStateFlagPath(stateName)}
                     alt={`${stateName} flag`}
-                    className="h-9 w-auto object-cover rounded-md border-2 border-white/30"
+                    className="w-20 h-14 object-cover rounded-lg border-2 border-white/30"
                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
                   />
                 );
               })()}
+              <span
+                className="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-semibold"
+                style={{ backgroundColor: viabilityBadge.bgColor, color: viabilityBadge.color }}
+              >
+                {viabilityBadge.label}
+              </span>
             </div>
-          </div>
-          <div className="flex items-center gap-2 mb-6">
-            <div className="flex items-center gap-0.5">
-              {[1, 2, 3, 4, 5].map(i => {
-                if (starRating >= i) {
-                  return <svg key={i} className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
-                } else if (starRating >= i - 0.5) {
-                  return <svg key={i} className="w-4 h-4" viewBox="0 0 24 24"><defs><linearGradient id={`pstar-${i}`}><stop offset="50%" stopColor="#FACC15" /><stop offset="50%" stopColor="rgba(255,255,255,0.3)" /></linearGradient></defs><path fill={`url(#pstar-${i})`} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
-                }
-                return <svg key={i} className="w-4 h-4 text-white/30" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
-              })}
-            </div>
-            <span className="text-white/70 text-sm font-semibold">{(result.numericScore ?? 0).toFixed(1)}/10</span>
-            <span className="text-white/40 mx-1">|</span>
-            <span className="text-white/80 text-sm">Your Financial Roadmap</span>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
