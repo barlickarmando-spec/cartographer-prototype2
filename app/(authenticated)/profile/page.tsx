@@ -1137,54 +1137,20 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                {customSearchProjection && (() => {
-                  const proj = customSearchProjection;
-                  const pricePerSqft = result.requiredHousePrice > 0 && result.requiredSqFt > 0
-                    ? result.requiredHousePrice / result.requiredSqFt
-                    : 0;
-                  const affordableSqFt = pricePerSqft > 0
-                    ? Math.round(proj.maxSustainableHousePrice / pricePerSqft)
-                    : 0;
-
-                  return (
-                    <div className="mt-4">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-[#F0F9FF] rounded-lg p-3">
-                          <p className="text-[#6B7280] text-xs mb-1">Max Home Value</p>
-                          <p className="text-[#2C3E50] font-bold">${proj.maxSustainableHousePrice.toLocaleString()}</p>
-                        </div>
-                        {affordableSqFt > 0 && (
-                          <div className="bg-[#F0F9FF] rounded-lg p-3">
-                            <p className="text-[#6B7280] text-xs mb-1">Approx. Size</p>
-                            <p className="text-[#2C3E50] font-bold">{affordableSqFt.toLocaleString()} sqft</p>
-                          </div>
-                        )}
-                        <div className="bg-[#F0F9FF] rounded-lg p-3">
-                          <p className="text-[#6B7280] text-xs mb-1">Down Payment</p>
-                          <p className="text-[#2C3E50] font-bold">${proj.downPaymentRequired.toLocaleString()}</p>
-                        </div>
-                        <div className="bg-[#F0F9FF] rounded-lg p-3">
-                          <p className="text-[#6B7280] text-xs mb-1">Savings at {customSearchUnit === 'months' ? `${customSearchValue} mo` : `yr ${customSearchValue}`}</p>
-                          <p className="text-[#2C3E50] font-bold">${proj.totalSavings.toLocaleString()}</p>
-                        </div>
-                      </div>
-                      {proj.sustainabilityLimited && (
-                        <p className="text-amber-700 text-xs mt-2">
-                          Limited by your income, not savings. Even with more time saving, the max sustainable house stays around ${proj.maxSustainableHousePrice.toLocaleString()}.
-                        </p>
-                      )}
-                      <button
-                        onClick={() => setShowCustomHomes(!showCustomHomes)}
-                        className="mt-3 text-sm text-[#5BA4E5] hover:text-[#3B82F6] font-medium flex items-center gap-1"
-                      >
-                        {showCustomHomes ? 'Hide' : 'Browse'} homes
-                        <svg className={`w-4 h-4 transition-transform ${showCustomHomes ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-                    </div>
-                  );
-                })()}
+                {customSearchProjection && (
+                  <div className="mt-4">
+                    <HouseProjectionCard
+                      title={`After ${customSearchValue} ${customSearchUnit}`}
+                      subtitle={customSearchProjection.sustainabilityLimited
+                        ? 'Limited by income — even with more time, the max sustainable price stays similar'
+                        : `What you can afford after saving for ${customSearchValue} ${customSearchUnit}`}
+                      projection={customSearchProjection}
+                      location={result.location}
+                      showHomes={showCustomHomes}
+                      onToggle={() => setShowCustomHomes(!showCustomHomes)}
+                    />
+                  </div>
+                )}
 
                 {customSearchValue && !customSearchProjection && !customSearchAttempted && (
                   <p className="text-[#6B7280] text-xs mt-3">
