@@ -59,9 +59,9 @@ export default function Home() {
             <Image
               src="/Icons/Icons Transparent/Logo_transparent.png"
               alt="Cartographer"
-              width={512}
-              height={128}
-              className="h-16 sm:h-20 w-auto"
+              width={640}
+              height={160}
+              className="h-24 sm:h-32 w-auto"
             />
           </div>
 
@@ -503,35 +503,21 @@ export default function Home() {
                 step: "01",
                 title: "Tell us about you",
                 description: "Enter your income, debts, occupation, and goals. Takes about two minutes.",
-                icon: (
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                ),
               },
               {
                 step: "02",
                 title: "We crunch the numbers",
                 description: "Our engine processes tax codes, salary data, and housing markets across every US city.",
-                icon: (
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-                ),
               },
               {
                 step: "03",
                 title: "Get your roadmap",
                 description: "See personalized results with actionable timelines, city rankings, and financial projections.",
-                icon: (
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
-                ),
               },
             ].map((item) => (
               <div key={item.step} className="relative">
                 <div className="bg-slate-800 rounded-2xl p-8 border border-slate-700/50 h-full">
-                  <div className="flex items-center gap-4 mb-5">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white">
-                      {item.icon}
-                    </div>
-                    <span className="text-3xl font-bold text-slate-600">{item.step}</span>
-                  </div>
+                  <span className="text-3xl font-bold text-slate-600 mb-5 block">{item.step}</span>
                   <h3 className="text-xl font-semibold mb-3">{item.title}</h3>
                   <p className="text-slate-400 leading-relaxed">{item.description}</p>
                 </div>
@@ -603,9 +589,9 @@ export default function Home() {
         <div className="max-w-5xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             {[
-              { value: "19,000+", label: "Cities analyzed" },
-              { value: "50", label: "State tax engines" },
-              { value: "800+", label: "Occupations tracked" },
+              { value: "70", label: "Cities analyzed" },
+              { value: "51", label: "State tax engines" },
+              { value: "22", label: "Occupations tracked" },
               { value: "30 yr", label: "Projection depth" },
             ].map((stat) => (
               <div key={stat.label}>
