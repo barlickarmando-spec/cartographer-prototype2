@@ -7,14 +7,14 @@ export default function Home() {
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-lg border-b border-slate-200/60 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between h-20">
             <Link href="/" className="flex items-center shrink-0">
               <Image
                 src="/Icons/Icons Transparent/Logo_transparent.png"
                 alt="Cartographer"
                 width={256}
                 height={64}
-                className="h-12 w-auto"
+                className="h-14 w-auto"
                 priority
               />
             </Link>
@@ -53,11 +53,16 @@ export default function Home() {
       </nav>
 
       {/* Hero Section */}
-      <section className="pt-28 pb-8 px-4 sm:px-6 lg:px-8">
+      <section className="pt-32 pb-8 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-1.5 rounded-full mb-8 text-sm border border-blue-100">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-            Now analyzing every US city and state
+          <div className="flex justify-center mb-8">
+            <Image
+              src="/Icons/Icons Transparent/Logo_transparent.png"
+              alt="Cartographer"
+              width={512}
+              height={128}
+              className="h-16 sm:h-20 w-auto"
+            />
           </div>
 
           <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold text-slate-900 tracking-tight leading-[1.1] mb-6">
@@ -87,9 +92,6 @@ export default function Home() {
             </Link>
           </div>
 
-          <p className="text-sm text-slate-400">
-            No credit card required
-          </p>
         </div>
       </section>
 
@@ -633,7 +635,6 @@ export default function Home() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
             </svg>
           </Link>
-          <p className="text-sm text-slate-400 mt-5">No credit card required</p>
         </div>
       </section>
 
