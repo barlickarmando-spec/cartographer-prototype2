@@ -1071,17 +1071,248 @@ function getStateFlagPath(stateName: string): string {
   return `/flags/${stateName} Flag.${ext}`;
 }
 
-function Step6Location({ answers, updateAnswer }: StepProps) {
+// Reusable searchable location dropdown
+function LocationSearchDropdown({
+  label,
+  multiSelect,
+  selectedValues,
+  onSelect,
+  onDeselect,
+  onClearAll,
+}: {
+  label: string;
+  multiSelect: boolean;
+  selectedValues: string[];
+  onSelect: (displayName: string) => void;
+  onDeselect: (displayName: string) => void;
+  onClearAll?: () => void;
+}) {
   const [allLocations] = useState(getAllLocations());
   const [searchTerm, setSearchTerm] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  
-  const filteredLocations = allLocations.filter(loc => 
+
+  const filteredLocations = allLocations.filter(loc =>
     loc.displayName.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  
   const states = filteredLocations.filter(l => l.type === 'state');
   const cities = filteredLocations.filter(l => l.type === 'city');
+
+  // For single-select, show selected location name in the input
+  const selectedLabel = !multiSelect && selectedValues.length > 0
+    ? (() => {
+        const loc = allLocations.find(l => l.displayName === selectedValues[0]);
+        if (!loc) return selectedValues[0];
+        if (loc.type === 'city') {
+          const stateCode = getStateCodeForLocation(loc);
+          return `${loc.name}${STATE_NAMES[stateCode] ? `, ${STATE_NAMES[stateCode]}` : ''}`;
+        }
+        return loc.displayName;
+      })()
+    : '';
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+        {label}
+      </label>
+      <div className="relative">
+        {!multiSelect && selectedValues.length > 0 && !isSearchFocused ? (
+          <div
+            className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] bg-white flex items-center justify-between cursor-pointer hover:border-[#D1D5DB] transition-all"
+            onClick={() => setIsSearchFocused(true)}
+          >
+            <span className="text-[#2C3E50] font-medium">{selectedLabel}</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeselect(selectedValues[0]);
+              }}
+              className="text-[#9CA3AF] hover:text-[#6B7280] ml-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        ) : (
+          <input
+            type="text"
+            placeholder="Search states and cities..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            onFocus={() => setIsSearchFocused(true)}
+            onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+            className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+          />
+        )}
+
+        {isSearchFocused && (
+          <div className="absolute z-20 w-full mt-1 max-h-80 overflow-y-auto border border-[#E5E7EB] rounded-lg p-4 bg-white shadow-lg">
+            {/* States */}
+            {states.length > 0 && (
+              <div className="mb-4">
+                <div className="text-xs font-semibold text-[#9CA3AF] uppercase tracking-wide mb-2 px-2">
+                  States ({states.length})
+                </div>
+                <div className="space-y-2">
+                  {states.map(loc => {
+                    const isSelected = selectedValues.includes(loc.displayName);
+                    return (
+                      <label
+                        key={loc.name}
+                        className={`flex items-center justify-between w-full px-4 py-3 rounded-lg cursor-pointer transition-all ${
+                          isSelected ? 'bg-[#EFF6FF] border border-[#5BA4E5]' : 'border border-transparent hover:bg-[#F8FAFB]'
+                        }`}
+                      >
+                        <div className="flex items-center flex-1">
+                          {multiSelect ? (
+                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all flex-shrink-0 ${
+                              isSelected ? 'bg-[#5BA4E5] border-[#5BA4E5]' : 'border-[#D1D5DB] bg-white'
+                            }`}>
+                              {isSelected && (
+                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </div>
+                          ) : (
+                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 ${
+                              isSelected ? 'border-[#5BA4E5]' : 'border-[#D1D5DB] bg-white'
+                            }`}>
+                              {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-[#5BA4E5]" />}
+                            </div>
+                          )}
+                          <input
+                            type={multiSelect ? 'checkbox' : 'radio'}
+                            checked={isSelected}
+                            onChange={() => {
+                              if (isSelected) {
+                                onDeselect(loc.displayName);
+                              } else {
+                                onSelect(loc.displayName);
+                                setSearchTerm('');
+                                if (!multiSelect) setIsSearchFocused(false);
+                              }
+                            }}
+                            className="sr-only"
+                          />
+                          <span className="ml-3 font-medium text-[#2C3E50]">{loc.displayName}</span>
+                        </div>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={getStateFlagPath(loc.name)}
+                          alt={`${loc.name} flag`}
+                          className="w-8 h-6 object-cover rounded border border-[#E5E7EB] ml-2"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Cities */}
+            {cities.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-[#9CA3AF] uppercase tracking-wide mb-2 px-2">
+                  Major Cities ({cities.length})
+                </div>
+                <div className="space-y-2">
+                  {cities.map(loc => {
+                    const isSelected = selectedValues.includes(loc.displayName);
+                    const stateCode = getStateCodeForLocation(loc);
+                    return (
+                      <label
+                        key={loc.displayName}
+                        className={`flex items-center justify-between w-full px-4 py-3 rounded-lg cursor-pointer transition-all ${
+                          isSelected ? 'bg-[#EFF6FF] border border-[#5BA4E5]' : 'border border-transparent hover:bg-[#F8FAFB]'
+                        }`}
+                      >
+                        <div className="flex items-center flex-1">
+                          {multiSelect ? (
+                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all flex-shrink-0 ${
+                              isSelected ? 'bg-[#5BA4E5] border-[#5BA4E5]' : 'border-[#D1D5DB] bg-white'
+                            }`}>
+                              {isSelected && (
+                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </div>
+                          ) : (
+                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 ${
+                              isSelected ? 'border-[#5BA4E5]' : 'border-[#D1D5DB] bg-white'
+                            }`}>
+                              {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-[#5BA4E5]" />}
+                            </div>
+                          )}
+                          <input
+                            type={multiSelect ? 'checkbox' : 'radio'}
+                            checked={isSelected}
+                            onChange={() => {
+                              if (isSelected) {
+                                onDeselect(loc.displayName);
+                              } else {
+                                onSelect(loc.displayName);
+                                setSearchTerm('');
+                                if (!multiSelect) setIsSearchFocused(false);
+                              }
+                            }}
+                            className="sr-only"
+                          />
+                          <span className="ml-3 font-medium text-[#2C3E50] flex-1">
+                            {loc.name}{STATE_NAMES[stateCode] ? `, ${STATE_NAMES[stateCode]}` : ''}
+                          </span>
+                        </div>
+                        {STATE_NAMES[stateCode] && (
+                          <>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={getStateFlagPath(STATE_NAMES[stateCode])}
+                              alt={`${STATE_NAMES[stateCode]} flag`}
+                              className="w-8 h-6 object-cover rounded border border-[#E5E7EB] ml-2"
+                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            />
+                          </>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {filteredLocations.length === 0 && (
+              <div className="text-center py-8 text-[#9CA3AF]">
+                No locations found matching &quot;{searchTerm}&quot;
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {multiSelect && selectedValues.length > 0 && (
+        <div className="mt-3 flex items-center gap-3 text-sm">
+          <p className="text-[#6B7280]">
+            {selectedValues.length} location{selectedValues.length !== 1 ? 's' : ''} selected
+          </p>
+          {onClearAll && (
+            <button
+              onClick={onClearAll}
+              className="text-[#5BA4E5] hover:text-[#4A93D4] font-medium"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Step6Location({ answers, updateAnswer }: StepProps) {
+  const [allLocations] = useState(getAllLocations());
 
   return (
     <div>
@@ -1091,7 +1322,7 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
       <p className="text-[#6B7280] mb-10 text-center">
         Where do you want to analyze affordability?
       </p>
-      
+
       <div className="space-y-8 max-w-2xl mx-auto">
         {/* Location Situation */}
         <div>
@@ -1127,245 +1358,46 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
           </div>
         </div>
 
-        {/* Current Location (Dropdown with Flags) */}
+        {/* Current Location (Single-select searchable dropdown) */}
         {answers.locationSituation === 'currently-live-may-move' && (
-          <div>
-            <label className="block text-sm font-medium text-[#2C3E50] mb-2">
-              Where do you currently live?
-            </label>
-            <select
-              value={answers.currentLocation || ''}
-              onChange={(e) => updateAnswer('currentLocation', e.target.value || undefined)}
-              className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all bg-white"
-            >
-              <option value="">Select location...</option>
-              <optgroup label="States">
-                {states.map(loc => {
-                  const stateCode = STATE_CODES[loc.name];
-                  return (
-                    <option key={loc.name} value={loc.displayName}>
-                      {loc.displayName}
-                    </option>
-                  );
-                })}
-              </optgroup>
-              <optgroup label="Major Cities">
-                {cities.map(loc => (
-                  <option key={loc.displayName} value={loc.displayName}>
-                    {loc.displayName}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
-          </div>
+          <LocationSearchDropdown
+            label="Where do you currently live?"
+            multiSelect={false}
+            selectedValues={answers.currentLocation ? [answers.currentLocation] : []}
+            onSelect={(val) => updateAnswer('currentLocation', val)}
+            onDeselect={() => updateAnswer('currentLocation', undefined)}
+          />
         )}
 
-        {/* Exact Location (Dropdown with Flags) */}
+        {/* Exact Location (Single-select searchable dropdown) */}
         {answers.locationSituation === 'know-exactly' && (
-          <div>
-            <label className="block text-sm font-medium text-[#2C3E50] mb-2">
-              Where do you want to live?
-            </label>
-            <select
-              value={answers.exactLocation || ''}
-              onChange={(e) => updateAnswer('exactLocation', e.target.value || undefined)}
-              className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all bg-white"
-              required
-            >
-              <option value="">Select location...</option>
-              <optgroup label="States">
-                {states.map(loc => (
-                  <option key={loc.name} value={loc.displayName}>
-                    {loc.displayName}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="Major Cities">
-                {cities.map(loc => (
-                  <option key={loc.displayName} value={loc.displayName}>
-                    {loc.displayName}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
-          </div>
+          <LocationSearchDropdown
+            label="Where do you want to live?"
+            multiSelect={false}
+            selectedValues={answers.exactLocation ? [answers.exactLocation] : []}
+            onSelect={(val) => updateAnswer('exactLocation', val)}
+            onDeselect={() => updateAnswer('exactLocation', undefined)}
+          />
         )}
 
-        {/* Multiple Locations (List with Flags) */}
+        {/* Multiple Locations (Multi-select searchable dropdown) */}
         {(answers.locationSituation === 'currently-live-may-move' || answers.locationSituation === 'deciding-between') && (
-          <div>
-            <label className="block text-sm font-medium text-[#2C3E50] mb-2">
-              {answers.locationSituation === 'currently-live-may-move' 
-                ? 'What places are you considering?' 
-                : 'What places are you deciding between?'}
-            </label>
-            
-            <div className="relative">
-            <input
-              type="text"
-              placeholder="Search states and cities..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              onFocus={() => setIsSearchFocused(true)}
-              onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-              className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
-            />
-
-            {isSearchFocused && (
-            <div className="absolute z-20 w-full mt-1 max-h-80 overflow-y-auto border border-[#E5E7EB] rounded-lg p-4 bg-white shadow-lg">
-              {/* States */}
-              {states.length > 0 && (
-                <div className="mb-4">
-                  <div className="text-xs font-semibold text-[#9CA3AF] uppercase tracking-wide mb-2 px-2">
-                    States ({states.length})
-                  </div>
-                  <div className="space-y-2">
-                    {states.map(loc => {
-                      const isSelected = answers.potentialLocations?.includes(loc.displayName) || false;
-                      const stateCode = STATE_CODES[loc.name];
-                      
-                      return (
-                        <label
-                          key={loc.name}
-                          className={`flex items-center justify-between w-full px-4 py-3 rounded-lg cursor-pointer transition-all ${
-                            isSelected ? 'bg-[#EFF6FF] border border-[#5BA4E5]' : 'border border-transparent hover:bg-[#F8FAFB]'
-                          }`}
-                        >
-                          <div className="flex items-center flex-1">
-                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all flex-shrink-0 ${
-                              isSelected ? 'bg-[#5BA4E5] border-[#5BA4E5]' : 'border-[#D1D5DB] bg-white'
-                            }`}>
-                              {isSelected && (
-                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                </svg>
-                              )}
-                            </div>
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => {
-                                const current = answers.potentialLocations || [];
-                                if (isSelected) {
-                                  updateAnswer('potentialLocations', current.filter(s => s !== loc.displayName));
-                                } else {
-                                  updateAnswer('potentialLocations', [...current, loc.displayName]);
-                                  setSearchTerm('');
-                                }
-                              }}
-                              className="sr-only"
-                            />
-                            <span className="ml-3 font-medium text-[#2C3E50]">{loc.displayName}</span>
-                          </div>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={getStateFlagPath(loc.name)}
-                            alt={`${loc.name} flag`}
-                            className="w-8 h-6 object-cover rounded border border-[#E5E7EB] ml-2"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                              if (e.currentTarget.nextElementSibling) (e.currentTarget.nextElementSibling as HTMLElement).classList.remove('hidden');
-                            }}
-                          />
-                          <span className="hidden text-xs font-mono text-[#9CA3AF] bg-[#F8FAFB] px-2 py-1 rounded ml-2 font-medium">
-                            {stateCode}
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Cities */}
-              {cities.length > 0 && (
-                <div>
-                  <div className="text-xs font-semibold text-[#9CA3AF] uppercase tracking-wide mb-2 px-2">
-                    Major Cities ({cities.length})
-                  </div>
-                  <div className="space-y-2">
-                    {cities.map(loc => {
-                      const isSelected = answers.potentialLocations?.includes(loc.displayName) || false;
-                      const stateCode = getStateCodeForLocation(loc);
-                      
-                      return (
-                        <label
-                          key={loc.displayName}
-                          className={`flex items-center justify-between w-full px-4 py-3 rounded-lg cursor-pointer transition-all ${
-                            isSelected ? 'bg-[#EFF6FF] border border-[#5BA4E5]' : 'border border-transparent hover:bg-[#F8FAFB]'
-                          }`}
-                        >
-                          <div className="flex items-center flex-1">
-                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all flex-shrink-0 ${
-                              isSelected ? 'bg-[#5BA4E5] border-[#5BA4E5]' : 'border-[#D1D5DB] bg-white'
-                            }`}>
-                              {isSelected && (
-                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                </svg>
-                              )}
-                            </div>
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => {
-                                const current = answers.potentialLocations || [];
-                                if (isSelected) {
-                                  updateAnswer('potentialLocations', current.filter(s => s !== loc.displayName));
-                                } else {
-                                  updateAnswer('potentialLocations', [...current, loc.displayName]);
-                                  setSearchTerm('');
-                                }
-                              }}
-                              className="sr-only"
-                            />
-                            <span className="ml-3 font-medium text-[#2C3E50] flex-1">
-                              {loc.name}{STATE_NAMES[stateCode] ? `, ${STATE_NAMES[stateCode]}` : ''}
-                            </span>
-                          </div>
-                          {STATE_NAMES[stateCode] && (
-                            <>
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={getStateFlagPath(STATE_NAMES[stateCode])}
-                                alt={`${STATE_NAMES[stateCode]} flag`}
-                                className="w-8 h-6 object-cover rounded border border-[#E5E7EB] ml-2"
-                                onError={(e) => {
-                                  e.currentTarget.style.display = 'none';
-                                }}
-                              />
-                            </>
-                          )}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {filteredLocations.length === 0 && (
-                <div className="text-center py-8 text-[#9CA3AF]">
-                  No locations found matching &quot;{searchTerm}&quot;
-                </div>
-              )}
-            </div>
-            )}
-            </div>
-
-            {answers.potentialLocations && answers.potentialLocations.length > 0 && (
-              <div className="mt-3 flex items-center gap-3 text-sm">
-                <p className="text-[#6B7280]">
-                  {answers.potentialLocations.length} location{answers.potentialLocations.length !== 1 ? 's' : ''} selected
-                </p>
-                <button
-                  onClick={() => updateAnswer('potentialLocations', [])}
-                  className="text-[#5BA4E5] hover:text-[#4A93D4] font-medium"
-                >
-                  Clear all
-                </button>
-              </div>
-            )}
-          </div>
+          <LocationSearchDropdown
+            label={answers.locationSituation === 'currently-live-may-move'
+              ? 'What places are you considering?'
+              : 'What places are you deciding between?'}
+            multiSelect={true}
+            selectedValues={answers.potentialLocations || []}
+            onSelect={(val) => {
+              const current = answers.potentialLocations || [];
+              updateAnswer('potentialLocations', [...current, val]);
+            }}
+            onDeselect={(val) => {
+              const current = answers.potentialLocations || [];
+              updateAnswer('potentialLocations', current.filter(s => s !== val));
+            }}
+            onClearAll={() => updateAnswer('potentialLocations', [])}
+          />
         )}
 
         {/* No Idea Info */}

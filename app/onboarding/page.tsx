@@ -45,10 +45,8 @@ export default function OnboardingPage() {
       const isNoIdea = profile.selectedLocations.length === 0;
 
       if (isNoIdea) {
-        // "No idea" - calculate ALL states to find the best fits
-        locations = getAllLocationOptions()
-          .filter(o => o.type === 'state')
-          .map(o => o.label);
+        // "No idea" - calculate ALL locations (states + cities) to find the best fits
+        locations = getAllLocationOptions().map(o => o.label);
         // No saved locations for "no idea" users
         setSavedLocations([]);
       } else {

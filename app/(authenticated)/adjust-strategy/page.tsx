@@ -83,10 +83,8 @@ export default function AdjustStrategyPage() {
         if (allLocations.length > 0) {
           locations = allLocations;
         } else {
-          // "no idea" users — recalculate all states
-          locations = getAllLocationOptions()
-            .filter((o) => o.type === "state")
-            .map((o) => o.label);
+          // "no idea" users — recalculate all locations (states + cities)
+          locations = getAllLocationOptions().map((o) => o.label);
         }
 
         const results = locations
