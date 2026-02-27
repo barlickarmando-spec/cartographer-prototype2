@@ -287,9 +287,22 @@ function hasAnyGeoFilter(typeFilter: string, geoFilters: string[]): boolean {
   return typeFilter !== 'all' || geoFilters.length > 0;
 }
 
-function matchesAnyGeoFilter(locationName: string, geoFilters: string[]): boolean {
+function matchesGeoFilters(locationName: string, geoFilters: string[]): boolean {
   if (geoFilters.length === 0) return true;
-  return geoFilters.some(f => matchesLocationFilter(locationName, f));
+
+  // Split into additive (state/city/region — OR, expands pool) and
+  // subtractive (weather — AND, narrows existing pool)
+  const additive = geoFilters.filter(f => !f.startsWith('weather:'));
+  const subtractive = geoFilters.filter(f => f.startsWith('weather:'));
+
+  // Additive: location must match at least one (OR). If none, everything passes.
+  const passesAdditive = additive.length === 0 || additive.some(f => matchesLocationFilter(locationName, f));
+  if (!passesAdditive) return false;
+
+  // Subtractive: location must match at least one weather filter (AND on top of additive).
+  // If none, everything passes.
+  const passesSubtractive = subtractive.length === 0 || subtractive.some(f => matchesLocationFilter(locationName, f));
+  return passesSubtractive;
 }
 
 function toggleGeoFilter(current: string[], value: string): string[] {
@@ -966,9 +979,11 @@ export default function MyLocationsPage() {
     visibleResults = visibleResults.filter(r => matchesLocationFilter(r.location, 'type:cities'));
   }
 
-  // Apply geographic filters (region/weather/state/city — OR logic across selections)
+  // Apply geographic filters:
+  //   state/city/region = additive (OR — expands the pool)
+  //   weather = subtractive (AND — narrows the pool from above)
   if (hasActiveGeoFilter(geoFilters)) {
-    visibleResults = visibleResults.filter(r => matchesAnyGeoFilter(r.location, geoFilters));
+    visibleResults = visibleResults.filter(r => matchesGeoFilters(r.location, geoFilters));
   }
 
   // Step 2: Apply sort mode (non-viable always sink to the bottom)
