@@ -9,6 +9,7 @@ import type { OnboardingAnswers } from "@/lib/onboarding/types";
 import { normalizeOnboardingAnswers } from "@/lib/onboarding/normalize";
 import { getOnboardingAnswers, setOnboardingAnswers, setUserProfile, setSavedLocations } from "@/lib/storage";
 import { getAllLocationOptions } from "@/lib/locations";
+import { resolveLocationFilters } from "@/lib/location-filters";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -37,12 +38,17 @@ export default function OnboardingPage() {
       const profile = normalizeOnboardingAnswers(answers);
       setOnboardingAnswers(answers);
       setUserProfile(profile);
-      
-      const { calculateAutoApproach } = require('@/lib/calculation-engine');
+
+      const { calculateAutoApproach, calculateWithKidScenarios } = require('@/lib/calculation-engine');
+
+      // Choose calculation function based on kid scenario mode
+      const calcFn = profile.kidsKnowledge === 'dont-know-count'
+        ? calculateWithKidScenarios
+        : calculateAutoApproach;
 
       // Determine which locations to calculate
       let locations: string[];
-      const isNoIdea = profile.selectedLocations.length === 0;
+      const isNoIdea = profile.locationSituation === 'no-idea' && profile.selectedLocations.length === 0;
 
       if (isNoIdea) {
         // "No idea" - calculate ALL locations (states + cities) to find the best fits
@@ -50,20 +56,33 @@ export default function OnboardingPage() {
         // No saved locations for "no idea" users
         setSavedLocations([]);
       } else {
-        locations = profile.selectedLocations;
-        // Auto-save explicitly selected locations as favorites
-        setSavedLocations([...locations]);
+        // Resolve locations from specific selections + region/climate filters
+        const resolved = resolveLocationFilters({
+          states: profile.selectedLocations,
+          regions: profile.locationRegions,
+          climates: profile.locationClimate,
+        });
+        locations = resolved.length > 0 ? resolved : profile.selectedLocations;
+
+        // If still empty after filtering, fall back to all locations
+        if (locations.length === 0) {
+          locations = getAllLocationOptions().map(o => o.label);
+          setSavedLocations([]);
+        } else {
+          // Auto-save explicitly selected locations as favorites
+          setSavedLocations([...profile.selectedLocations]);
+        }
       }
 
       const results = locations.map(loc => {
         try {
-          const result = calculateAutoApproach(profile, loc, 30);
+          const result = calcFn(profile, loc, 30);
           return result;
         } catch (error) {
           console.error(`Error calculating for ${loc}:`, error);
           return null;
         }
-      }).filter(r => r !== null);
+      }).filter((r: unknown) => r !== null);
 
       // Always save results (even if empty) so other pages don't redirect back
       localStorage.setItem('calculation-results', JSON.stringify(results));

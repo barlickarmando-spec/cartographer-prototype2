@@ -22,6 +22,8 @@ function buildTestProfile(): UserProfile {
     numEarners: 2,
     numKids: 0,
     kidsPlan: "yes",
+    kidsKnowledge: "know-count",
+    declaredKidCount: 1,
     plannedKidAges: [32],
     hardRules: ["none"],
     userOccupation: "management",
@@ -36,11 +38,16 @@ function buildTestProfile(): UserProfile {
     carDebtRate: 0,
     otherDebt: 0,
     otherDebtRate: 0,
+    conditionalDebts: [],
+    annualExpenses: [],
     currentSavings: 0,
     disposableIncomeAllocation: 70,
     locationSituation: "know-exactly",
     selectedLocations: ["Florida"],
     currentLocation: "Florida",
+    locationRegions: [],
+    locationClimate: [],
+    locationPriority: "combination",
   };
 }
 

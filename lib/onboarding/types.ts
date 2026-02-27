@@ -42,11 +42,28 @@ export type DebtCalculationMethod =
 
 // === STEP 4: Financial Portfolio ===
 export interface DebtEntry {
-  type: 'cc-debt' | 'car-debt' | 'other';
-  totalDebt: number;
-  interestRate: number; // APR for CC, interest rate for others
-  ccRefreshMonths?: number; // Only for CC debt
+  type: 'cc-debt' | 'car-debt' | 'student-loan' | 'other';
+  label?: string;               // User-friendly name
+  totalDebt: number;            // Principal
+  interestRate: number;         // APR for CC, interest rate for others
+  ccRefreshMonths?: number;     // Only for CC debt
+  startAge?: number;            // Optional: only activate at this age
+  onlyAfterDebtFree?: boolean;  // Only acquire after all other debt paid
+  onlyIfViable?: boolean;       // Only acquire if viability >= 5
 }
+
+export interface AnnualExpense {
+  label: string;
+  annualCost: number;
+  startAge?: number;            // Optional: only applies from this age
+  onlyIfViable?: boolean;       // Optional: only if viability >= 5
+}
+
+// === STEP 2: Kid Planning Knowledge ===
+export type KidsKnowledge = 'know-count' | 'dont-know-count';
+
+// === STEP 6: Location Priority ===
+export type LocationPriority = 'affordability' | 'climate' | 'location' | 'combination';
 
 // === STEP 6: Location ===
 export type LocationSituation =
@@ -65,6 +82,8 @@ export interface OnboardingAnswers {
   relationshipPlans?: RelationshipPlan; // If single (note: plural)
   plannedRelationshipAge?: number; // If planning relationship
   kidsPlan: KidsPlan;
+  kidsKnowledge?: KidsKnowledge; // If kidsPlan === 'yes': do they know how many?
+  declaredKidCount?: number; // If kidsKnowledge === 'know-count': 1-3
   firstKidAge?: number; // If planning kids
   secondKidAge?: number; // If planning 2nd kid (optional)
   thirdKidAge?: number; // If planning 3rd kid (optional)
@@ -80,6 +99,8 @@ export interface OnboardingAnswers {
   userSalary?: number; // Optional manual override (renamed from userSalaryManual)
   partnerOccupation?: string; // Only if linked/planning relationship
   partnerSalary?: number; // Optional manual override (renamed from partnerSalaryManual)
+  currentSalaryOverride?: number; // Salary for current location only
+  currentSalaryLocation?: string; // Which location the override applies to
   
   // Step 4: Financial Portfolio
   userStudentLoanDebt: number;
@@ -90,16 +111,20 @@ export interface OnboardingAnswers {
   major?: string; // If using estimate by major
   partnerMajor?: string; // For linked students
   additionalDebts: DebtEntry[];
+  additionalExpenses: AnnualExpense[]; // Unlimited annual expenses
   savingsAccountValue: number;
-  
+
   // Step 5: Allocation
   disposableIncomeAllocation: number; // Percent (0-100)
-  
+
   // Step 6: Location
   locationSituation: LocationSituation;
   currentLocation?: string; // State name
   potentialLocations: string[]; // State names
   exactLocation?: string; // State name if know exactly
+  locationRegions: string[]; // Selected region filters
+  locationClimate: string[]; // Selected climate/weather filters
+  locationPriority: LocationPriority; // Ranking emphasis
 }
 
 // === Normalized User Profile (For Calculations) ===
@@ -108,7 +133,7 @@ export interface UserProfile {
   currentAge: number;
   isFinanciallyIndependent: boolean;
   expectedIndependenceAge?: number;
-  
+
   // Household Type
   householdType: HouseholdTypeEnum;
   relationshipStatus: RelationshipStatus;
@@ -116,20 +141,24 @@ export interface UserProfile {
   plannedRelationshipAge?: number;
   numEarners: 1 | 2;
   numKids: number;
-  
+
   // Life Planning
   kidsPlan: KidsPlan;
+  kidsKnowledge?: KidsKnowledge; // Scenario mode for kid planning
+  declaredKidCount: number; // 0-3, explicit count from user
   plannedKidAges: number[]; // Ages when kids are planned
   hardRules: HardRule[];
-  
+
   // Income
   userOccupation: string;
   userSalary?: number; // Manual override if provided
   partnerOccupation?: string;
   partnerSalary?: number;
   usePartnerIncomeDoubling: boolean; // If using the doubling rule
-  
-  // Debt
+  currentSalaryOverride?: number; // Salary for current location only
+  currentSalaryLocation?: string; // Which location the override applies to
+
+  // Debt (legacy flattened fields — still used by engine)
   studentLoanDebt: number; // Combined user + partner
   studentLoanRate: number; // Weighted average
   creditCardDebt: number;
@@ -139,17 +168,26 @@ export interface UserProfile {
   carDebtRate: number;
   otherDebt: number;
   otherDebtRate: number;
-  
+
+  // Conditional debts (pass-through for engine event system)
+  conditionalDebts: DebtEntry[];
+
+  // Annual expenses (injected into COL by engine)
+  annualExpenses: AnnualExpense[];
+
   // Savings
   currentSavings: number;
-  
+
   // Preferences
   disposableIncomeAllocation: number; // Percent
-  
+
   // Location
   locationSituation: LocationSituation;
   selectedLocations: string[]; // List of states to analyze
   currentLocation?: string;
+  locationRegions: string[];
+  locationClimate: string[];
+  locationPriority: LocationPriority;
 }
 
 // === Household Type Enum (12 Types) ===

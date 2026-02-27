@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { OnboardingAnswers } from "@/lib/onboarding/types";
+import { OnboardingAnswers, DebtEntry, AnnualExpense } from "@/lib/onboarding/types";
 import { getAllLocations, getOccupationList } from "@/lib/data-extraction";
 import { STATE_CODES, STATE_NAMES, getStateFlagPath } from "@/lib/state-flags";
+import { REGIONS, WEATHER_CATEGORIES } from "@/lib/location-filters";
 
 interface OnboardingWizardProps {
   initialAnswers?: Partial<OnboardingAnswers>;
@@ -16,8 +17,12 @@ export function OnboardingWizard({ initialAnswers, onComplete, onProgress }: Onb
   const [answers, setAnswers] = useState<Partial<OnboardingAnswers>>(initialAnswers || {
     hardRules: [],
     additionalDebts: [],
+    additionalExpenses: [],
     potentialLocations: [],
-    disposableIncomeAllocation: 70,
+    locationRegions: [],
+    locationClimate: [],
+    locationPriority: 'combination',
+    disposableIncomeAllocation: 50,
   });
 
   useEffect(() => {
@@ -35,14 +40,22 @@ export function OnboardingWizard({ initialAnswers, onComplete, onProgress }: Onb
       case 1: return !!answers.currentSituation;
       case 2: {
         // Only require relationshipStatus if user is independent
-        const isIndependent = answers.currentSituation === 'graduated-independent' || 
+        const isIndependent = answers.currentSituation === 'graduated-independent' ||
                               answers.currentSituation === 'student-independent' ||
                               answers.currentSituation === 'no-college' ||
                               answers.currentSituation === 'other';
         if (isIndependent) {
-          return !!answers.relationshipStatus && !!answers.kidsPlan;
+          if (!answers.relationshipStatus || !answers.kidsPlan) return false;
+        } else {
+          if (!answers.kidsPlan) return false;
         }
-        return !!answers.kidsPlan;
+        // If planning kids, require kidsKnowledge
+        if (answers.kidsPlan === 'yes') {
+          if (!answers.kidsKnowledge) return false;
+          // If they know count, require declaredKidCount
+          if (answers.kidsKnowledge === 'know-count' && !answers.declaredKidCount) return false;
+        }
+        return true;
       }
       case 3:
         if (answers.currentSituation === 'graduated-independent' || answers.currentSituation === 'student-independent' || answers.currentSituation === 'no-college' || answers.currentSituation === 'other') {
@@ -54,7 +67,7 @@ export function OnboardingWizard({ initialAnswers, onComplete, onProgress }: Onb
       case 6: {
         // Require locationSituation to be set
         if (!answers.locationSituation) return false;
-        
+
         // Require actual location selection based on situation
         if (answers.locationSituation === 'know-exactly') {
           return !!answers.exactLocation;
@@ -63,17 +76,22 @@ export function OnboardingWizard({ initialAnswers, onComplete, onProgress }: Onb
           return !!answers.currentLocation;
         }
         if (answers.locationSituation === 'deciding-between') {
-          return !!answers.potentialLocations && answers.potentialLocations.length > 0;
+          // Must have specific locations, or regions, or climate filters
+          const hasSpecific = !!answers.potentialLocations && answers.potentialLocations.length > 0;
+          const hasRegions = !!answers.locationRegions && answers.locationRegions.length > 0;
+          const hasClimate = !!answers.locationClimate && answers.locationClimate.length > 0;
+          return hasSpecific || hasRegions || hasClimate;
         }
         // For 'no-idea', just having the situation is enough
         return true;
       }
+      case 7: return true; // Confirmation page is always valid
       default: return false;
     }
   };
 
   const handleNext = () => {
-    if (canProceed() && currentStep < 6) {
+    if (canProceed() && currentStep < 7) {
       setCurrentStep(currentStep + 1);
     }
   };
@@ -90,7 +108,8 @@ export function OnboardingWizard({ initialAnswers, onComplete, onProgress }: Onb
     }
   };
 
-  const progressPercent = Math.round((currentStep / 6) * 100);
+  const totalSteps = 7;
+  const progressPercent = Math.round((currentStep / totalSteps) * 100);
 
   return (
     <div className="min-h-screen bg-[#F8FAFB]">
@@ -98,7 +117,7 @@ export function OnboardingWizard({ initialAnswers, onComplete, onProgress }: Onb
       <div className="bg-white border-b border-[#E5E7EB]">
         <div className="max-w-4xl mx-auto px-8 py-4">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-medium text-[#6B7280]">Step {currentStep} of 6</span>
+            <span className="text-sm font-medium text-[#6B7280]">Step {currentStep} of {totalSteps}</span>
             <span className="text-sm text-[#9CA3AF]">{progressPercent}% Complete</span>
           </div>
           <div className="w-full bg-[#E5E7EB] rounded-full h-2">
@@ -119,6 +138,7 @@ export function OnboardingWizard({ initialAnswers, onComplete, onProgress }: Onb
           {currentStep === 4 && <Step4FinancialPortfolio answers={answers} updateAnswer={updateAnswer} />}
           {currentStep === 5 && <Step5Allocation answers={answers} updateAnswer={updateAnswer} />}
           {currentStep === 6 && <Step6Location answers={answers} updateAnswer={updateAnswer} />}
+          {currentStep === 7 && <Step7Confirmation answers={answers} onEditStep={setCurrentStep} />}
         </div>
 
         {/* Navigation */}
@@ -136,19 +156,19 @@ export function OnboardingWizard({ initialAnswers, onComplete, onProgress }: Onb
 
           {/* Progress Dots */}
           <div className="flex gap-2">
-            {[1, 2, 3, 4, 5, 6].map(step => (
+            {[1, 2, 3, 4, 5, 6, 7].map(step => (
               <div
                 key={step}
                 className={`w-2 h-2 rounded-full transition-all ${
-                  step === currentStep ? 'bg-[#5BA4E5] w-8' : 
-                  step < currentStep ? 'bg-[#5BA4E5]' : 
+                  step === currentStep ? 'bg-[#5BA4E5] w-8' :
+                  step < currentStep ? 'bg-[#5BA4E5]' :
                   'bg-[#E5E7EB]'
                 }`}
               />
             ))}
           </div>
-          
-          {currentStep < 6 ? (
+
+          {currentStep < 7 ? (
             <button
               onClick={handleNext}
               disabled={!canProceed()}
@@ -165,7 +185,7 @@ export function OnboardingWizard({ initialAnswers, onComplete, onProgress }: Onb
               disabled={!canProceed()}
               className="flex items-center gap-2 px-6 py-2.5 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm font-medium"
             >
-              Continue
+              Calculate
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
@@ -366,83 +386,147 @@ function Step2HouseholdType({ answers, updateAnswer }: StepProps) {
             ))}
           </div>
 
-          {/* Kid age inputs - if planning kids */}
-          {(answers.kidsPlan === 'yes' || answers.kidsPlan === 'unsure') && (
-            <div className="mt-4 space-y-3">
-              {/* 1st Kid */}
-              <div>
-                <label className="block text-sm font-medium text-[#2C3E50] mb-2">
-                  Expected age for 1st kid (optional)
-                </label>
-                <input
-                  type="number"
-                  min="18"
-                  max="100"
-                  value={answers.firstKidAge || ''}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value) || undefined;
-                    updateAnswer('firstKidAge', val);
-                    if (!val) {
-                      updateAnswer('secondKidAge', undefined);
-                      updateAnswer('thirdKidAge', undefined);
-                    }
-                  }}
-                  className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
-                  placeholder="Leave blank for default (age 32)"
-                />
+          {/* Kids Knowledge - if planning kids */}
+          {answers.kidsPlan === 'yes' && (
+            <div className="mt-4 space-y-4">
+              <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+                Do you know how many kids you want?
+              </label>
+              <div className="space-y-2">
+                {[
+                  { value: 'know-count', label: 'Yes, I know how many' },
+                  { value: 'dont-know-count', label: 'Not sure yet' },
+                ].map(option => (
+                  <label
+                    key={option.value}
+                    className={`flex items-center w-full px-4 py-3 rounded-lg border cursor-pointer transition-all ${
+                      answers.kidsKnowledge === option.value
+                        ? 'border-[#5BA4E5] bg-[#EFF6FF]'
+                        : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="kidsKnowledge"
+                      value={option.value}
+                      checked={answers.kidsKnowledge === option.value}
+                      onChange={(e) => {
+                        updateAnswer('kidsKnowledge', e.target.value as any);
+                        if (e.target.value === 'dont-know-count') {
+                          updateAnswer('declaredKidCount', undefined);
+                          updateAnswer('firstKidAge', undefined);
+                          updateAnswer('secondKidAge', undefined);
+                          updateAnswer('thirdKidAge', undefined);
+                        }
+                      }}
+                      className="w-4 h-4 text-[#5BA4E5] border-[#D1D5DB] focus:ring-[#5BA4E5]"
+                    />
+                    <span className="ml-3 text-[#2C3E50]">{option.label}</span>
+                  </label>
+                ))}
               </div>
 
-              {/* 2nd Kid - shown after 1st kid age is entered */}
-              {answers.firstKidAge && (
+              {/* Kid count - if they know */}
+              {answers.kidsKnowledge === 'know-count' && (
                 <div>
                   <label className="block text-sm font-medium text-[#2C3E50] mb-2">
-                    Expected age for 2nd kid (optional)
+                    How many kids? (max 3)
                   </label>
                   <input
                     type="number"
-                    min={answers.firstKidAge}
-                    max="100"
-                    value={answers.secondKidAge || ''}
+                    min="1"
+                    max="3"
+                    step="1"
+                    value={answers.declaredKidCount || ''}
                     onChange={(e) => {
-                      const val = parseInt(e.target.value) || undefined;
-                      updateAnswer('secondKidAge', val);
-                      if (!val) {
-                        updateAnswer('thirdKidAge', undefined);
-                      }
+                      const val = Math.min(3, Math.max(1, parseInt(e.target.value) || 0));
+                      updateAnswer('declaredKidCount', val);
+                      // Clear ages beyond new count
+                      if (val < 2) { updateAnswer('secondKidAge', undefined); updateAnswer('thirdKidAge', undefined); }
+                      if (val < 3) { updateAnswer('thirdKidAge', undefined); }
                     }}
                     className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
-                    placeholder={`Leave blank if not planning a 2nd (at or after age ${answers.firstKidAge})`}
+                    placeholder="1-3"
                   />
-                  {answers.secondKidAge !== undefined && answers.secondKidAge < answers.firstKidAge && (
-                    <p className="text-xs text-red-500 mt-1">
-                      2nd kid must be at or after 1st kid (age {answers.firstKidAge})
-                    </p>
+                </div>
+              )}
+
+              {/* Kid age inputs - one per declared kid */}
+              {answers.kidsKnowledge === 'know-count' && answers.declaredKidCount && answers.declaredKidCount >= 1 && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+                      Expected age for 1st kid (optional, default 32)
+                    </label>
+                    <input
+                      type="number"
+                      min="18"
+                      max="100"
+                      step="1"
+                      value={answers.firstKidAge || ''}
+                      onChange={(e) => updateAnswer('firstKidAge', parseInt(e.target.value) || undefined)}
+                      className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+                      placeholder="32"
+                    />
+                  </div>
+
+                  {answers.declaredKidCount >= 2 && (
+                    <div>
+                      <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+                        Expected age for 2nd kid (optional, default 34)
+                      </label>
+                      <input
+                        type="number"
+                        min={answers.firstKidAge || 18}
+                        max="100"
+                        step="1"
+                        value={answers.secondKidAge || ''}
+                        onChange={(e) => updateAnswer('secondKidAge', parseInt(e.target.value) || undefined)}
+                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+                        placeholder="34"
+                      />
+                    </div>
+                  )}
+
+                  {answers.declaredKidCount >= 3 && (
+                    <div>
+                      <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+                        Expected age for 3rd kid (optional, default 36)
+                      </label>
+                      <input
+                        type="number"
+                        min={answers.secondKidAge || answers.firstKidAge || 18}
+                        max="100"
+                        step="1"
+                        value={answers.thirdKidAge || ''}
+                        onChange={(e) => updateAnswer('thirdKidAge', parseInt(e.target.value) || undefined)}
+                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+                        placeholder="36"
+                      />
+                    </div>
                   )}
                 </div>
               )}
 
-              {/* 3rd Kid - shown after valid 2nd kid age */}
-              {answers.secondKidAge && answers.secondKidAge >= (answers.firstKidAge || 0) && (
-                <div>
-                  <label className="block text-sm font-medium text-[#2C3E50] mb-2">
-                    Expected age for 3rd kid (optional)
-                  </label>
-                  <input
-                    type="number"
-                    min={answers.secondKidAge}
-                    max="100"
-                    value={answers.thirdKidAge || ''}
-                    onChange={(e) => updateAnswer('thirdKidAge', parseInt(e.target.value) || undefined)}
-                    className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
-                    placeholder={`Leave blank if not planning a 3rd (at or after age ${answers.secondKidAge})`}
-                  />
-                  {answers.thirdKidAge !== undefined && answers.thirdKidAge < answers.secondKidAge && (
-                    <p className="text-xs text-red-500 mt-1">
-                      3rd kid must be at or after 2nd kid (age {answers.secondKidAge})
-                    </p>
-                  )}
+              {/* Info for "don't know count" */}
+              {answers.kidsKnowledge === 'dont-know-count' && (
+                <div className="bg-[#EFF6FF] border border-[#5BA4E5] rounded-lg p-4">
+                  <p className="text-sm text-[#2C3E50]">
+                    We&apos;ll run scenarios for 1, 2, and 3 kids and recommend the most viable plan for your situation.
+                  </p>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Unsure about kids - info note */}
+          {answers.kidsPlan === 'unsure' && (
+            <div className="mt-4">
+              <div className="bg-[#EFF6FF] border border-[#5BA4E5] rounded-lg p-4">
+                <p className="text-sm text-[#2C3E50]">
+                  We&apos;ll model 1 kid at age 32 as a baseline and stress-test your plan as if you had 2 kids to ensure sustainability.
+                </p>
+              </div>
             </div>
           )}
 
@@ -665,18 +749,37 @@ function Step3AgeOccupation({ answers, updateAnswer }: StepProps) {
         {answers.relationshipStatus === 'single' && (answers.relationshipPlans === 'yes' || answers.relationshipPlans === 'unsure') && (
           <div className="bg-[#EFF6FF] border border-[#5BA4E5] rounded-lg p-4">
             <p className="text-sm text-[#2C3E50]">
-              <strong>Note:</strong> Since you&apos;re planning a relationship but don&apos;t have a partner yet, 
-              we&apos;ll use income doubling (your salary × 2) when you enter a relationship unless you 
+              <strong>Note:</strong> Since you&apos;re planning a relationship but don&apos;t have a partner yet,
+              we&apos;ll use income doubling (your salary × 2) when you enter a relationship unless you
               specify a partner occupation later.
             </p>
           </div>
         )}
+
+        {/* Salary Override for current location */}
+        <div>
+          <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+            Current salary (optional)
+          </label>
+          <p className="text-xs text-[#9CA3AF] mb-2">
+            If you know your current salary, enter it here. This will be used for your current location; other locations will use regional averages for your occupation.
+          </p>
+          <div className="relative">
+            <span className="absolute left-4 top-3.5 text-[#6B7280]">$</span>
+            <input
+              type="number"
+              min="0"
+              value={answers.currentSalaryOverride || ''}
+              onChange={(e) => updateAnswer('currentSalaryOverride', parseInt(e.target.value) || undefined)}
+              className="w-full pl-8 pr-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+              placeholder="Leave blank to use location averages"
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
 }
-
-// Continue in next file due to length...
 
 // ===== STEP 4: FINANCIAL PORTFOLIO =====
 function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
@@ -771,142 +874,250 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
           </div>
         )}
 
-        {/* Additional Debts */}
+        {/* Additional Debts — Dynamic List */}
         <div>
-          <h3 className="font-semibold text-[#2C3E50] mb-4">Additional Debts (Optional)</h3>
-          
-          <div className="space-y-6">
-            {/* Credit Card Debt */}
-            <div className="bg-[#F8FAFB] rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-medium text-[#2C3E50]">Credit Card Debt</h4>
-                <button
-                  onClick={() => {
-                    const debts = answers.additionalDebts || [];
-                    const hasCCDebt = debts.some(d => d.type === 'cc-debt');
-                    if (hasCCDebt) {
-                      updateAnswer('additionalDebts', debts.filter(d => d.type !== 'cc-debt'));
-                    } else {
-                      updateAnswer('additionalDebts', [...debts, { type: 'cc-debt', totalDebt: 0, interestRate: 0.216, ccRefreshMonths: 12 }]);
-                    }
-                  }}
-                  className="text-sm text-[#5BA4E5] hover:text-[#4A93D4] font-medium"
-                >
-                  {answers.additionalDebts?.some(d => d.type === 'cc-debt') ? 'Remove' : 'Add'}
-                </button>
-              </div>
-              
-              {answers.additionalDebts?.find(d => d.type === 'cc-debt') && (
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs text-[#6B7280] mb-1">Average annual credit card debt</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-[#6B7280] text-sm">$</span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={answers.additionalDebts.find(d => d.type === 'cc-debt')?.totalDebt || ''}
-                        onChange={(e) => {
-                          const debts = answers.additionalDebts || [];
-                          const updated = debts.map(d =>
-                            d.type === 'cc-debt' ? { ...d, totalDebt: Number(e.target.value) || 0 } : d
-                          );
-                          updateAnswer('additionalDebts', updated);
-                        }}
-                        className="w-full pl-7 pr-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-1 focus:ring-[#5BA4E5] outline-none transition-all text-sm"
-                        placeholder="0"
-                      />
-                    </div>
-                  </div>
+          <h3 className="font-semibold text-[#2C3E50] mb-2">Additional Debts (Optional)</h3>
+          <p className="text-sm text-[#9CA3AF] mb-4">Add any debts beyond student loans. Each can have optional conditions.</p>
 
+          <div className="space-y-3">
+            {(answers.additionalDebts || []).map((debt, idx) => (
+              <div key={idx} className="bg-[#F8FAFB] rounded-lg p-4 border border-[#E5E7EB]">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-medium text-[#2C3E50]">
+                    {debt.label || (debt.type === 'cc-debt' ? 'Credit Card' : debt.type === 'car-debt' ? 'Car Loan' : 'Other Debt')}
+                  </span>
+                  <button
+                    onClick={() => {
+                      const debts = [...(answers.additionalDebts || [])];
+                      debts.splice(idx, 1);
+                      updateAnswer('additionalDebts', debts);
+                    }}
+                    className="text-sm text-red-500 hover:text-red-700 font-medium"
+                  >
+                    Remove
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-[#6B7280] mb-1">APR (%)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.1"
-                      value={answers.additionalDebts.find(d => d.type === 'cc-debt')?.interestRate ? (answers.additionalDebts.find(d => d.type === 'cc-debt')?.interestRate || 0) * 100 : ''}
+                    <label className="block text-xs text-[#6B7280] mb-1">Type</label>
+                    <select
+                      value={debt.type}
                       onChange={(e) => {
-                        const debts = answers.additionalDebts || [];
-                        const updated = debts.map(d =>
-                          d.type === 'cc-debt' ? { ...d, interestRate: (Number(e.target.value) || 0) / 100 } : d
-                        );
-                        updateAnswer('additionalDebts', updated);
+                        const debts = [...(answers.additionalDebts || [])];
+                        debts[idx] = { ...debts[idx], type: e.target.value as DebtEntry['type'] };
+                        updateAnswer('additionalDebts', debts);
                       }}
-                      className="w-full px-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-1 focus:ring-[#5BA4E5] outline-none transition-all text-sm"
-                      placeholder="21.6"
+                      className="w-full px-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] outline-none text-sm bg-white"
+                    >
+                      <option value="cc-debt">Credit Card</option>
+                      <option value="car-debt">Car Loan</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[#6B7280] mb-1">Label (optional)</label>
+                    <input
+                      type="text"
+                      value={debt.label || ''}
+                      onChange={(e) => {
+                        const debts = [...(answers.additionalDebts || [])];
+                        debts[idx] = { ...debts[idx], label: e.target.value || undefined };
+                        updateAnswer('additionalDebts', debts);
+                      }}
+                      className="w-full px-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] outline-none text-sm"
+                      placeholder="e.g. Car payment"
                     />
                   </div>
-                </div>
-              )}
-            </div>
-
-            {/* Car Debt */}
-            <div className="bg-[#F8FAFB] rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-medium text-[#2C3E50]">Car Debt</h4>
-                <button
-                  onClick={() => {
-                    const debts = answers.additionalDebts || [];
-                    const hasCarDebt = debts.some(d => d.type === 'car-debt');
-                    if (hasCarDebt) {
-                      updateAnswer('additionalDebts', debts.filter(d => d.type !== 'car-debt'));
-                    } else {
-                      updateAnswer('additionalDebts', [...debts, { type: 'car-debt', totalDebt: 0, interestRate: 0.05 }]);
-                    }
-                  }}
-                  className="text-sm text-[#5BA4E5] hover:text-[#4A93D4] font-medium"
-                >
-                  {answers.additionalDebts?.some(d => d.type === 'car-debt') ? 'Remove' : 'Add'}
-                </button>
-              </div>
-              
-              {answers.additionalDebts?.find(d => d.type === 'car-debt') && (
-                <div className="space-y-3">
                   <div>
-                    <label className="block text-xs text-[#6B7280] mb-1">Total amount</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-[#6B7280] text-sm">$</span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={answers.additionalDebts.find(d => d.type === 'car-debt')?.totalDebt || ''}
-                        onChange={(e) => {
-                          const debts = answers.additionalDebts || [];
-                          const updated = debts.map(d => 
-                            d.type === 'car-debt' ? { ...d, totalDebt: Number(e.target.value) || 0 } : d
-                          );
-                          updateAnswer('additionalDebts', updated);
-                        }}
-                        className="w-full pl-7 pr-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-1 focus:ring-[#5BA4E5] outline-none transition-all text-sm"
-                        placeholder="0"
-                      />
-                    </div>
+                    <label className="block text-xs text-[#6B7280] mb-1">Amount ($)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={debt.totalDebt || ''}
+                      onChange={(e) => {
+                        const debts = [...(answers.additionalDebts || [])];
+                        debts[idx] = { ...debts[idx], totalDebt: Number(e.target.value) || 0 };
+                        updateAnswer('additionalDebts', debts);
+                      }}
+                      className="w-full px-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] outline-none text-sm"
+                      placeholder="0"
+                    />
                   </div>
-
                   <div>
-                    <label className="block text-xs text-[#6B7280] mb-1">Interest rate (%)</label>
+                    <label className="block text-xs text-[#6B7280] mb-1">Interest Rate (%)</label>
                     <input
                       type="number"
                       min="0"
                       max="100"
                       step="0.1"
-                      value={answers.additionalDebts.find(d => d.type === 'car-debt')?.interestRate ? (answers.additionalDebts.find(d => d.type === 'car-debt')?.interestRate || 0) * 100 : ''}
+                      value={debt.interestRate ? debt.interestRate * 100 : ''}
                       onChange={(e) => {
-                        const debts = answers.additionalDebts || [];
-                        const updated = debts.map(d => 
-                          d.type === 'car-debt' ? { ...d, interestRate: (Number(e.target.value) || 0) / 100 } : d
-                        );
-                        updateAnswer('additionalDebts', updated);
+                        const debts = [...(answers.additionalDebts || [])];
+                        debts[idx] = { ...debts[idx], interestRate: (Number(e.target.value) || 0) / 100 };
+                        updateAnswer('additionalDebts', debts);
                       }}
-                      className="w-full px-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-1 focus:ring-[#5BA4E5] outline-none transition-all text-sm"
+                      className="w-full px-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] outline-none text-sm"
                       placeholder="5.0"
                     />
                   </div>
+                  <div>
+                    <label className="block text-xs text-[#6B7280] mb-1">Start Age (optional)</label>
+                    <input
+                      type="number"
+                      min="18"
+                      max="100"
+                      value={debt.startAge || ''}
+                      onChange={(e) => {
+                        const debts = [...(answers.additionalDebts || [])];
+                        debts[idx] = { ...debts[idx], startAge: parseInt(e.target.value) || undefined };
+                        updateAnswer('additionalDebts', debts);
+                      }}
+                      className="w-full px-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] outline-none text-sm"
+                      placeholder="Now"
+                    />
+                  </div>
+                  <div className="flex flex-col justify-end gap-1">
+                    <label className="flex items-center gap-2 text-xs text-[#6B7280] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={debt.onlyAfterDebtFree || false}
+                        onChange={(e) => {
+                          const debts = [...(answers.additionalDebts || [])];
+                          debts[idx] = { ...debts[idx], onlyAfterDebtFree: e.target.checked || undefined };
+                          updateAnswer('additionalDebts', debts);
+                        }}
+                        className="w-3.5 h-3.5 text-[#5BA4E5] border-[#D1D5DB] rounded focus:ring-[#5BA4E5]"
+                      />
+                      Only after debt-free
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-[#6B7280] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={debt.onlyIfViable || false}
+                        onChange={(e) => {
+                          const debts = [...(answers.additionalDebts || [])];
+                          debts[idx] = { ...debts[idx], onlyIfViable: e.target.checked || undefined };
+                          updateAnswer('additionalDebts', debts);
+                        }}
+                        className="w-3.5 h-3.5 text-[#5BA4E5] border-[#D1D5DB] rounded focus:ring-[#5BA4E5]"
+                      />
+                      Only if viable
+                    </label>
+                  </div>
                 </div>
-              )}
-            </div>
+              </div>
+            ))}
+
+            <button
+              onClick={() => {
+                const debts = [...(answers.additionalDebts || [])];
+                debts.push({ type: 'other', totalDebt: 0, interestRate: 0.06 });
+                updateAnswer('additionalDebts', debts);
+              }}
+              className="w-full py-3 border-2 border-dashed border-[#D1D5DB] rounded-lg text-sm text-[#6B7280] hover:border-[#5BA4E5] hover:text-[#5BA4E5] transition-all"
+            >
+              + Add Debt
+            </button>
+          </div>
+        </div>
+
+        {/* Additional Annual Expenses */}
+        <div>
+          <h3 className="font-semibold text-[#2C3E50] mb-2">Annual Expenses (Optional)</h3>
+          <p className="text-sm text-[#9CA3AF] mb-4">Add recurring annual costs that affect your budget.</p>
+
+          <div className="space-y-3">
+            {(answers.additionalExpenses || []).map((expense, idx) => (
+              <div key={idx} className="bg-[#F8FAFB] rounded-lg p-4 border border-[#E5E7EB]">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-medium text-[#2C3E50]">{expense.label || 'Expense'}</span>
+                  <button
+                    onClick={() => {
+                      const expenses = [...(answers.additionalExpenses || [])];
+                      expenses.splice(idx, 1);
+                      updateAnswer('additionalExpenses', expenses);
+                    }}
+                    className="text-sm text-red-500 hover:text-red-700 font-medium"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-[#6B7280] mb-1">Label</label>
+                    <input
+                      type="text"
+                      value={expense.label || ''}
+                      onChange={(e) => {
+                        const expenses = [...(answers.additionalExpenses || [])];
+                        expenses[idx] = { ...expenses[idx], label: e.target.value };
+                        updateAnswer('additionalExpenses', expenses);
+                      }}
+                      className="w-full px-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] outline-none text-sm"
+                      placeholder="e.g. Insurance"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[#6B7280] mb-1">Annual Cost ($)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={expense.annualCost || ''}
+                      onChange={(e) => {
+                        const expenses = [...(answers.additionalExpenses || [])];
+                        expenses[idx] = { ...expenses[idx], annualCost: Number(e.target.value) || 0 };
+                        updateAnswer('additionalExpenses', expenses);
+                      }}
+                      className="w-full px-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] outline-none text-sm"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[#6B7280] mb-1">Start Age (optional)</label>
+                    <input
+                      type="number"
+                      min="18"
+                      max="100"
+                      value={expense.startAge || ''}
+                      onChange={(e) => {
+                        const expenses = [...(answers.additionalExpenses || [])];
+                        expenses[idx] = { ...expenses[idx], startAge: parseInt(e.target.value) || undefined };
+                        updateAnswer('additionalExpenses', expenses);
+                      }}
+                      className="w-full px-3 py-2 rounded border border-[#E5E7EB] focus:border-[#5BA4E5] outline-none text-sm"
+                      placeholder="Now"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <label className="flex items-center gap-2 text-xs text-[#6B7280] cursor-pointer pb-2">
+                      <input
+                        type="checkbox"
+                        checked={expense.onlyIfViable || false}
+                        onChange={(e) => {
+                          const expenses = [...(answers.additionalExpenses || [])];
+                          expenses[idx] = { ...expenses[idx], onlyIfViable: e.target.checked || undefined };
+                          updateAnswer('additionalExpenses', expenses);
+                        }}
+                        className="w-3.5 h-3.5 text-[#5BA4E5] border-[#D1D5DB] rounded focus:ring-[#5BA4E5]"
+                      />
+                      Only if viable
+                    </label>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            <button
+              onClick={() => {
+                const expenses = [...(answers.additionalExpenses || [])];
+                expenses.push({ label: '', annualCost: 0 });
+                updateAnswer('additionalExpenses', expenses);
+              }}
+              className="w-full py-3 border-2 border-dashed border-[#D1D5DB] rounded-lg text-sm text-[#6B7280] hover:border-[#5BA4E5] hover:text-[#5BA4E5] transition-all"
+            >
+              + Add Annual Expense
+            </button>
           </div>
         </div>
 
@@ -926,6 +1137,9 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
               placeholder="0"
             />
           </div>
+          <p className="mt-2 text-xs text-[#9CA3AF]">
+            Applied in Year 1 toward: credit card debt first, then loan debt, then mortgage savings.
+          </p>
         </div>
       </div>
     </div>
@@ -934,7 +1148,7 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
 
 // ===== STEP 5: ALLOCATION =====
 function Step5Allocation({ answers, updateAnswer }: StepProps) {
-  const allocation = answers.disposableIncomeAllocation || 70;
+  const allocation = answers.disposableIncomeAllocation ?? 50;
 
   return (
     <div>
@@ -1014,7 +1228,7 @@ function Step5Allocation({ answers, updateAnswer }: StepProps) {
           {/* Labels */}
           <div className="flex justify-between mt-2 text-xs text-[#6B7280]">
             <span>0%</span>
-            <span className="text-[#5BA4E5] font-medium">70% Recommended</span>
+            <span className="text-[#5BA4E5] font-medium">50% Recommended</span>
             <span>100%</span>
           </div>
         </div>
@@ -1022,8 +1236,8 @@ function Step5Allocation({ answers, updateAnswer }: StepProps) {
         {/* Recommendation Box */}
         <div className="bg-[#EFF6FF] border border-[#D1D5DB] rounded-lg p-4">
           <p className="text-sm text-[#2C3E50]">
-            <span className="font-semibold">Recommended baseline: 70%</span>
-            {' '}- This balance allows you to make meaningful progress on debts and savings while maintaining quality of life.
+            <span className="font-semibold">Recommended baseline: 50%</span>
+            {' '}- This creates a realistic balance between financial progress and quality of life, with more realistic clustering around 5-7 viability scores.
           </p>
         </div>
       </div>
@@ -1386,9 +1600,237 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
             </ul>
           </div>
         )}
+
+        {/* Region Filter */}
+        {answers.locationSituation && answers.locationSituation !== 'know-exactly' && (
+          <div>
+            <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+              Filter by Region (optional)
+            </label>
+            <p className="text-xs text-[#9CA3AF] mb-3">Select regions to focus your analysis on specific areas.</p>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.keys(REGIONS).map(region => {
+                const isSelected = (answers.locationRegions || []).includes(region);
+                return (
+                  <label
+                    key={region}
+                    className={`flex items-center px-3 py-2 rounded-lg border cursor-pointer transition-all text-sm ${
+                      isSelected ? 'border-[#5BA4E5] bg-[#EFF6FF]' : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {
+                        const regions = [...(answers.locationRegions || [])];
+                        if (isSelected) {
+                          updateAnswer('locationRegions', regions.filter(r => r !== region));
+                        } else {
+                          updateAnswer('locationRegions', [...regions, region]);
+                        }
+                      }}
+                      className="w-3.5 h-3.5 text-[#5BA4E5] border-[#D1D5DB] rounded focus:ring-[#5BA4E5] mr-2"
+                    />
+                    {region}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Climate/Weather Filter */}
+        {answers.locationSituation && answers.locationSituation !== 'know-exactly' && (
+          <div>
+            <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+              Filter by Climate (optional)
+            </label>
+            <p className="text-xs text-[#9CA3AF] mb-3">Narrow results to locations matching your climate preference.</p>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.keys(WEATHER_CATEGORIES).map(climate => {
+                const isSelected = (answers.locationClimate || []).includes(climate);
+                return (
+                  <label
+                    key={climate}
+                    className={`flex items-center px-3 py-2 rounded-lg border cursor-pointer transition-all text-sm ${
+                      isSelected ? 'border-[#5BA4E5] bg-[#EFF6FF]' : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {
+                        const climates = [...(answers.locationClimate || [])];
+                        if (isSelected) {
+                          updateAnswer('locationClimate', climates.filter(c => c !== climate));
+                        } else {
+                          updateAnswer('locationClimate', [...climates, climate]);
+                        }
+                      }}
+                      className="w-3.5 h-3.5 text-[#5BA4E5] border-[#D1D5DB] rounded focus:ring-[#5BA4E5] mr-2"
+                    />
+                    {climate}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Location Priority Mode */}
+        {answers.locationSituation && (
+          <div>
+            <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+              Ranking Priority
+            </label>
+            <p className="text-xs text-[#9CA3AF] mb-3">How should we prioritize when ranking locations?</p>
+            <div className="space-y-2">
+              {[
+                { value: 'combination', label: 'Balanced (Recommended)' },
+                { value: 'affordability', label: 'Affordability First' },
+                { value: 'climate', label: 'Climate Preference' },
+                { value: 'location', label: 'Location Preference' },
+              ].map(option => (
+                <label
+                  key={option.value}
+                  className={`flex items-center w-full px-4 py-3 rounded-lg border cursor-pointer transition-all ${
+                    (answers.locationPriority || 'combination') === option.value
+                      ? 'border-[#5BA4E5] bg-[#EFF6FF]'
+                      : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="locationPriority"
+                    value={option.value}
+                    checked={(answers.locationPriority || 'combination') === option.value}
+                    onChange={(e) => updateAnswer('locationPriority', e.target.value as any)}
+                    className="w-4 h-4 text-[#5BA4E5] border-[#D1D5DB] focus:ring-[#5BA4E5]"
+                  />
+                  <span className="ml-3 text-sm text-[#2C3E50]">{option.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-export { Step2HouseholdType, Step3AgeOccupation, Step4FinancialPortfolio, Step5Allocation, Step6Location };
+// ===== STEP 7: CONFIRMATION =====
+function Step7Confirmation({ answers, onEditStep }: { answers: Partial<OnboardingAnswers>; onEditStep: (step: number) => void }) {
+  const hardRuleLabels: Record<string, string> = {
+    'debt-before-kids': 'Pay off all debt before kids',
+    'mortgage-before-kids': 'Obtain mortgage before kids',
+    'kids-asap-viable': 'Have kids ASAP when viable',
+    'none': 'None',
+  };
+
+  const debtTypeLabels: Record<string, string> = {
+    'cc-debt': 'Credit Card',
+    'car-debt': 'Car Loan',
+    'student-loan': 'Student Loan',
+    'other': 'Other',
+  };
+
+  const Section = ({ title, step, children }: { title: string; step: number; children: React.ReactNode }) => (
+    <div className="border border-[#E5E7EB] rounded-lg p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-semibold text-[#2C3E50]">{title}</h3>
+        <button
+          onClick={() => onEditStep(step)}
+          className="text-sm text-[#5BA4E5] hover:text-[#4A93D4] font-medium"
+        >
+          Edit
+        </button>
+      </div>
+      <div className="text-sm text-[#6B7280] space-y-1">{children}</div>
+    </div>
+  );
+
+  return (
+    <div>
+      <h1 className="text-3xl font-bold text-[#2C3E50] mb-3 text-center">
+        Review Your Plan
+      </h1>
+      <p className="text-[#6B7280] mb-8 text-center">
+        Confirm your details before we calculate your results
+      </p>
+
+      <div className="space-y-4 max-w-2xl mx-auto">
+        {/* Income */}
+        <Section title="Income" step={3}>
+          <p>Occupation: <span className="text-[#2C3E50] font-medium">{answers.userOccupation || 'Not set'}</span></p>
+          {answers.currentSalaryOverride && (
+            <p>Current salary override: <span className="text-[#2C3E50] font-medium">${answers.currentSalaryOverride.toLocaleString()}</span></p>
+          )}
+          {answers.partnerOccupation && (
+            <p>Partner: <span className="text-[#2C3E50] font-medium">{answers.partnerOccupation}</span></p>
+          )}
+          {answers.relationshipStatus === 'linked' && !answers.partnerOccupation && (
+            <p className="text-xs italic">Partner income: doubled from your salary</p>
+          )}
+        </Section>
+
+        {/* Kid Plan */}
+        <Section title="Family Plan" step={2}>
+          <p>Kids plan: <span className="text-[#2C3E50] font-medium">
+            {answers.kidsPlan === 'yes' ? (
+              answers.kidsKnowledge === 'know-count'
+                ? `${answers.declaredKidCount} kid${(answers.declaredKidCount || 0) > 1 ? 's' : ''}`
+                : 'Yes (scenarios will be tested)'
+            ) : answers.kidsPlan === 'unsure' ? 'Unsure (1 kid modeled at 32)' : answers.kidsPlan === 'have-kids' ? `Already have ${answers.numKids || 0} kid(s)` : 'No'}
+          </span></p>
+          {answers.kidsPlan === 'yes' && answers.kidsKnowledge === 'know-count' && (
+            <p>Ages: <span className="text-[#2C3E50] font-medium">
+              {[answers.firstKidAge || 32, answers.declaredKidCount && answers.declaredKidCount >= 2 ? (answers.secondKidAge || 34) : null, answers.declaredKidCount && answers.declaredKidCount >= 3 ? (answers.thirdKidAge || 36) : null].filter(Boolean).join(', ')}
+            </span></p>
+          )}
+          {answers.hardRules && answers.hardRules.length > 0 && (
+            <p>Hard rules: <span className="text-[#2C3E50] font-medium">{answers.hardRules.map(r => hardRuleLabels[r] || r).join(', ')}</span></p>
+          )}
+        </Section>
+
+        {/* Debt */}
+        <Section title="Financial Portfolio" step={4}>
+          {(answers.userStudentLoanDebt || 0) > 0 && (
+            <p>Student loans: <span className="text-[#2C3E50] font-medium">${(answers.userStudentLoanDebt || 0).toLocaleString()} @ {((answers.userStudentLoanRate || 0.05) * 100).toFixed(1)}%</span></p>
+          )}
+          {(answers.additionalDebts || []).map((debt, i) => (
+            <p key={i}>{debt.label || debtTypeLabels[debt.type]}: <span className="text-[#2C3E50] font-medium">${debt.totalDebt.toLocaleString()} @ {(debt.interestRate * 100).toFixed(1)}%{debt.startAge ? ` (starts age ${debt.startAge})` : ''}{debt.onlyAfterDebtFree ? ' (after debt-free)' : ''}{debt.onlyIfViable ? ' (if viable)' : ''}</span></p>
+          ))}
+          {(answers.additionalExpenses || []).length > 0 && (
+            <>
+              <p className="font-medium text-[#2C3E50] mt-2">Annual Expenses:</p>
+              {(answers.additionalExpenses || []).map((exp, i) => (
+                <p key={i}>{exp.label}: <span className="text-[#2C3E50] font-medium">${exp.annualCost.toLocaleString()}/yr{exp.startAge ? ` (from age ${exp.startAge})` : ''}</span></p>
+              ))}
+            </>
+          )}
+          <p>Savings: <span className="text-[#2C3E50] font-medium">${(answers.savingsAccountValue || 0).toLocaleString()}</span></p>
+          <p>Allocation: <span className="text-[#2C3E50] font-medium">{answers.disposableIncomeAllocation ?? 50}%</span></p>
+        </Section>
+
+        {/* Location */}
+        <Section title="Location" step={6}>
+          <p>Situation: <span className="text-[#2C3E50] font-medium">
+            {answers.locationSituation === 'no-idea' ? 'Analyzing all locations' : answers.locationSituation === 'know-exactly' ? `Exact: ${answers.exactLocation}` : answers.locationSituation === 'currently-live-may-move' ? `Current: ${answers.currentLocation}` : 'Deciding between options'}
+          </span></p>
+          {(answers.potentialLocations || []).length > 0 && (
+            <p>Locations: <span className="text-[#2C3E50] font-medium">{answers.potentialLocations!.join(', ')}</span></p>
+          )}
+          {(answers.locationRegions || []).length > 0 && (
+            <p>Regions: <span className="text-[#2C3E50] font-medium">{answers.locationRegions!.join(', ')}</span></p>
+          )}
+          {(answers.locationClimate || []).length > 0 && (
+            <p>Climate: <span className="text-[#2C3E50] font-medium">{answers.locationClimate!.join(', ')}</span></p>
+          )}
+          <p>Priority: <span className="text-[#2C3E50] font-medium">{answers.locationPriority || 'Balanced'}</span></p>
+        </Section>
+      </div>
+    </div>
+  );
+}
+
+export { Step2HouseholdType, Step3AgeOccupation, Step4FinancialPortfolio, Step5Allocation, Step6Location, Step7Confirmation };
