@@ -1059,6 +1059,13 @@ function getStateCodeForLocation(loc: any): string {
   return parts[1] || '';
 }
 
+// Get the flag image path for a state name
+function getStateFlagPath(stateName: string): string {
+  const jpgStates = ['Illinois', 'New Jersey'];
+  const ext = jpgStates.includes(stateName) ? 'jpg' : 'png';
+  return `/flags/${stateName} Flag.${ext}`;
+}
+
 function Step6Location({ answers, updateAnswer }: StepProps) {
   const [allLocations] = useState(getAllLocations());
   const [searchTerm, setSearchTerm] = useState('');
@@ -1245,11 +1252,19 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
                             />
                             <span className="ml-3 font-medium text-[#2C3E50]">{loc.displayName}</span>
                           </div>
-                          {stateCode && (
-                            <span className="text-xs font-mono text-[#9CA3AF] bg-[#F8FAFB] px-2 py-1 rounded ml-2 font-medium">
-                              {stateCode}
-                            </span>
-                          )}
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={getStateFlagPath(loc.name)}
+                            alt={`${loc.name} flag`}
+                            className="w-8 h-6 object-cover rounded border border-[#E5E7EB] ml-2"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              if (e.currentTarget.nextElementSibling) (e.currentTarget.nextElementSibling as HTMLElement).classList.remove('hidden');
+                            }}
+                          />
+                          <span className="hidden text-xs font-mono text-[#9CA3AF] bg-[#F8FAFB] px-2 py-1 rounded ml-2 font-medium">
+                            {stateCode}
+                          </span>
                         </label>
                       );
                     })}
@@ -1302,11 +1317,26 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
                             <span className="ml-3 font-medium text-[#2C3E50] flex-1">{loc.name}</span>
                             <span className="text-sm text-[#9CA3AF] mx-3">{stateCode}</span>
                           </div>
-                          {stateCode && (
-                            <span className="text-xs font-mono text-[#9CA3AF] bg-[#F8FAFB] px-2 py-1 rounded ml-2 font-medium">
-                              {stateCode}
-                            </span>
-                          )}
+                          {(() => {
+                            const stateName = Object.entries(STATE_CODES).find(([, code]) => code === stateCode)?.[0];
+                            return stateName ? (
+                              <>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={getStateFlagPath(stateName)}
+                                  alt={`${stateName} flag`}
+                                  className="w-8 h-6 object-cover rounded border border-[#E5E7EB] ml-2"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    if (e.currentTarget.nextElementSibling) (e.currentTarget.nextElementSibling as HTMLElement).classList.remove('hidden');
+                                  }}
+                                />
+                                <span className="hidden text-xs font-mono text-[#9CA3AF] bg-[#F8FAFB] px-2 py-1 rounded ml-2 font-medium">
+                                  {stateCode}
+                                </span>
+                              </>
+                            ) : null;
+                          })()}
                         </label>
                       );
                     })}
