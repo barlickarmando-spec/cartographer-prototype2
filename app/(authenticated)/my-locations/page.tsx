@@ -12,6 +12,7 @@ import { getAdjustedCOLKey } from '@/lib/onboarding/types';
 import type { OnboardingAnswers, UserProfile } from '@/lib/onboarding/types';
 import { searchLocations, getAllLocationOptions } from '@/lib/locations';
 import { estimateHomeSizeSqft } from '@/lib/home-value-lookup';
+import { getStateFlagPath, getStateNameFromLocation } from '@/lib/state-flags';
 
 // ===== TYPES =====
 
@@ -134,7 +135,7 @@ function getViabilityLabel(result: CalculationResult): { label: string; viabilit
   }
   if (result.viabilityClassification === 'viable-extreme-care') {
     const base = labels[classification];
-    return { label: base?.label || 'Viable (Extreme Care)', viabilityStatus: 'Viable (Extreme Care)', houseSize: base?.houseSize || '', color: '#DC2626', bgColor: '#FEE2E2', barColor: '#EF4444' };
+    return { label: base?.label || 'Viable (Extreme Care)', viabilityStatus: 'Viable (Extreme Care)', houseSize: base?.houseSize || '', color: '#D97706', bgColor: '#FEF3C7', barColor: '#F59E0B' };
   }
   if (result.viabilityClassification === 'viable-higher-allocation') {
     const base = labels[classification];
@@ -416,35 +417,52 @@ function LocationCard({
       {/* ===== TOP SECTION ===== */}
       <div className="px-6 pt-5 pb-4">
         <div className="flex items-start justify-between">
-          <div className="flex-1 min-w-0">
-            {/* Row 1: Location name + Viability status badge */}
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <h3 className="text-lg font-bold text-gray-900 truncate">{result.location}</h3>
-              {isCurrent && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EFF6FF] text-[#5BA4E5] uppercase tracking-wider shrink-0">
-                  Current
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            <div className="flex-1 min-w-0">
+              {/* Row 1: Location name + Viability status badge */}
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                <h3 className="text-lg font-bold text-gray-900 truncate">{result.location}</h3>
+                {isCurrent && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EFF6FF] text-[#5BA4E5] uppercase tracking-wider shrink-0">
+                    Current
+                  </span>
+                )}
+                <span
+                  className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold shrink-0"
+                  style={{ backgroundColor: viability.bgColor, color: viability.color }}
+                >
+                  {viability.viabilityStatus}
                 </span>
-              )}
-              <span
-                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold shrink-0"
-                style={{ backgroundColor: viability.bgColor, color: viability.color }}
-              >
-                {viability.viabilityStatus}
-              </span>
-            </div>
-            {/* Row 2: Star rating + House size classification */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                <StarRating rating={starRating} />
-                <span className="text-xs font-medium text-gray-400">{starRating.toFixed(1)}</span>
               </div>
-              {viability.houseSize && (
-                <>
-                  <span className="text-gray-300">|</span>
-                  <span className="text-xs font-semibold" style={{ color: viability.color }}>{viability.houseSize}</span>
-                </>
-              )}
+              {/* Row 2: Star rating + House size classification */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <StarRating rating={starRating} />
+                  <span className="text-xs font-medium text-gray-400">{starRating.toFixed(1)}</span>
+                </div>
+                {viability.houseSize && (
+                  <>
+                    <span className="text-gray-300">|</span>
+                    <span className="text-xs font-semibold" style={{ color: viability.color }}>{viability.houseSize}</span>
+                  </>
+                )}
+              </div>
             </div>
+
+            {/* State Flag */}
+            {(() => {
+              const stateName = getStateNameFromLocation(result.location);
+              if (!stateName) return null;
+              return (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={getStateFlagPath(stateName)}
+                  alt={`${stateName} flag`}
+                  className="shrink-0 w-14 h-9 object-cover rounded border border-gray-200 mt-1"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+              );
+            })()}
           </div>
 
           {/* Wishlist Heart */}

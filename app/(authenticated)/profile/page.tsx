@@ -10,6 +10,7 @@ import { getOnboardingAnswers } from '@/lib/storage';
 import { searchLocations, getAllLocationOptions } from '@/lib/locations';
 import { getPricePerSqft, getTypicalHomeValue } from '@/lib/home-value-lookup';
 import type { OnboardingAnswers } from '@/lib/onboarding/types';
+import { getStateFlagPath, getStateNameFromLocation } from '@/lib/state-flags';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -216,9 +217,9 @@ export default function ProfilePage() {
     const houseClassification = r.houseClassification || 'viable-medium-house';
     const houseLabels: Record<string, { label: string; color: string; bgColor: string }> = {
       'very-viable-stable-large-house': { label: 'Very Viable and Stable: Large House', color: '#065F46', bgColor: '#A7F3D0' },
-      'viable-large-house': { label: 'Viable: Large House', color: '#10B981', bgColor: '#D1FAE5' },
-      'very-viable-stable-medium-house': { label: 'Very Viable and Stable: Medium House', color: '#10B981', bgColor: '#D1FAE5' },
-      'viable-medium-house': { label: 'Viable: Medium House', color: '#5BA4E5', bgColor: '#EFF6FF' },
+      'viable-large-house': { label: 'Viable: Large House', color: '#059669', bgColor: '#D1FAE5' },
+      'very-viable-stable-medium-house': { label: 'Very Viable and Stable: Medium House', color: '#059669', bgColor: '#D1FAE5' },
+      'viable-medium-house': { label: 'Viable: Medium House', color: '#2563EB', bgColor: '#DBEAFE' },
       'somewhat-viable-small-house': { label: 'Somewhat Viable: Small House', color: '#0891B2', bgColor: '#CFFAFE' },
     };
 
@@ -226,13 +227,15 @@ export default function ProfilePage() {
       return { label: 'Not Viable', color: '#DC2626', bgColor: '#FEE2E2' };
     }
     if (r.viabilityClassification === 'viable-when-renting') {
-      return { label: 'Viable When Renting', color: '#8B5CF6', bgColor: '#EDE9FE' };
+      return { label: 'Viable When Renting', color: '#7C3AED', bgColor: '#EDE9FE' };
     }
     if (r.viabilityClassification === 'viable-extreme-care') {
-      return { label: houseLabels[houseClassification]?.label || 'Viable (Extreme Care)', color: '#EF4444', bgColor: '#FEE2E2' };
+      const base = houseLabels[houseClassification];
+      return { label: base?.label || 'Viable (Extreme Care)', color: '#D97706', bgColor: '#FEF3C7' };
     }
     if (r.viabilityClassification === 'viable-higher-allocation') {
-      return { label: houseLabels[houseClassification]?.label || 'Viable (Higher Allocation)', color: '#F59E0B', bgColor: '#FEF3C7' };
+      const base = houseLabels[houseClassification];
+      return { label: base?.label || 'Viable (Higher Allocation)', color: '#D97706', bgColor: '#FEF3C7' };
     }
 
     return houseLabels[houseClassification] || houseLabels['viable-medium-house'];
@@ -245,12 +248,14 @@ export default function ProfilePage() {
     if (result.viabilityClassification === 'no-viable-path')
       return { label: 'Not Viable', color: '#DC2626', bgColor: '#FEE2E2' };
     if (result.viabilityClassification === 'viable-when-renting')
-      return { label: 'Viable When Renting', color: '#8B5CF6', bgColor: '#EDE9FE' };
+      return { label: 'Viable When Renting', color: '#7C3AED', bgColor: '#EDE9FE' };
     if (result.viabilityClassification === 'viable-extreme-care')
-      return { label: 'Viable (Extreme Care)', color: '#EF4444', bgColor: '#FEE2E2' };
+      return { label: 'Viable (Extreme Care)', color: '#D97706', bgColor: '#FEF3C7' };
     if (result.viabilityClassification === 'viable-higher-allocation')
-      return { label: 'Viable (Higher Allocation)', color: '#F59E0B', bgColor: '#FEF3C7' };
-    return { label: 'Viable', color: '#065F46', bgColor: '#A7F3D0' };
+      return { label: 'Viable (Higher Allocation)', color: '#D97706', bgColor: '#FEF3C7' };
+    if (result.viabilityClassification === 'very-viable-stable')
+      return { label: 'Very Viable', color: '#065F46', bgColor: '#A7F3D0' };
+    return { label: 'Viable', color: '#059669', bgColor: '#D1FAE5' };
   })();
 
   const starRating = Math.round(((result.numericScore ?? 0) / 10) * 5 * 2) / 2; // 0-5 half-star
@@ -382,39 +387,61 @@ export default function ProfilePage() {
         
         {/* TOP SECTION - Key Metrics */}
         <div className="bg-gradient-to-br from-[#5BA4E5] to-[#4A93D4] p-8 text-white">
-          <div className="flex items-start justify-between mb-1">
-            <h1 className="text-3xl font-bold">{result.location}</h1>
-            <span
-              className="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-semibold shrink-0 ml-3"
-              style={{ backgroundColor: viabilityBadge.bgColor, color: viabilityBadge.color }}
-            >
-              {viabilityBadge.label}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 mb-6">
-            <div className="flex items-center gap-0.5">
-              {[1, 2, 3, 4, 5].map(i => {
-                if (starRating >= i) {
-                  return <svg key={i} className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
-                } else if (starRating >= i - 0.5) {
-                  return <svg key={i} className="w-4 h-4" viewBox="0 0 24 24"><defs><linearGradient id={`pstar-${i}`}><stop offset="50%" stopColor="#FACC15" /><stop offset="50%" stopColor="rgba(255,255,255,0.3)" /></linearGradient></defs><path fill={`url(#pstar-${i})`} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
-                }
-                return <svg key={i} className="w-4 h-4 text-white/30" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
-              })}
+          <div className="flex items-start justify-between mb-6">
+            {/* Left: text column */}
+            <div className="flex-1 min-w-0">
+              <h1 className="text-3xl font-bold mb-2">{result.location}</h1>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-0.5">
+                  {[1, 2, 3, 4, 5].map(i => {
+                    if (starRating >= i) {
+                      return <svg key={i} className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
+                    } else if (starRating >= i - 0.5) {
+                      return <svg key={i} className="w-4 h-4" viewBox="0 0 24 24"><defs><linearGradient id={`pstar-${i}`}><stop offset="50%" stopColor="#FACC15" /><stop offset="50%" stopColor="rgba(255,255,255,0.3)" /></linearGradient></defs><path fill={`url(#pstar-${i})`} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
+                    }
+                    return <svg key={i} className="w-4 h-4 text-white/30" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
+                  })}
+                </div>
+                <span className="text-white/70 text-sm font-semibold">{(result.numericScore ?? 0).toFixed(1)}/10</span>
+                <span className="text-white/40 mx-1">|</span>
+                <span className="text-white/80 text-sm">Your Financial Roadmap</span>
+              </div>
             </div>
-            <span className="text-white/70 text-sm font-semibold">{(result.numericScore ?? 0).toFixed(1)}/10</span>
-            <span className="text-white/40 mx-1">|</span>
-            <span className="text-white/80 text-sm">Your Financial Roadmap</span>
+
+            {/* Right: flag + viability badge */}
+            <div className="flex items-center gap-3 shrink-0 ml-4">
+              {/* State Flag — spans both text lines */}
+              {(() => {
+                const stateName = getStateNameFromLocation(result.location);
+                if (!stateName) return null;
+                return (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={getStateFlagPath(stateName)}
+                    alt={`${stateName} flag`}
+                    className="w-20 h-14 object-cover rounded-lg border-2 border-white/30"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                );
+              })()}
+              <span
+                className="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-semibold"
+                style={{ backgroundColor: viabilityBadge.bgColor, color: viabilityBadge.color }}
+              >
+                {viabilityBadge.label}
+              </span>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {/* Time to Home Ownership - matches max home value timeline */}
+            {/* Time to Home Ownership - only show if calculable */}
+            {(result.houseProjections.maxAffordable || result.yearsToMortgage > 0) && (
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
               <p className="text-white/70 text-sm mb-1">Time to Homeownership</p>
               <p className="text-2xl font-bold">
                 {result.houseProjections.maxAffordable
                   ? pluralize(result.houseProjections.maxAffordable.year, 'year')
-                  : result.yearsToMortgage > 0 ? pluralize(result.yearsToMortgage, 'year') : 'N/A'}
+                  : pluralize(result.yearsToMortgage, 'year')}
               </p>
               {result.houseProjections.maxAffordable ? (
                 <p className="text-white/60 text-xs mt-1">At age {result.houseProjections.maxAffordable.age}</p>
@@ -422,6 +449,7 @@ export default function ProfilePage() {
                 <p className="text-white/60 text-xs mt-1">At age {result.ageMortgageAcquired}</p>
               ) : null}
             </div>
+            )}
 
             {/* Projected Home Value (max affordable) */}
             <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
@@ -1017,40 +1045,17 @@ export default function ProfilePage() {
                 : reqSqFt <= 1800 ? 'kids planned'
                 : 'multiple kids planned';
 
-              if (fastProj) {
-                return (
-                  <HouseProjectionCard
-                    title="Fastest to Homeownership"
-                    subtitle={`Fastest path to a ${fastSqFt.toLocaleString()} sqft home (${kidLabel})`}
-                    projection={fastProj}
-                    location={result.location}
-                    showHomes={showFastestHomes}
-                    onToggle={() => setShowFastestHomes(!showFastestHomes)}
-                  />
-                );
-              }
+              if (!fastProj) return null;
 
               return (
-                <div className="bg-white border border-[#E5E7EB] rounded-xl overflow-hidden">
-                  <div className="px-6 py-5">
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <h3 className="font-bold text-[#2C3E50] text-lg">Fastest to Homeownership</h3>
-                        <p className="text-[#6B7280] text-sm">
-                          Fastest path to a {fastSqFt.toLocaleString()} sqft home ({kidLabel})
-                        </p>
-                      </div>
-                    </div>
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
-                      <p className="text-amber-800 text-sm">
-                        A {fastSqFt.toLocaleString()} sqft home is not reachable within the simulation period.
-                        {result.houseProjections.maxAffordable && (
-                          <span> Your max affordable home is ${result.houseProjections.maxAffordable.maxSustainableHousePrice.toLocaleString()}.</span>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <HouseProjectionCard
+                  title="Fastest to Homeownership"
+                  subtitle={`Fastest path to a ${fastSqFt.toLocaleString()} sqft home (${kidLabel})`}
+                  projection={fastProj}
+                  location={result.location}
+                  showHomes={showFastestHomes}
+                  onToggle={() => setShowFastestHomes(!showFastestHomes)}
+                />
               );
             })()}
 
@@ -1141,9 +1146,7 @@ export default function ProfilePage() {
                   <div className="mt-4">
                     <HouseProjectionCard
                       title={`After ${customSearchValue} ${customSearchUnit}`}
-                      subtitle={customSearchProjection.sustainabilityLimited
-                        ? 'Limited by income — even with more time, the max sustainable price stays similar'
-                        : `What you can afford after saving for ${customSearchValue} ${customSearchUnit}`}
+                      subtitle={`What you can afford after saving for ${customSearchValue} ${customSearchUnit}`}
                       projection={customSearchProjection}
                       location={result.location}
                       showHomes={showCustomHomes}
@@ -1353,14 +1356,6 @@ export default function ProfilePage() {
                                   : 'text-red-600'
                               }`}>
                                 ${result.houseProjections.maxAffordable.postMortgageDisposableIncome.toLocaleString()}/yr
-                              </td>
-                            </tr>
-                            <tr>
-                              <td className="px-4 py-3 text-[#4B5563]">Limited By</td>
-                              <td className="px-4 py-3 text-right font-medium text-[#2C3E50]">
-                                {result.houseProjections.maxAffordable.sustainabilityLimited
-                                  ? 'Income (annual cost cap)'
-                                  : 'Savings (need more time)'}
                               </td>
                             </tr>
                           </>
@@ -1655,9 +1650,6 @@ function HouseProjectionCard({ title, subtitle, projection, location, showHomes,
             <p className="text-2xl font-bold text-[#2C3E50]">
               {formatCurrency(projection.maxSustainableHousePrice)}
             </p>
-            {projection.sustainabilityLimited && (
-              <p className="text-xs text-[#EF4444] mt-1">Limited by income</p>
-            )}
           </div>
 
           {/* Estimated Size */}
@@ -1692,14 +1684,6 @@ function HouseProjectionCard({ title, subtitle, projection, location, showHomes,
           </div>
         </div>
 
-        {/* Affordability Status */}
-        {!projection.canAfford && (
-          <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-            <p className="text-sm text-yellow-800">
-              You&apos;ll need to save longer to afford the down payment
-            </p>
-          </div>
-        )}
       </div>
 
       {/* See Potential Homes Button */}
