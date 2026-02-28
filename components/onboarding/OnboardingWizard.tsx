@@ -756,26 +756,6 @@ function Step3AgeOccupation({ answers, updateAnswer }: StepProps) {
           </div>
         )}
 
-        {/* Salary Override for current location */}
-        <div>
-          <label className="block text-sm font-medium text-[#2C3E50] mb-2">
-            Current salary (optional)
-          </label>
-          <p className="text-xs text-[#9CA3AF] mb-2">
-            If you know your current salary, enter it here. This will be used for your current location; other locations will use regional averages for your occupation.
-          </p>
-          <div className="relative">
-            <span className="absolute left-4 top-3.5 text-[#6B7280]">$</span>
-            <input
-              type="number"
-              min="0"
-              value={answers.currentSalaryOverride || ''}
-              onChange={(e) => updateAnswer('currentSalaryOverride', parseInt(e.target.value) || undefined)}
-              className="w-full pl-8 pr-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
-              placeholder="Leave blank to use location averages"
-            />
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -1601,6 +1581,52 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
           </div>
         )}
 
+        {/* Salary Override for current location - shown after location selection */}
+        {answers.locationSituation && (
+          <div>
+            <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+              Current salary (optional)
+            </label>
+            <p className="text-xs text-[#9CA3AF] mb-2">
+              If you know your current salary, enter it here. This will be used for your current location; other locations will use regional averages for your occupation.
+            </p>
+            <div className="relative">
+              <span className="absolute left-4 top-3.5 text-[#6B7280]">$</span>
+              <input
+                type="number"
+                min="0"
+                value={answers.currentSalaryOverride || ''}
+                onChange={(e) => updateAnswer('currentSalaryOverride', parseInt(e.target.value) || undefined)}
+                className="w-full pl-8 pr-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+                placeholder="Leave blank to use location averages"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Partner Salary - only if in a financially linked relationship */}
+        {answers.locationSituation && answers.relationshipStatus === 'linked' && (
+          <div>
+            <label className="block text-sm font-medium text-[#2C3E50] mb-2">
+              Partner&apos;s current salary (optional)
+            </label>
+            <p className="text-xs text-[#9CA3AF] mb-2">
+              If you know your partner&apos;s current salary, enter it here. If left blank and no partner occupation is set, income doubling (your salary × 2) will be used.
+            </p>
+            <div className="relative">
+              <span className="absolute left-4 top-3.5 text-[#6B7280]">$</span>
+              <input
+                type="number"
+                min="0"
+                value={answers.partnerSalary || ''}
+                onChange={(e) => updateAnswer('partnerSalary', parseInt(e.target.value) || undefined)}
+                className="w-full pl-8 pr-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
+                placeholder="Leave blank to use location averages"
+              />
+            </div>
+          </div>
+        )}
+
         {/* Region Filter */}
         {answers.locationSituation && answers.locationSituation !== 'know-exactly' && (
           <div>
@@ -1762,13 +1788,10 @@ function Step7Confirmation({ answers, onEditStep }: { answers: Partial<Onboardin
         {/* Income */}
         <Section title="Income" step={3}>
           <p>Occupation: <span className="text-[#2C3E50] font-medium">{answers.userOccupation || 'Not set'}</span></p>
-          {answers.currentSalaryOverride && (
-            <p>Current salary override: <span className="text-[#2C3E50] font-medium">${answers.currentSalaryOverride.toLocaleString()}</span></p>
-          )}
           {answers.partnerOccupation && (
             <p>Partner: <span className="text-[#2C3E50] font-medium">{answers.partnerOccupation}</span></p>
           )}
-          {answers.relationshipStatus === 'linked' && !answers.partnerOccupation && (
+          {answers.relationshipStatus === 'linked' && !answers.partnerOccupation && !answers.partnerSalary && (
             <p className="text-xs italic">Partner income: doubled from your salary</p>
           )}
         </Section>
@@ -1827,6 +1850,12 @@ function Step7Confirmation({ answers, onEditStep }: { answers: Partial<Onboardin
             <p>Climate: <span className="text-[#2C3E50] font-medium">{answers.locationClimate!.join(', ')}</span></p>
           )}
           <p>Priority: <span className="text-[#2C3E50] font-medium">{answers.locationPriority || 'Balanced'}</span></p>
+          {answers.currentSalaryOverride && (
+            <p>Current salary override: <span className="text-[#2C3E50] font-medium">${answers.currentSalaryOverride.toLocaleString()}</span></p>
+          )}
+          {answers.partnerSalary && (
+            <p>Partner salary: <span className="text-[#2C3E50] font-medium">${answers.partnerSalary.toLocaleString()}</span></p>
+          )}
         </Section>
       </div>
     </div>
