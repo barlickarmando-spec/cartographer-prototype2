@@ -332,16 +332,20 @@ function calculateAutoApproach(
 
     let simProfile = profile;
     if (hasAsapRule && profile.kidsPlan !== 'no') {
-      const viableAges: number[] = [];
+      // Respect the user's declared kid count — don't inflate beyond what they asked for
+      const userWantedKids = Math.min(3, profile.declaredKidCount || (profile.plannedKidAges?.length || 0));
+      const allViableAges: number[] = [];
       if (kidViability.firstKid.isViable && kidViability.firstKid.minimumAge != null) {
-        viableAges.push(kidViability.firstKid.minimumAge);
+        allViableAges.push(kidViability.firstKid.minimumAge);
       }
       if (kidViability.secondKid.isViable && kidViability.secondKid.minimumAge != null) {
-        viableAges.push(kidViability.secondKid.minimumAge);
+        allViableAges.push(kidViability.secondKid.minimumAge);
       }
       if (kidViability.thirdKid.isViable && kidViability.thirdKid.minimumAge != null) {
-        viableAges.push(kidViability.thirdKid.minimumAge);
+        allViableAges.push(kidViability.thirdKid.minimumAge);
       }
+      // Only take as many viable ages as the user actually wants
+      const viableAges = allViableAges.slice(0, userWantedKids);
       if (viableAges.length > 0) {
         simProfile = {
           ...profile,
@@ -652,15 +656,20 @@ function runYearByYearSimulation(
     const canHaveKidByRules = checkKidHardRules(profile.hardRules, loanDebt, hasMortgage, ccDebtAmount);
 
     if (hasAsapRule && profile.plannedKidAges && profile.plannedKidAges.length > 0) {
-      // kids-asap-viable: birth kids at pre-computed minimum viable ages unconditionally
-      // (viable ages were injected by calculateAutoApproach from kidViability results)
+      // kids-asap-viable: birth kids at pre-computed minimum viable ages
+      // BUT still respect stacking hard rules (debt-before-kids, mortgage-before-kids)
+      // Priority: pay off debt → get mortgage → have kids ASAP
       const kidsScheduled = profile.plannedKidAges.filter(age => age <= ageThisYear).length;
       if (kidsScheduled > currentNumKids && currentNumKids < 3) {
-        currentNumKids++;
-        kidBornThisYear = currentNumKids;
-        const relStatus = relationshipStarted ? 'linked' : 'single';
-        currentHouseholdType = determineHouseholdType(relStatus as any, currentNumEarners, currentNumKids);
-        debugNotes.push(`Kid #${kidBornThisYear} born at age ${ageThisYear} (kids-asap-viable)`);
+        if (canHaveKidByRules) {
+          currentNumKids++;
+          kidBornThisYear = currentNumKids;
+          const relStatus = relationshipStarted ? 'linked' : 'single';
+          currentHouseholdType = determineHouseholdType(relStatus as any, currentNumEarners, currentNumKids);
+          debugNotes.push(`Kid #${kidBornThisYear} born at age ${ageThisYear} (kids-asap-viable)`);
+        } else {
+          debugNotes.push(`Kid deferred at age ${ageThisYear} — waiting for hard rule conditions (debt/mortgage)`);
+        }
       }
     } else if (profile.plannedKidAges && profile.plannedKidAges.length > 0) {
       // Standard path: check if a kid is scheduled at or after planned age
