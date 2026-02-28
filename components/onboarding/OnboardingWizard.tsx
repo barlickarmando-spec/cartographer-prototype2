@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { OnboardingAnswers, DebtEntry, AnnualExpense } from "@/lib/onboarding/types";
 import { getAllLocations, getOccupationList } from "@/lib/data-extraction";
 import { STATE_CODES, STATE_NAMES, getStateFlagPath } from "@/lib/state-flags";
@@ -1243,13 +1243,26 @@ function FilterSearchDropdown({
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
 
   const filtered = options.filter(opt =>
     opt.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
-    <div>
+    <div ref={containerRef}>
       <label className="block text-sm font-medium text-[#2C3E50] mb-2">{label}</label>
       <p className="text-xs text-[#9CA3AF] mb-3">{description}</p>
 
@@ -1292,7 +1305,7 @@ function FilterSearchDropdown({
           placeholder={`Search ${label.toLowerCase().replace(' (optional)', '')}...`}
         />
         <button
-          onClick={() => setIsOpen(!isOpen)}
+          onMouseDown={(e) => { e.preventDefault(); setIsOpen(!isOpen); }}
           className="absolute right-3 top-3.5 text-[#6B7280]"
         >
           {isOpen ? '▲' : '▼'}
@@ -1660,8 +1673,8 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
           />
         )}
 
-        {/* Salary Override for current location - shown after location selection */}
-        {answers.locationSituation && (
+        {/* Salary Override for current location - only when user specifies a location */}
+        {(answers.locationSituation === 'know-exactly' || answers.locationSituation === 'currently-live-may-move') && (
           <div>
             <label className="block text-sm font-medium text-[#2C3E50] mb-2">
               Current salary (optional)
@@ -1680,8 +1693,8 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
           </div>
         )}
 
-        {/* Partner Salary - only if in a financially linked relationship */}
-        {answers.locationSituation && answers.relationshipStatus === 'linked' && (
+        {/* Partner Salary - only when user specifies a location and is in a linked relationship */}
+        {(answers.locationSituation === 'know-exactly' || answers.locationSituation === 'currently-live-may-move') && answers.relationshipStatus === 'linked' && (
           <div>
             <label className="block text-sm font-medium text-[#2C3E50] mb-2">
               Partner&apos;s current salary (optional)

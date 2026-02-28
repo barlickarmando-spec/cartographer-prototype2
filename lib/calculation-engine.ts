@@ -610,33 +610,34 @@ function runYearByYearSimulation(
     
     // === LIFE EVENT: KIDS BORN ===
     let kidBornThisYear = 0;
-    if (profile.plannedKidAges && profile.plannedKidAges.length > 0) {
-      const kidIndex = profile.plannedKidAges.findIndex(age => age === ageThisYear);
-      if (kidIndex >= 0) {
-        // Check hard rules — now checks ALL active debt, not just student loans
-        const canHaveKid = checkKidHardRules(profile.hardRules, loanDebt, hasMortgage, ccDebtAmount);
-        if (canHaveKid) {
-          currentNumKids++;
-          kidBornThisYear = currentNumKids;
-          const relStatus = relationshipStarted ? 'linked' : 'single';
-          currentHouseholdType = determineHouseholdType(relStatus as any, currentNumEarners, currentNumKids);
-          debugNotes.push(`Kid #${kidBornThisYear} born at age ${ageThisYear}`);
-        } else {
-          debugNotes.push(`Kid blocked by hard rules at age ${ageThisYear}`);
-        }
-      }
-    }
+    const maxPlannedKids = profile.declaredKidCount || (profile.plannedKidAges?.length || 0);
+    const hasAsapRule = profile.hardRules && profile.hardRules.includes('kids-asap-viable');
+    const canHaveKidByRules = checkKidHardRules(profile.hardRules, loanDebt, hasMortgage, ccDebtAmount);
 
-    // === KIDS-ASAP-VIABLE HARD RULE ===
-    // If user has this rule, trigger a kid birth when conditions are right, even if not the planned age
-    if (profile.hardRules && profile.hardRules.includes('kids-asap-viable') && kidBornThisYear === 0) {
-      const maxPlannedKids = profile.declaredKidCount || (profile.plannedKidAges?.length || 0);
-      if (currentNumKids < maxPlannedKids && lastYearScore >= 5 && savings > 5000) {
+    if (hasAsapRule && currentNumKids < maxPlannedKids) {
+      // kids-asap-viable: ignore planned ages, have kids as soon as hard rules + viability allow
+      if (canHaveKidByRules && lastYearScore >= 5 && savings > 5000) {
         currentNumKids++;
         kidBornThisYear = currentNumKids;
         const relStatus = relationshipStarted ? 'linked' : 'single';
         currentHouseholdType = determineHouseholdType(relStatus as any, currentNumEarners, currentNumKids);
-        debugNotes.push(`Kid #${kidBornThisYear} born at age ${ageThisYear} (kids-asap-viable triggered)`);
+        debugNotes.push(`Kid #${kidBornThisYear} born at age ${ageThisYear} (kids-asap-viable)`);
+      }
+    } else if (profile.plannedKidAges && profile.plannedKidAges.length > 0) {
+      // Standard path: check if a kid is scheduled at or after planned age
+      // kidsOwed tracks kids whose planned age has passed but were blocked by hard rules
+      const kidsOwed = profile.plannedKidAges.filter(age => age <= ageThisYear).length - currentNumKids;
+      if (kidsOwed > 0) {
+        if (canHaveKidByRules) {
+          currentNumKids++;
+          kidBornThisYear = currentNumKids;
+          const relStatus = relationshipStarted ? 'linked' : 'single';
+          currentHouseholdType = determineHouseholdType(relStatus as any, currentNumEarners, currentNumKids);
+          const wasDeferred = !profile.plannedKidAges.includes(ageThisYear);
+          debugNotes.push(`Kid #${kidBornThisYear} born at age ${ageThisYear}${wasDeferred ? ' (deferred by hard rules)' : ''}`);
+        } else {
+          debugNotes.push(`Kid deferred by hard rules at age ${ageThisYear}`);
+        }
       }
     }
 
