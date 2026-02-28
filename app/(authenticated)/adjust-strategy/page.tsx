@@ -9,6 +9,7 @@ import {
   Step3AgeOccupation,
   Step4FinancialPortfolio,
   Step5Allocation,
+  Step6Location,
 } from "@/components/onboarding/OnboardingWizard";
 import type { OnboardingAnswers } from "@/lib/onboarding/types";
 import { normalizeOnboardingAnswers } from "@/lib/onboarding/normalize";
@@ -26,6 +27,7 @@ const STEPS = [
   { key: 3, label: "Job & Occupation" },
   { key: 4, label: "Financial Portfolio" },
   { key: 5, label: "Allocation" },
+  { key: 6, label: "Location" },
 ] as const;
 
 export default function AdjustStrategyPage() {
@@ -172,6 +174,9 @@ export default function AdjustStrategyPage() {
           )}
           {step.key === 5 && (
             <Step5Allocation answers={answers} updateAnswer={updateAnswer} />
+          )}
+          {step.key === 6 && (
+            <Step6Location answers={answers} updateAnswer={updateAnswer} />
           )}
         </div>
 

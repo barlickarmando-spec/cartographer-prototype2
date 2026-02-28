@@ -676,8 +676,16 @@ function runYearByYearSimulation(
     
     if (currentNumEarners === 2) {
       if (profile.partnerOccupation) {
-        partnerIncome = getSalary(locationData.name, profile.partnerOccupation, profile.partnerSalary);
+        // Use partner salary override for current location, location averages elsewhere
+        const partnerSalaryForLocation = (profile.partnerSalary && locationData.name === profile.currentSalaryLocation)
+          ? profile.partnerSalary
+          : getSalary(locationData.name, profile.partnerOccupation, undefined);
+        partnerIncome = partnerSalaryForLocation;
         debugNotes.push(`Partner income from occupation: $${partnerIncome}`);
+      } else if (profile.partnerSalary) {
+        // Partner salary provided directly without occupation
+        partnerIncome = profile.partnerSalary;
+        debugNotes.push(`Partner income from manual salary: $${partnerIncome}`);
       } else if (profile.usePartnerIncomeDoubling || relationshipStarted) {
         // Income doubling rule
         partnerIncome = userIncome;

@@ -508,25 +508,6 @@ function Step2HouseholdType({ answers, updateAnswer }: StepProps) {
                 </div>
               )}
 
-              {/* Info for "don't know count" */}
-              {answers.kidsKnowledge === 'dont-know-count' && (
-                <div className="bg-[#EFF6FF] border border-[#5BA4E5] rounded-lg p-4">
-                  <p className="text-sm text-[#2C3E50]">
-                    We&apos;ll run scenarios for 1, 2, and 3 kids and recommend the most viable plan for your situation.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Unsure about kids - info note */}
-          {answers.kidsPlan === 'unsure' && (
-            <div className="mt-4">
-              <div className="bg-[#EFF6FF] border border-[#5BA4E5] rounded-lg p-4">
-                <p className="text-sm text-[#2C3E50]">
-                  We&apos;ll model 1 kid at age 32 as a baseline and stress-test your plan as if you had 2 kids to ensure sustainability.
-                </p>
-              </div>
             </div>
           )}
 
@@ -586,9 +567,6 @@ function Step2HouseholdType({ answers, updateAnswer }: StepProps) {
           <label className="block text-sm font-medium text-[#2C3E50] mb-2">
             Should we set any of these hard rules?
           </label>
-          <p className="text-sm text-[#9CA3AF] mb-4">
-            These are hard parameters for the formula and will affect your calculations
-          </p>
           <div className="space-y-3">
             {[
               { value: 'debt-before-kids', label: 'Pay off all student debt before having kids' },
@@ -709,12 +687,6 @@ function Step3AgeOccupation({ answers, updateAnswer }: StepProps) {
             ))}
           </select>
 
-          {/* Salary note */}
-          {answers.userOccupation && (
-            <p className="mt-2 text-xs text-[#9CA3AF]">
-              Salary is automatically adjusted per location based on regional data for this occupation.
-            </p>
-          )}
         </div>
 
         {/* Partner Occupation - if linked */}
@@ -735,25 +707,8 @@ function Step3AgeOccupation({ answers, updateAnswer }: StepProps) {
                 ))}
               </select>
 
-              {/* Partner salary note */}
-              {answers.partnerOccupation && (
-                <p className="mt-2 text-xs text-[#9CA3AF]">
-                  Partner salary is automatically adjusted per location based on regional data.
-                </p>
-              )}
             </div>
           </>
-        )}
-
-        {/* Info note about income doubling */}
-        {answers.relationshipStatus === 'single' && (answers.relationshipPlans === 'yes' || answers.relationshipPlans === 'unsure') && (
-          <div className="bg-[#EFF6FF] border border-[#5BA4E5] rounded-lg p-4">
-            <p className="text-sm text-[#2C3E50]">
-              <strong>Note:</strong> Since you&apos;re planning a relationship but don&apos;t have a partner yet,
-              we&apos;ll use income doubling (your salary × 2) when you enter a relationship unless you
-              specify a partner occupation later.
-            </p>
-          </div>
         )}
 
       </div>
@@ -857,7 +812,6 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
         {/* Additional Debts — Dynamic List */}
         <div>
           <h3 className="font-semibold text-[#2C3E50] mb-2">Additional Debts (Optional)</h3>
-          <p className="text-sm text-[#9CA3AF] mb-4">Add any debts beyond student loans. Each can have optional conditions.</p>
 
           <div className="space-y-3">
             {(answers.additionalDebts || []).map((debt, idx) => (
@@ -1027,7 +981,6 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
         {/* Additional Annual Expenses */}
         <div>
           <h3 className="font-semibold text-[#2C3E50] mb-2">Annual Expenses (Optional)</h3>
-          <p className="text-sm text-[#9CA3AF] mb-4">Add recurring annual costs that affect your budget.</p>
 
           <div className="space-y-3">
             {(answers.additionalExpenses || []).map((expense, idx) => (
@@ -1707,30 +1660,12 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
           />
         )}
 
-        {/* No Idea Info */}
-        {answers.locationSituation === 'no-idea' && (
-          <div className="bg-[#EFF6FF] border border-[#5BA4E5] rounded-lg p-5">
-            <p className="text-sm text-[#2C3E50] mb-2">
-              <strong>We&apos;ll analyze all {allLocations.length} locations</strong> (states + major cities) and recommend the best fits based on:
-            </p>
-            <ul className="text-sm text-[#6B7280] space-y-1 ml-4">
-              <li>• Your occupation and expected salary</li>
-              <li>• Cost of living for your household type</li>
-              <li>• Housing affordability</li>
-              <li>• Years to achieve your financial goals</li>
-            </ul>
-          </div>
-        )}
-
         {/* Salary Override for current location - shown after location selection */}
         {answers.locationSituation && (
           <div>
             <label className="block text-sm font-medium text-[#2C3E50] mb-2">
               Current salary (optional)
             </label>
-            <p className="text-xs text-[#9CA3AF] mb-2">
-              If you know your current salary, enter it here. This will be used for your current location; other locations will use regional averages for your occupation.
-            </p>
             <div className="relative">
               <span className="absolute left-4 top-3.5 text-[#6B7280]">$</span>
               <input
@@ -1751,9 +1686,6 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
             <label className="block text-sm font-medium text-[#2C3E50] mb-2">
               Partner&apos;s current salary (optional)
             </label>
-            <p className="text-xs text-[#9CA3AF] mb-2">
-              If you know your partner&apos;s current salary, enter it here. If left blank and no partner occupation is set, income doubling (your salary × 2) will be used.
-            </p>
             <div className="relative">
               <span className="absolute left-4 top-3.5 text-[#6B7280]">$</span>
               <input
@@ -1806,34 +1738,32 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
           />
         )}
 
-        {/* Location Priority Mode */}
+        {/* Location Type Preference */}
         {answers.locationSituation && (
           <div>
-            <label className="block text-sm font-medium text-[#2C3E50] mb-2">
-              Ranking Priority
+            <label className="block text-sm font-medium text-[#2C3E50] mb-3">
+              Location type preference
             </label>
-            <p className="text-xs text-[#9CA3AF] mb-3">How should we prioritize when ranking locations?</p>
             <div className="space-y-2">
               {[
-                { value: 'combination', label: 'Balanced (Recommended)' },
-                { value: 'affordability', label: 'Affordability First' },
-                { value: 'climate', label: 'Climate Preference' },
-                { value: 'location', label: 'Location Preference' },
+                { value: 'cities', label: 'Cities' },
+                { value: 'towns', label: 'Towns / Outside of the city' },
+                { value: 'both', label: 'Both' },
               ].map(option => (
                 <label
                   key={option.value}
                   className={`flex items-center w-full px-4 py-3 rounded-lg border cursor-pointer transition-all ${
-                    (answers.locationPriority || 'combination') === option.value
+                    (answers.locationTypePreference || 'both') === option.value
                       ? 'border-[#5BA4E5] bg-[#EFF6FF]'
                       : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
                   }`}
                 >
                   <input
                     type="radio"
-                    name="locationPriority"
+                    name="locationTypePreference"
                     value={option.value}
-                    checked={(answers.locationPriority || 'combination') === option.value}
-                    onChange={(e) => updateAnswer('locationPriority', e.target.value as any)}
+                    checked={(answers.locationTypePreference || 'both') === option.value}
+                    onChange={(e) => updateAnswer('locationTypePreference', e.target.value as any)}
                     className="w-4 h-4 text-[#5BA4E5] border-[#D1D5DB] focus:ring-[#5BA4E5]"
                   />
                   <span className="ml-3 text-sm text-[#2C3E50]">{option.label}</span>
@@ -1952,7 +1882,7 @@ function Step7Confirmation({ answers, onEditStep }: { answers: Partial<Onboardin
           {(answers.locationClimate || []).length > 0 && (
             <p>Climate: <span className="text-[#2C3E50] font-medium">{answers.locationClimate!.join(', ')}</span></p>
           )}
-          <p>Priority: <span className="text-[#2C3E50] font-medium">{answers.locationPriority || 'Balanced'}</span></p>
+          <p>Type: <span className="text-[#2C3E50] font-medium">{answers.locationTypePreference === 'cities' ? 'Cities' : answers.locationTypePreference === 'towns' ? 'Towns' : 'Both'}</span></p>
           {answers.currentSalaryOverride && (
             <p>Current salary override: <span className="text-[#2C3E50] font-medium">${answers.currentSalaryOverride.toLocaleString()}</span></p>
           )}

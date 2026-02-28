@@ -48,6 +48,7 @@ function buildTestProfile(): UserProfile {
     locationRegions: [],
     locationClimate: [],
     locationPriority: "combination",
+    locationTypePreference: "both",
   };
 }
 
