@@ -292,9 +292,35 @@ function calculateAutoApproach(
       return createErrorResult(locationName, locationData, `Invalid profile: ${validationErrors.join(', ')}`);
     }
     
+    // Pre-compute kid viability to find minimum viable ages
+    // When kids-asap-viable is selected, use these ages as hard birth dates
+    const kidViability = calculateKidViability(profile, locationData);
+    const hasAsapRule = profile.hardRules && profile.hardRules.includes('kids-asap-viable');
+
+    let simProfile = profile;
+    if (hasAsapRule && profile.kidsPlan !== 'no') {
+      const viableAges: number[] = [];
+      if (kidViability.firstKid.isViable && kidViability.firstKid.minimumAge != null) {
+        viableAges.push(kidViability.firstKid.minimumAge);
+      }
+      if (kidViability.secondKid.isViable && kidViability.secondKid.minimumAge != null) {
+        viableAges.push(kidViability.secondKid.minimumAge);
+      }
+      if (kidViability.thirdKid.isViable && kidViability.thirdKid.minimumAge != null) {
+        viableAges.push(kidViability.thirdKid.minimumAge);
+      }
+      if (viableAges.length > 0) {
+        simProfile = {
+          ...profile,
+          plannedKidAges: viableAges,
+          declaredKidCount: viableAges.length,
+        };
+      }
+    }
+
     // Run year-by-year simulation
     console.log(`Starting simulation for ${locationName}, ${simulationYears} years`);
-    const simulation = runYearByYearSimulation(profile, locationData, simulationYears);
+    const simulation = runYearByYearSimulation(simProfile, locationData, simulationYears);
     
     if (simulation.snapshots.length === 0) {
       return createErrorResult(locationName, locationData, 'Simulation produced no results');
@@ -338,8 +364,7 @@ function calculateAutoApproach(
       houseProjections, locationPricePerSqft, requiredHousePrice, largeHousePrice, requiredSqFt
     );
 
-    // Kid viability
-    const kidViability = calculateKidViability(profile, locationData);
+    // Kid viability (already computed above, before main simulation)
 
     // Numeric Score (0-10 precision) — now includes Home Size Fit component
     const numericScore = calculateNumericScore(
@@ -610,17 +635,15 @@ function runYearByYearSimulation(
     
     // === LIFE EVENT: KIDS BORN ===
     let kidBornThisYear = 0;
-    let maxPlannedKids = Math.min(3, profile.declaredKidCount || (profile.plannedKidAges?.length || 0));
+    const maxPlannedKids = Math.min(3, profile.declaredKidCount || (profile.plannedKidAges?.length || 0));
     const hasAsapRule = profile.hardRules && profile.hardRules.includes('kids-asap-viable');
-    // For kids-asap-viable with no declared count, default to 3 (the cap)
-    if (hasAsapRule && maxPlannedKids === 0) {
-      maxPlannedKids = 3;
-    }
     const canHaveKidByRules = checkKidHardRules(profile.hardRules, loanDebt, hasMortgage, ccDebtAmount);
 
-    if (hasAsapRule && currentNumKids < maxPlannedKids) {
-      // kids-asap-viable: ignore planned ages, have kids as soon as hard rules + viability allow
-      if (canHaveKidByRules && lastYearScore >= 3 && savings > 2000) {
+    if (hasAsapRule && profile.plannedKidAges && profile.plannedKidAges.length > 0) {
+      // kids-asap-viable: birth kids at pre-computed minimum viable ages unconditionally
+      // (viable ages were injected by calculateAutoApproach from kidViability results)
+      const kidsScheduled = profile.plannedKidAges.filter(age => age <= ageThisYear).length;
+      if (kidsScheduled > currentNumKids && currentNumKids < 3) {
         currentNumKids++;
         kidBornThisYear = currentNumKids;
         const relStatus = relationshipStarted ? 'linked' : 'single';
@@ -631,7 +654,7 @@ function runYearByYearSimulation(
       // Standard path: check if a kid is scheduled at or after planned age
       // kidsOwed tracks kids whose planned age has passed but were blocked by hard rules
       const kidsOwed = profile.plannedKidAges.filter(age => age <= ageThisYear).length - currentNumKids;
-      if (kidsOwed > 0) {
+      if (kidsOwed > 0 && currentNumKids < 3) {
         if (canHaveKidByRules) {
           currentNumKids++;
           kidBornThisYear = currentNumKids;
