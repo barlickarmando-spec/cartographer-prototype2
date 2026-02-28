@@ -291,7 +291,40 @@ function calculateAutoApproach(
       console.error('calculateAutoApproach: Profile validation errors:', validationErrors);
       return createErrorResult(locationName, locationData, `Invalid profile: ${validationErrors.join(', ')}`);
     }
-    
+
+    // === UNSURE ABOUT KIDS: cascading scenario logic ===
+    // 1) Try 2 kids (1 at 32, 2nd at 34) — buffer ensures 2nd kid is viable
+    // 2) If score <= 5, fall back to 1 kid at 32
+    // 3) If score <= 5, fall back to 0 kids
+    if (profile.kidsPlan === 'unsure' && (profile.numKids || 0) === 0) {
+      const kidAge = profile.plannedKidAges?.[0] || 32;
+      const secondKidAge = Math.max(kidAge + 2, profile.currentAge + 3);
+
+      // Scenario 1: 2 kids (buffer for viability of a second kid)
+      const bufferResult = calculateAutoApproach(
+        { ...profile, kidsPlan: 'yes', plannedKidAges: [kidAge, secondKidAge], declaredKidCount: 2 },
+        locationName, simulationYears
+      );
+      if (bufferResult && bufferResult.numericScore > 5) {
+        return bufferResult;
+      }
+
+      // Scenario 2: just 1 kid
+      const oneKidResult = calculateAutoApproach(
+        { ...profile, kidsPlan: 'yes', plannedKidAges: [kidAge], declaredKidCount: 1 },
+        locationName, simulationYears
+      );
+      if (oneKidResult && oneKidResult.numericScore > 5) {
+        return oneKidResult;
+      }
+
+      // Scenario 3: no kids
+      return calculateAutoApproach(
+        { ...profile, kidsPlan: 'no', plannedKidAges: [], declaredKidCount: 0 },
+        locationName, simulationYears
+      );
+    }
+
     // Pre-compute kid viability to find minimum viable ages
     // When kids-asap-viable is selected, use these ages as hard birth dates
     const kidViability = calculateKidViability(profile, locationData);
@@ -390,27 +423,6 @@ function calculateAutoApproach(
     const fastestHomeProjection = calculateFastestToTarget(
       fastestHomeSqFt, locationPricePerSqft, profile, locationData, simulation.snapshots
     );
-
-    // === STRICT NON-VIABLE CHECK: "unsure" about kids → account for 1 kid ===
-    // If user is "unsure" about kids and not already flagged as no-viable-path,
-    // check if adding 1 kid would put them in the red (COL > income).
-    if (viability !== 'no-viable-path' && profile.kidsPlan === 'unsure' && (profile.numKids || 0) === 0) {
-      // Determine household type with 1 kid
-      const relStatus = profile.relationshipStatus === 'linked' ? 'linked' : 'single';
-      const withKidHousehold = determineHouseholdType(relStatus as any, profile.numEarners, 1);
-      const colKeyWithKid = getAdjustedCOLKey(withKidHousehold);
-      const adjustedCOLWithKid = locationData.adjustedCOL[colKeyWithKid] || 0;
-
-      // Check if COL with 1 kid + housing exceeds income
-      const year1Income = simulation.snapshots[0]?.totalIncome ?? 0;
-      const year1Housing = simulation.snapshots[0]?.housingCost ?? 0;
-      const totalCOLWithKid = adjustedCOLWithKid + year1Housing;
-
-      if (totalCOLWithKid > year1Income) {
-        // Adding 1 kid would put them in the red
-        viability = 'no-viable-path' as ViabilityClass;
-      }
-    }
 
     // Generate recommendations and warnings (now sqft-aware)
     const recommendations = generateRecommendations(
