@@ -700,10 +700,11 @@ function runYearByYearSimulation(
     const colKey = getAdjustedCOLKey(currentHouseholdType);
     const baseCOL = locationData.adjustedCOL[colKey] || 0;
 
-    // Add annual expenses (conditional on age and viability)
+    // Add annual expenses (conditional on age, debt-free status, and viability)
     let annualExpensesTotal = 0;
     for (const expense of profile.annualExpenses || []) {
       if (expense.startAge && ageThisYear < expense.startAge) continue;
+      if (expense.onlyAfterDebtFree && loanDebt > 0) continue;
       if (expense.onlyIfViable && lastYearScore < 5) continue;
       annualExpensesTotal += expense.annualCost;
     }

@@ -989,16 +989,38 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
               </div>
             ))}
 
-            <button
-              onClick={() => {
-                const debts = [...(answers.additionalDebts || [])];
-                debts.push({ type: 'other', totalDebt: 0, interestRate: 0.06 });
-                updateAnswer('additionalDebts', debts);
-              }}
-              className="w-full py-3 border-2 border-dashed border-[#D1D5DB] rounded-lg text-sm text-[#6B7280] hover:border-[#5BA4E5] hover:text-[#5BA4E5] transition-all"
-            >
-              + Add Debt
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  const debts = [...(answers.additionalDebts || [])];
+                  debts.push({ type: 'cc-debt', totalDebt: 0, interestRate: 0.216 });
+                  updateAnswer('additionalDebts', debts);
+                }}
+                className="flex-1 py-2.5 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-all shadow-sm text-sm font-medium"
+              >
+                + Credit Card
+              </button>
+              <button
+                onClick={() => {
+                  const debts = [...(answers.additionalDebts || [])];
+                  debts.push({ type: 'car-debt', totalDebt: 0, interestRate: 0.07 });
+                  updateAnswer('additionalDebts', debts);
+                }}
+                className="flex-1 py-2.5 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-all shadow-sm text-sm font-medium"
+              >
+                + Car Loan
+              </button>
+              <button
+                onClick={() => {
+                  const debts = [...(answers.additionalDebts || [])];
+                  debts.push({ type: 'other', totalDebt: 0, interestRate: 0.06 });
+                  updateAnswer('additionalDebts', debts);
+                }}
+                className="flex-1 py-2.5 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-all shadow-sm text-sm font-medium"
+              >
+                + Additional
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1069,8 +1091,21 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
                       placeholder="Now"
                     />
                   </div>
-                  <div className="flex items-end">
-                    <label className="flex items-center gap-2 text-xs text-[#6B7280] cursor-pointer pb-2">
+                  <div className="flex flex-col justify-end gap-1">
+                    <label className="flex items-center gap-2 text-xs text-[#6B7280] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={expense.onlyAfterDebtFree || false}
+                        onChange={(e) => {
+                          const expenses = [...(answers.additionalExpenses || [])];
+                          expenses[idx] = { ...expenses[idx], onlyAfterDebtFree: e.target.checked || undefined };
+                          updateAnswer('additionalExpenses', expenses);
+                        }}
+                        className="w-3.5 h-3.5 text-[#5BA4E5] border-[#D1D5DB] rounded focus:ring-[#5BA4E5]"
+                      />
+                      Only after debt-free
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-[#6B7280] cursor-pointer">
                       <input
                         type="checkbox"
                         checked={expense.onlyIfViable || false}
@@ -1094,7 +1129,7 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
                 expenses.push({ label: '', annualCost: 0 });
                 updateAnswer('additionalExpenses', expenses);
               }}
-              className="w-full py-3 border-2 border-dashed border-[#D1D5DB] rounded-lg text-sm text-[#6B7280] hover:border-[#5BA4E5] hover:text-[#5BA4E5] transition-all"
+              className="w-full py-2.5 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-all shadow-sm text-sm font-medium"
             >
               + Add Annual Expense
             </button>
@@ -1235,6 +1270,112 @@ function getStateCodeForLocation(loc: any): string {
   // For cities, extract state from displayName like "Austin, TX"
   const parts = loc.displayName.split(', ');
   return (parts[1] || '').trim();
+}
+
+// Reusable searchable multi-select dropdown for filters (regions, climate, etc.)
+function FilterSearchDropdown({
+  label,
+  description,
+  options,
+  selectedValues,
+  onToggle,
+  onClearAll,
+}: {
+  label: string;
+  description: string;
+  options: string[];
+  selectedValues: string[];
+  onToggle: (value: string) => void;
+  onClearAll?: () => void;
+}) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+
+  const filtered = options.filter(opt =>
+    opt.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-[#2C3E50] mb-2">{label}</label>
+      <p className="text-xs text-[#9CA3AF] mb-3">{description}</p>
+
+      {/* Selected tags */}
+      {selectedValues.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {selectedValues.map(val => (
+            <span
+              key={val}
+              className="inline-flex items-center gap-1 px-3 py-1 bg-[#EFF6FF] text-[#2C3E50] rounded-full text-sm border border-[#5BA4E5]"
+            >
+              {val}
+              <button
+                onClick={() => onToggle(val)}
+                className="text-[#5BA4E5] hover:text-[#4A93D4] font-bold ml-1"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          {onClearAll && (
+            <button
+              onClick={onClearAll}
+              className="text-xs text-[#9CA3AF] hover:text-red-500 px-2 py-1"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Search input */}
+      <div className="relative">
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          onFocus={() => setIsOpen(true)}
+          className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all text-sm"
+          placeholder={`Search ${label.toLowerCase().replace(' (optional)', '')}...`}
+        />
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="absolute right-3 top-3.5 text-[#6B7280]"
+        >
+          {isOpen ? '▲' : '▼'}
+        </button>
+      </div>
+
+      {/* Dropdown list */}
+      {isOpen && (
+        <div className="mt-2 max-h-48 overflow-y-auto border border-[#E5E7EB] rounded-lg bg-white">
+          {filtered.length === 0 ? (
+            <div className="px-4 py-3 text-sm text-[#9CA3AF]">No matches</div>
+          ) : (
+            filtered.map(opt => {
+              const isSelected = selectedValues.includes(opt);
+              return (
+                <label
+                  key={opt}
+                  className={`flex items-center px-4 py-2.5 cursor-pointer transition-all text-sm hover:bg-[#F3F4F6] ${
+                    isSelected ? 'bg-[#EFF6FF]' : ''
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggle(opt)}
+                    className="w-3.5 h-3.5 text-[#5BA4E5] border-[#D1D5DB] rounded focus:ring-[#5BA4E5] mr-3"
+                  />
+                  {opt}
+                </label>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Reusable searchable location dropdown
@@ -1629,78 +1770,40 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
 
         {/* Region Filter */}
         {answers.locationSituation && answers.locationSituation !== 'know-exactly' && (
-          <div>
-            <label className="block text-sm font-medium text-[#2C3E50] mb-2">
-              Filter by Region (optional)
-            </label>
-            <p className="text-xs text-[#9CA3AF] mb-3">Select regions to focus your analysis on specific areas.</p>
-            <div className="grid grid-cols-2 gap-2">
-              {Object.keys(REGIONS).map(region => {
-                const isSelected = (answers.locationRegions || []).includes(region);
-                return (
-                  <label
-                    key={region}
-                    className={`flex items-center px-3 py-2 rounded-lg border cursor-pointer transition-all text-sm ${
-                      isSelected ? 'border-[#5BA4E5] bg-[#EFF6FF]' : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => {
-                        const regions = [...(answers.locationRegions || [])];
-                        if (isSelected) {
-                          updateAnswer('locationRegions', regions.filter(r => r !== region));
-                        } else {
-                          updateAnswer('locationRegions', [...regions, region]);
-                        }
-                      }}
-                      className="w-3.5 h-3.5 text-[#5BA4E5] border-[#D1D5DB] rounded focus:ring-[#5BA4E5] mr-2"
-                    />
-                    {region}
-                  </label>
-                );
-              })}
-            </div>
-          </div>
+          <FilterSearchDropdown
+            label="Filter by Region (optional)"
+            description="Select regions to focus your analysis on specific areas."
+            options={Object.keys(REGIONS)}
+            selectedValues={answers.locationRegions || []}
+            onToggle={(region) => {
+              const regions = [...(answers.locationRegions || [])];
+              if (regions.includes(region)) {
+                updateAnswer('locationRegions', regions.filter(r => r !== region));
+              } else {
+                updateAnswer('locationRegions', [...regions, region]);
+              }
+            }}
+            onClearAll={() => updateAnswer('locationRegions', [])}
+          />
         )}
 
         {/* Climate/Weather Filter */}
         {answers.locationSituation && answers.locationSituation !== 'know-exactly' && (
-          <div>
-            <label className="block text-sm font-medium text-[#2C3E50] mb-2">
-              Filter by Climate (optional)
-            </label>
-            <p className="text-xs text-[#9CA3AF] mb-3">Narrow results to locations matching your climate preference.</p>
-            <div className="grid grid-cols-2 gap-2">
-              {Object.keys(WEATHER_CATEGORIES).map(climate => {
-                const isSelected = (answers.locationClimate || []).includes(climate);
-                return (
-                  <label
-                    key={climate}
-                    className={`flex items-center px-3 py-2 rounded-lg border cursor-pointer transition-all text-sm ${
-                      isSelected ? 'border-[#5BA4E5] bg-[#EFF6FF]' : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => {
-                        const climates = [...(answers.locationClimate || [])];
-                        if (isSelected) {
-                          updateAnswer('locationClimate', climates.filter(c => c !== climate));
-                        } else {
-                          updateAnswer('locationClimate', [...climates, climate]);
-                        }
-                      }}
-                      className="w-3.5 h-3.5 text-[#5BA4E5] border-[#D1D5DB] rounded focus:ring-[#5BA4E5] mr-2"
-                    />
-                    {climate}
-                  </label>
-                );
-              })}
-            </div>
-          </div>
+          <FilterSearchDropdown
+            label="Filter by Climate (optional)"
+            description="Narrow results to locations matching your climate preference."
+            options={Object.keys(WEATHER_CATEGORIES)}
+            selectedValues={answers.locationClimate || []}
+            onToggle={(climate) => {
+              const climates = [...(answers.locationClimate || [])];
+              if (climates.includes(climate)) {
+                updateAnswer('locationClimate', climates.filter(c => c !== climate));
+              } else {
+                updateAnswer('locationClimate', [...climates, climate]);
+              }
+            }}
+            onClearAll={() => updateAnswer('locationClimate', [])}
+          />
         )}
 
         {/* Location Priority Mode */}

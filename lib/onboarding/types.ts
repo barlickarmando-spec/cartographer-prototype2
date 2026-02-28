@@ -56,6 +56,7 @@ export interface AnnualExpense {
   label: string;
   annualCost: number;
   startAge?: number;            // Optional: only applies from this age
+  onlyAfterDebtFree?: boolean;  // Optional: only activate after all debt paid
   onlyIfViable?: boolean;       // Optional: only if viability >= 5
 }
 
