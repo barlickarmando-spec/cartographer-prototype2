@@ -115,3 +115,70 @@ export function resolveLocationFilters(params: {
 
   return pool;
 }
+
+/**
+ * Filter a list of location names by type preference.
+ *
+ * - 'cities': Remove bare states, expand them to their cities.
+ *             Keep any explicitly selected locations regardless of type.
+ * - 'towns':  Remove cities unless they were explicitly selected by the user.
+ * - 'both':   No filtering.
+ *
+ * @param locations       Resolved location names to filter
+ * @param typePreference  'cities' | 'towns' | 'both'
+ * @param userSelected    Locations the user explicitly picked in the dropdown
+ * @param allCityLabels   All available city labels (to expand states → cities)
+ */
+export function filterLocationsByTypePreference(
+  locations: string[],
+  typePreference: 'cities' | 'towns' | 'both',
+  userSelected: string[],
+  allCityLabels: { label: string; state?: string }[],
+): string[] {
+  if (typePreference === 'both') return locations;
+
+  const userSelectedSet = new Set(userSelected);
+
+  if (typePreference === 'cities') {
+    // For each state in the list, find cities within that state
+    const result: string[] = [];
+    const addedSet = new Set<string>();
+
+    for (const loc of locations) {
+      const isCity = loc.includes(', ');
+
+      if (isCity) {
+        // Keep all cities
+        if (!addedSet.has(loc)) {
+          result.push(loc);
+          addedSet.add(loc);
+        }
+      } else {
+        // It's a state — expand to cities within it
+        const abbrev = STATE_TO_ABBREV[loc];
+        if (abbrev) {
+          for (const city of allCityLabels) {
+            if (city.state === abbrev && !addedSet.has(city.label)) {
+              result.push(city.label);
+              addedSet.add(city.label);
+            }
+          }
+        }
+        // Also keep the state if user explicitly selected it
+        if (userSelectedSet.has(loc) && !addedSet.has(loc)) {
+          result.push(loc);
+          addedSet.add(loc);
+        }
+      }
+    }
+    return result;
+  }
+
+  // typePreference === 'towns'
+  // Keep states, remove cities unless user explicitly selected them
+  return locations.filter(loc => {
+    const isCity = loc.includes(', ');
+    if (!isCity) return true; // Keep all states
+    return userSelectedSet.has(loc); // Keep city only if explicitly selected
+  });
+}

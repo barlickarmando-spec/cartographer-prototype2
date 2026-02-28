@@ -21,6 +21,7 @@ import {
   setSavedLocations,
 } from "@/lib/storage";
 import { getAllLocationOptions } from "@/lib/locations";
+import { filterLocationsByTypePreference } from "@/lib/location-filters";
 
 const STEPS = [
   { key: 2, label: "Household Planning" },
@@ -87,6 +88,17 @@ export default function AdjustStrategyPage() {
         } else {
           // "no idea" users — recalculate all locations (states + cities)
           locations = getAllLocationOptions().map((o) => o.label);
+        }
+
+        // Filter by location type preference (cities vs towns)
+        if (profile.locationTypePreference !== 'both') {
+          const allOpts = getAllLocationOptions();
+          locations = filterLocationsByTypePreference(
+            locations,
+            profile.locationTypePreference,
+            profile.selectedLocations,
+            allOpts.filter(o => o.type === 'city').map(o => ({ label: o.label, state: o.state })),
+          );
         }
 
         const results = locations
