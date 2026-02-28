@@ -8,7 +8,7 @@
  * - Graceful degradation
  */
 
-import { UserProfile, HouseholdTypeEnum, determineHouseholdType, getAdjustedCOLKey, getRentType } from './onboarding/types';
+import { UserProfile, HouseholdTypeEnum, determineHouseholdType, getAdjustedCOLKey, getRentType, DebtEntry, AnnualExpense } from './onboarding/types';
 import { getLocationData, getSalary, LocationData } from './data-extraction';
 import { getTypicalHomeValue, getPricePerSqft } from './home-value-lookup';
 
@@ -127,7 +127,10 @@ export interface YearSnapshot {
   // Life Events
   kidBornThisYear: number;
   relationshipStartedThisYear: boolean;
-  
+
+  // Annual expenses injected into COL
+  annualExpensesTotal: number;
+
   // Debug info
   debugNotes: string[];
 }
@@ -507,21 +510,38 @@ function runYearByYearSimulation(
   
   // Initialize state
   let currentAge = profile.currentAge;
-  let loanDebt = profile.studentLoanDebt;
+
+  // Merge all non-CC debts (student loans + car + other) into one loan pool with blended rate
+  const initialStudentDebt = profile.studentLoanDebt || 0;
+  const initialCarDebt = profile.carDebt || 0;
+  const initialOtherDebt = profile.otherDebt || 0;
+  const totalNonCCDebt = initialStudentDebt + initialCarDebt + initialOtherDebt;
+  const blendedLoanRate = totalNonCCDebt > 0
+    ? (initialStudentDebt * (profile.studentLoanRate || 0.05) +
+       initialCarDebt * (profile.carDebtRate || 0.07) +
+       initialOtherDebt * (profile.otherDebtRate || 0.06)) / totalNonCCDebt
+    : (profile.studentLoanRate || 0.05);
+  let loanDebt = totalNonCCDebt;
+  let effectiveLoanRate = blendedLoanRate;
+
   let savings = Math.max(0, profile.currentSavings); // Ensure non-negative
   let hasMortgage = false;
   let savingsNoMortgage = Math.max(0, profile.currentSavings); // Hypothetical savings if no house is ever purchased
   let currentHouseholdType = profile.householdType;
   let currentNumKids = profile.numKids || 0;
   let currentNumEarners = profile.numEarners;
-  
+
   // Debt tracking
   let loanDebtGrowthYears = 0;
   let negativeDIYears = 0;
-  
-  // CC debt tracking
-  const ccDebt = profile.creditCardDebt || 0;
+
+  // CC debt tracking — mutable so conditional CC debts can increase the refresh amount
+  let ccDebtAmount = profile.creditCardDebt || 0;
   const ccRefreshYears = Math.max(1, Math.round((profile.creditCardRefreshMonths || 36) / 12));
+
+  // Conditional debt tracking
+  const activeConditionalDebts = new Set<number>();
+  let lastYearScore = 5; // Assume viable initially for onlyIfViable checks
   
   // Relationship tracking
   let relationshipStarted = profile.relationshipStatus === 'linked';
@@ -546,6 +566,22 @@ function runYearByYearSimulation(
   let chosenHousePrice = 0;
   let calculatedAnnualMortgagePayment = 0;
 
+  // === YEAR 1 SAVINGS WATERFALL ===
+  // Apply initial savings to debts in priority order: CC → loans → remainder stays as savings
+  if (savings > 0 && ccDebtAmount > 0) {
+    const ccPayoff = Math.min(savings, ccDebtAmount);
+    savings -= ccPayoff;
+    ccDebtAmount -= ccPayoff;
+    console.log(`Savings waterfall: Paid $${ccPayoff} CC debt, remaining savings: $${savings}`);
+  }
+  if (savings > 0 && loanDebt > 0) {
+    const loanPayoff = Math.min(savings, loanDebt);
+    savings -= loanPayoff;
+    loanDebt -= loanPayoff;
+    console.log(`Savings waterfall: Paid $${loanPayoff} loan debt, remaining savings: $${savings}`);
+  }
+  savingsNoMortgage = savings; // Update hypothetical savings to match
+
   console.log('Starting simulation with:', {
     currentAge,
     loanDebt,
@@ -557,7 +593,7 @@ function runYearByYearSimulation(
     formulaDownPayment: Math.round(medianDownPayment),
     formulaAnnualPayment: Math.round(medianAnnualPayment),
   });
-  
+
   for (let year = 1; year <= years; year++) {
     const debugNotes: string[] = [];
     const ageThisYear = currentAge + year - 1;
@@ -577,8 +613,8 @@ function runYearByYearSimulation(
     if (profile.plannedKidAges && profile.plannedKidAges.length > 0) {
       const kidIndex = profile.plannedKidAges.findIndex(age => age === ageThisYear);
       if (kidIndex >= 0) {
-        // Check hard rules
-        const canHaveKid = checkKidHardRules(profile.hardRules, loanDebt, hasMortgage);
+        // Check hard rules — now checks ALL active debt, not just student loans
+        const canHaveKid = checkKidHardRules(profile.hardRules, loanDebt, hasMortgage, ccDebtAmount);
         if (canHaveKid) {
           currentNumKids++;
           kidBornThisYear = currentNumKids;
@@ -590,9 +626,52 @@ function runYearByYearSimulation(
         }
       }
     }
-    
+
+    // === KIDS-ASAP-VIABLE HARD RULE ===
+    // If user has this rule, trigger a kid birth when conditions are right, even if not the planned age
+    if (profile.hardRules && profile.hardRules.includes('kids-asap-viable') && kidBornThisYear === 0) {
+      const maxPlannedKids = profile.declaredKidCount || (profile.plannedKidAges?.length || 0);
+      if (currentNumKids < maxPlannedKids && lastYearScore >= 5 && savings > 5000) {
+        currentNumKids++;
+        kidBornThisYear = currentNumKids;
+        const relStatus = relationshipStarted ? 'linked' : 'single';
+        currentHouseholdType = determineHouseholdType(relStatus as any, currentNumEarners, currentNumKids);
+        debugNotes.push(`Kid #${kidBornThisYear} born at age ${ageThisYear} (kids-asap-viable triggered)`);
+      }
+    }
+
+    // === CONDITIONAL DEBT INJECTION ===
+    // Check conditional debts and activate them when conditions are met
+    for (let i = 0; i < (profile.conditionalDebts || []).length; i++) {
+      if (activeConditionalDebts.has(i)) continue; // Already activated
+      const debt = profile.conditionalDebts[i];
+      if (debt.startAge && ageThisYear < debt.startAge) continue;
+      if (debt.onlyAfterDebtFree && loanDebt > 0) continue;
+      if (debt.onlyIfViable && lastYearScore < 5) continue;
+
+      // Activate this debt
+      activeConditionalDebts.add(i);
+      if (debt.type === 'cc-debt') {
+        // CC debts increase the refresh amount
+        ccDebtAmount += debt.totalDebt;
+        debugNotes.push(`Conditional CC debt activated: ${debt.label || 'CC'} $${debt.totalDebt}`);
+      } else {
+        // Non-CC debts merge into loan pool with blended rate
+        const oldTotal = loanDebt;
+        const oldRate = effectiveLoanRate;
+        loanDebt += debt.totalDebt;
+        effectiveLoanRate = loanDebt > 0
+          ? (oldTotal * oldRate + debt.totalDebt * (debt.interestRate || 0.06)) / loanDebt
+          : oldRate;
+        debugNotes.push(`Conditional debt activated: ${debt.label || debt.type} $${debt.totalDebt} at ${(debt.interestRate * 100).toFixed(1)}%`);
+      }
+    }
+
     // === CALCULATE INCOME ===
-    const userIncome = getSalary(locationData.name, profile.userOccupation, profile.userSalary);
+    // Salary override: use user's known salary for their current location, location averages elsewhere
+    const userIncome = (profile.currentSalaryOverride && locationData.name === profile.currentSalaryLocation)
+      ? profile.currentSalaryOverride
+      : getSalary(locationData.name, profile.userOccupation, profile.userSalary);
     let partnerIncome = 0;
     
     if (currentNumEarners === 2) {
@@ -619,8 +698,20 @@ function runYearByYearSimulation(
     
     // === CALCULATE COST OF LIVING ===
     const colKey = getAdjustedCOLKey(currentHouseholdType);
-    const adjustedCOL = locationData.adjustedCOL[colKey] || 0;
-    
+    const baseCOL = locationData.adjustedCOL[colKey] || 0;
+
+    // Add annual expenses (conditional on age and viability)
+    let annualExpensesTotal = 0;
+    for (const expense of profile.annualExpenses || []) {
+      if (expense.startAge && ageThisYear < expense.startAge) continue;
+      if (expense.onlyIfViable && lastYearScore < 5) continue;
+      annualExpensesTotal += expense.annualCost;
+    }
+    const adjustedCOL = baseCOL + annualExpensesTotal;
+    if (annualExpensesTotal > 0) {
+      debugNotes.push(`Annual expenses: $${annualExpensesTotal} added to COL`);
+    }
+
     // Housing cost: rent BEFORE mortgage, calculated mortgage payment AFTER
     // HARD LOCK: housingCost is ALWAYS rent OR mortgage, NEVER both
     // HARD LOCK: After mortgageActive=true, rent must NEVER be included again
@@ -670,17 +761,17 @@ function runYearByYearSimulation(
     const loanDebtStartYear = loanDebt;
     
     // PRIORITY 1: Credit Card Debt (every refresh cycle)
-    if (year % ccRefreshYears === 0 && ccDebt > 0) {
-      ccDebtPayment = Math.min(ccDebt, remainingEDI);
+    if (year % ccRefreshYears === 0 && ccDebtAmount > 0) {
+      ccDebtPayment = Math.min(ccDebtAmount, remainingEDI);
       remainingEDI -= ccDebtPayment;
       debugNotes.push(`CC debt payment (refresh cycle): $${ccDebtPayment}`);
     }
-    
-    // PRIORITY 2: Loan Debt (Student Loans)
+
+    // PRIORITY 2: Loan Debt (all non-CC debts merged into single pool)
     let loanDebtInterest = 0;
     if (loanDebt > 0) {
-      // Calculate interest - CRITICAL: Ensure rate is decimal (0.065, not 6.5)
-      const interestRate = profile.studentLoanRate;
+      // Calculate interest using blended rate — CRITICAL: Ensure rate is decimal (0.065, not 6.5)
+      const interestRate = effectiveLoanRate;
       if (interestRate > 1) {
         console.error(`ERROR: Interest rate ${interestRate} appears to be percentage, not decimal!`);
         debugNotes.push(`ERROR: Interest rate ${interestRate} > 1, using 0.065 instead`);
@@ -725,13 +816,13 @@ function runYearByYearSimulation(
         
         // Only stop if debt has grown for 5+ consecutive years AND grew significantly overall
         if (loanDebtGrowthYears >= LOAN_DEBT_GROWTH_TOLERANCE) {
-          const totalDebtGrowth = profile.studentLoanDebt > 0 
-            ? (loanDebt - profile.studentLoanDebt) / profile.studentLoanDebt 
+          const totalDebtGrowth = totalNonCCDebt > 0
+            ? (loanDebt - totalNonCCDebt) / totalNonCCDebt
             : 0;
-          
+
           if (totalDebtGrowth > 0.5) {
             // Debt grew by 50%+ - truly unsustainable
-            console.log(`Stopping: Debt grew from $${profile.studentLoanDebt.toFixed(0)} to $${loanDebt.toFixed(0)} (${(totalDebtGrowth * 100).toFixed(0)}% growth)`);
+            console.log(`Stopping: Debt grew from $${totalNonCCDebt.toFixed(0)} to $${loanDebt.toFixed(0)} (${(totalDebtGrowth * 100).toFixed(0)}% growth)`);
             return {
               snapshots,
               stoppedEarly: true,
@@ -853,9 +944,18 @@ function runYearByYearSimulation(
       mortgageAcquiredThisYear,
       kidBornThisYear,
       relationshipStartedThisYear,
+      annualExpensesTotal,
       debugNotes,
     });
-    
+
+    // Update lastYearScore for conditional debt/expense checks in the next iteration
+    // Quick heuristic: positive DI + savings growing = likely viable (score >= 5)
+    if (disposableIncome < 0) {
+      lastYearScore = Math.max(0, lastYearScore - 2);
+    } else if (savings > savingsStartYear && loanDebt <= loanDebtStartYear) {
+      lastYearScore = Math.min(10, lastYearScore + 1);
+    }
+
     // === EARLY EXIT CONDITIONS ===
     
     // Success condition: Main goals achieved
@@ -882,19 +982,21 @@ function findYearWhen(snapshots: YearSnapshot[], condition: (s: YearSnapshot) =>
   return found ? found.year : -1;
 }
 
-function checkKidHardRules(hardRules: string[], loanDebt: number, hasMortgage: boolean): boolean {
+function checkKidHardRules(hardRules: string[], loanDebt: number, hasMortgage: boolean, ccDebt: number = 0): boolean {
   if (!hardRules || hardRules.length === 0 || hardRules.includes('none')) {
     return true; // No restrictions
   }
-  
-  if (hardRules.includes('debt-before-kids') && loanDebt > 0) {
-    return false; // Must pay off debt first
+
+  // debt-before-kids: check ALL active debt (not just student loans)
+  const totalDebt = loanDebt + ccDebt;
+  if (hardRules.includes('debt-before-kids') && totalDebt > 0) {
+    return false; // Must pay off ALL debt first
   }
-  
+
   if (hardRules.includes('mortgage-before-kids') && !hasMortgage) {
     return false; // Must get mortgage first
   }
-  
+
   return true;
 }
 
@@ -1775,10 +1877,11 @@ function generateRecommendations(
   }
 
   // Debt-specific recommendations
-  if (profile.studentLoanDebt > 0 && simulation.length > 0) {
+  const totalInitialDebt = (profile.studentLoanDebt || 0) + (profile.carDebt || 0) + (profile.otherDebt || 0);
+  if (totalInitialDebt > 0 && simulation.length > 0) {
     const lastYear = simulation[simulation.length - 1];
     if (lastYear.loanDebtEnd > lastYear.loanDebtStart) {
-      recommendations.push('WARNING: Student loan debt is growing - consider increasing allocation or income');
+      recommendations.push('WARNING: Debt is growing - consider increasing allocation or income');
     }
   }
 
@@ -2031,10 +2134,57 @@ function calculateFastestToTarget(
   return null;
 }
 
+// ===== MULTI-SCENARIO KID BRANCHING =====
+
+/**
+ * Calculate with kid scenario branching based on kidsKnowledge.
+ *
+ * - 'know-count' or undefined: single simulation with declared kids (standard path)
+ * - 'dont-know-count': run 0/1/2/3 kid scenarios, prefer 2 if viable (score >= 5)
+ * - 'unsure': handled by normalize.ts (1 kid at 32), falls through to standard path
+ */
+function calculateWithKidScenarios(
+  profile: UserProfile,
+  locationName: string,
+  simulationYears: number = 30
+): CalculationResult | null {
+  // Standard path: known count, unsure (already set up by normalize), or no kidsKnowledge
+  if (!profile.kidsKnowledge || profile.kidsKnowledge === 'know-count') {
+    return calculateAutoApproach(profile, locationName, simulationYears);
+  }
+
+  // 'dont-know-count': run scenarios for 0, 1, 2, 3 kids
+  const defaultAges = [32, 34, 36].map(age => Math.max(age, profile.currentAge + 1));
+
+  const scenarios: (CalculationResult | null)[] = [];
+  for (let numKids = 0; numKids <= 3; numKids++) {
+    const testProfile: UserProfile = {
+      ...profile,
+      plannedKidAges: defaultAges.slice(0, numKids),
+      declaredKidCount: numKids,
+      kidsPlan: numKids === 0 ? 'no' : 'yes',
+    };
+    scenarios.push(calculateAutoApproach(testProfile, locationName, simulationYears));
+  }
+
+  // Prefer 2 kids if viable (score >= 5), else 1, else 3, else 0
+  const preference = [2, 1, 3, 0];
+  for (const target of preference) {
+    const result = scenarios[target];
+    if (result && result.calculationSuccessful && result.numericScore >= 5) {
+      return result;
+    }
+  }
+
+  // Fallback: return the 0-kids result (most likely to succeed)
+  return scenarios[0] || calculateAutoApproach(profile, locationName, simulationYears);
+}
+
 // ===== EXPORTS =====
 
 export {
   calculateAutoApproach,
+  calculateWithKidScenarios,
   runYearByYearSimulation,
   classifyViability,
   calculateNumericScore,
