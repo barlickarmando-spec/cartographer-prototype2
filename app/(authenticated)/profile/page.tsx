@@ -791,8 +791,11 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* FAMILY PLANNING SECTION - Vertical Timeline (only when user plans kids) */}
-        {result.kidViability && result.kidViability.firstKid.reason !== 'User does not plan to have kids' && (() => {
+        {/* FAMILY PLANNING SECTION - Vertical Timeline (when user plans kids or is unsure) */}
+        {result.kidViability && (
+          result.kidViability.firstKid.reason !== 'User does not plan to have kids' ||
+          onboardingProfile?.kidsPlan === 'unsure'
+        ) && (() => {
           const currentAge = result.yearByYear[0]?.age ?? 0;
           const currentYear = new Date().getFullYear();
           const kv = result.kidViability;

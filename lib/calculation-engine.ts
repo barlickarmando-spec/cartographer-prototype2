@@ -293,23 +293,12 @@ function calculateAutoApproach(
     }
 
     // === UNSURE ABOUT KIDS: cascading scenario logic ===
-    // 1) Try 2 kids (1 at 32, 2nd at 34) — buffer ensures 2nd kid is viable
-    // 2) If score <= 5, fall back to 1 kid at 32
-    // 3) If score <= 5, fall back to 0 kids
+    // 1) Calculate with 1 kid at 32 — kid viability section provides 2nd kid buffer info
+    // 2) If score <= 5, fall back to 0 kids but preserve kid viability data
     if (profile.kidsPlan === 'unsure' && (profile.numKids || 0) === 0) {
       const kidAge = profile.plannedKidAges?.[0] || 32;
-      const secondKidAge = Math.max(kidAge + 2, profile.currentAge + 3);
 
-      // Scenario 1: 2 kids (buffer for viability of a second kid)
-      const bufferResult = calculateAutoApproach(
-        { ...profile, kidsPlan: 'yes', plannedKidAges: [kidAge, secondKidAge], declaredKidCount: 2 },
-        locationName, simulationYears
-      );
-      if (bufferResult && bufferResult.numericScore > 5) {
-        return bufferResult;
-      }
-
-      // Scenario 2: just 1 kid
+      // Try 1 kid — year-by-year will show 1 kid born, kid viability shows 2nd/3rd feasibility
       const oneKidResult = calculateAutoApproach(
         { ...profile, kidsPlan: 'yes', plannedKidAges: [kidAge], declaredKidCount: 1 },
         locationName, simulationYears
@@ -318,11 +307,16 @@ function calculateAutoApproach(
         return oneKidResult;
       }
 
-      // Scenario 3: no kids
-      return calculateAutoApproach(
+      // 1-kid not viable — fall back to no kids but preserve kid viability data
+      const noKidResult = calculateAutoApproach(
         { ...profile, kidsPlan: 'no', plannedKidAges: [], declaredKidCount: 0 },
         locationName, simulationYears
       );
+      if (noKidResult && oneKidResult) {
+        // Attach kid viability from 1-kid run so profile page can still show the section
+        noKidResult.kidViability = oneKidResult.kidViability;
+      }
+      return noKidResult;
     }
 
     // Pre-compute kid viability to find minimum viable ages
