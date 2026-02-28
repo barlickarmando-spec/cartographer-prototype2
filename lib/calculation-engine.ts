@@ -610,13 +610,17 @@ function runYearByYearSimulation(
     
     // === LIFE EVENT: KIDS BORN ===
     let kidBornThisYear = 0;
-    const maxPlannedKids = profile.declaredKidCount || (profile.plannedKidAges?.length || 0);
+    let maxPlannedKids = Math.min(3, profile.declaredKidCount || (profile.plannedKidAges?.length || 0));
     const hasAsapRule = profile.hardRules && profile.hardRules.includes('kids-asap-viable');
+    // For kids-asap-viable with no declared count, default to 3 (the cap)
+    if (hasAsapRule && maxPlannedKids === 0) {
+      maxPlannedKids = 3;
+    }
     const canHaveKidByRules = checkKidHardRules(profile.hardRules, loanDebt, hasMortgage, ccDebtAmount);
 
     if (hasAsapRule && currentNumKids < maxPlannedKids) {
       // kids-asap-viable: ignore planned ages, have kids as soon as hard rules + viability allow
-      if (canHaveKidByRules && lastYearScore >= 5 && savings > 5000) {
+      if (canHaveKidByRules && lastYearScore >= 3 && savings > 2000) {
         currentNumKids++;
         kidBornThisYear = currentNumKids;
         const relStatus = relationshipStarted ? 'linked' : 'single';
@@ -670,7 +674,7 @@ function runYearByYearSimulation(
 
     // === CALCULATE INCOME ===
     // Salary override: use user's known salary for their current location, location averages elsewhere
-    const userIncome = (profile.currentSalaryOverride && locationData.name === profile.currentSalaryLocation)
+    const userIncome = (profile.currentSalaryOverride && locationData.displayName === profile.currentSalaryLocation)
       ? profile.currentSalaryOverride
       : getSalary(locationData.name, profile.userOccupation, profile.userSalary);
     let partnerIncome = 0;
@@ -678,7 +682,7 @@ function runYearByYearSimulation(
     if (currentNumEarners === 2) {
       if (profile.partnerOccupation) {
         // Use partner salary override for current location, location averages elsewhere
-        const partnerSalaryForLocation = (profile.partnerSalary && locationData.name === profile.currentSalaryLocation)
+        const partnerSalaryForLocation = (profile.partnerSalary && locationData.displayName === profile.currentSalaryLocation)
           ? profile.partnerSalary
           : getSalary(locationData.name, profile.partnerOccupation, undefined);
         partnerIncome = partnerSalaryForLocation;
