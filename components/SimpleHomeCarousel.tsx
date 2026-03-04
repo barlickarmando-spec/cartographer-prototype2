@@ -39,12 +39,23 @@ function buildZillowUrl(location: string, minPrice: number, maxPrice: number): s
   return `https://www.zillow.com/homes/${formatted}_rb/?searchQueryState=%7B%22pagination%22%3A%7B%7D%2C%22isMapVisible%22%3Afalse%2C%22filterState%22%3A%7B%22price%22%3A%7B%22min%22%3A${minPrice}%2C%22max%22%3A${maxPrice}%7D%2C%22beds%22%3A%7B%22min%22%3A2%7D%7D%2C%22isListVisible%22%3Atrue%7D`;
 }
 
+// Deterministic gradient palette for cards without photos
+const CARD_GRADIENTS = [
+  'from-[#EFF6FF] to-[#DBEAFE]',
+  'from-[#F0FDF4] to-[#DCFCE7]',
+  'from-[#FEF3C7] to-[#FDE68A]',
+  'from-[#FCE7F3] to-[#FBCFE8]',
+  'from-[#EDE9FE] to-[#DDD6FE]',
+  'from-[#E0F2FE] to-[#BAE6FD]',
+];
+
 export default function SimpleHomeCarousel({
   location,
   targetPrice,
   priceRange = 50000
 }: SimpleHomeCarouselProps) {
   const [homes, setHomes] = useState<Home[]>([]);
+  const [source, setSource] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -80,8 +91,10 @@ export default function SimpleHomeCarousel({
         if (!cancelled) {
           if (data.success && data.homes && data.homes.length > 0) {
             setHomes(data.homes);
+            setSource(data.source || '');
           } else {
             setHomes([]);
+            setSource('');
           }
         }
       } catch {
@@ -144,7 +157,7 @@ export default function SimpleHomeCarousel({
     );
   }
 
-  // Error or empty state — Zillow fallback
+  // Error or empty state -- Zillow fallback
   if (error || homes.length === 0) {
     const zillowUrl = buildZillowUrl(location, minPrice, maxPrice);
 
@@ -195,7 +208,9 @@ export default function SimpleHomeCarousel({
     );
   }
 
-  // Success state — carousel with real listings
+  const isSampleData = source === 'Sample listings';
+
+  // Success state -- carousel with listings
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -206,6 +221,7 @@ export default function SimpleHomeCarousel({
           </h3>
           <p className="text-sm text-[#6B7280]">
             {formatPrice(minPrice)} - {formatPrice(maxPrice)} | {homes.length} listing{homes.length !== 1 ? 's' : ''} found
+            {isSampleData && <span className="ml-1 text-[#9CA3AF]">(sample data)</span>}
           </p>
         </div>
         {/* Desktop arrow buttons */}
@@ -238,18 +254,36 @@ export default function SimpleHomeCarousel({
         className="flex gap-4 overflow-x-auto scroll-smooth snap-x snap-mandatory pb-2"
         style={{ scrollbarWidth: 'thin' }}
       >
-        {homes.map((home) => (
-          <HomeListingCard key={home.id} home={home} />
+        {homes.map((home, idx) => (
+          <HomeListingCard key={home.id} home={home} index={idx} />
         ))}
       </div>
+
+      {/* Browse more link */}
+      {isSampleData && (
+        <div className="text-center pt-1">
+          <a
+            href={buildZillowUrl(location, minPrice, maxPrice)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 text-sm text-[#5BA4E5] hover:text-[#4A93D4] font-medium transition-colors"
+          >
+            Browse live listings on Zillow
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </a>
+        </div>
+      )}
     </div>
   );
 }
 
-function HomeListingCard({ home }: { home: Home }) {
+function HomeListingCard({ home, index }: { home: Home; index: number }) {
   const [imgError, setImgError] = useState(false);
 
   const formattedPrice = formatPrice(home.price);
+  const gradient = CARD_GRADIENTS[index % CARD_GRADIENTS.length];
 
   const listingUrl = home.listingUrl.startsWith('http')
     ? home.listingUrl
@@ -263,8 +297,9 @@ function HomeListingCard({ home }: { home: Home }) {
       className="flex-shrink-0 w-72 snap-start bg-white rounded-xl border border-[#E5E7EB] overflow-hidden hover:shadow-xl transition-all duration-300 group"
     >
       {/* Image area */}
-      <div className="relative h-48 bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE] overflow-hidden">
+      <div className={`relative h-48 bg-gradient-to-br ${gradient} overflow-hidden`}>
         {home.photoUrl && !imgError ? (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={home.photoUrl}
             alt={`Home at ${home.address}`}
@@ -273,10 +308,11 @@ function HomeListingCard({ home }: { home: Home }) {
             loading="lazy"
           />
         ) : (
-          <div className="flex items-center justify-center h-full">
-            <svg className="w-16 h-16 text-[#5BA4E5] opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="flex flex-col items-center justify-center h-full gap-2">
+            <svg className="w-14 h-14 text-[#5BA4E5] opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
             </svg>
+            <span className="text-xs text-[#5BA4E5] opacity-60 font-medium">{home.city}, {home.state}</span>
           </div>
         )}
         {/* Price badge */}
@@ -310,9 +346,9 @@ function HomeListingCard({ home }: { home: Home }) {
 
         {/* CTA footer */}
         <div className="flex items-center justify-between pt-3 mt-3 border-t border-[#E5E7EB]">
-          <span className="text-xs text-[#9CA3AF]">Realtor.com</span>
+          <span className="text-xs text-[#9CA3AF]">View on Realtor.com</span>
           <div className="flex items-center gap-1 text-[#5BA4E5] group-hover:gap-2 transition-all">
-            <span className="text-xs font-medium">View Listing</span>
+            <span className="text-xs font-medium">View</span>
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>

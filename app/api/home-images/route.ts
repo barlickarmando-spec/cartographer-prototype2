@@ -15,14 +15,7 @@ export async function GET(request: NextRequest) {
   const apiKey = process.env.GOOGLE_API_KEY;
   const cx = process.env.GOOGLE_SEARCH_ENGINE_ID;
 
-  if (!apiKey || !cx) {
-    return NextResponse.json(
-      { success: false, error: 'Google API not configured' },
-      { status: 500 }
-    );
-  }
-
-  // Format price for readable search query: 1400000 → "$1.4 million"
+  // Format price for readable search query: 1400000 -> "$1.4 million"
   const priceNum = parseInt(price, 10);
   let priceLabel: string;
   if (priceNum >= 1000000) {
@@ -33,6 +26,11 @@ export async function GET(request: NextRequest) {
 
   const query = `${location} home for sale ${priceLabel}`;
 
+  // If Google API keys are missing, return empty (not an error)
+  if (!apiKey || !cx) {
+    return NextResponse.json({ success: true, images: [], query });
+  }
+
   const url = new URL('https://www.googleapis.com/customsearch/v1');
   url.searchParams.set('q', query);
   url.searchParams.set('searchType', 'image');
@@ -42,8 +40,12 @@ export async function GET(request: NextRequest) {
   url.searchParams.set('key', apiKey);
   url.searchParams.set('cx', cx);
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
   try {
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), { signal: controller.signal });
+    clearTimeout(timeout);
 
     if (!response.ok) {
       let errorDetail = `Google API returned ${response.status}`;
@@ -57,10 +59,8 @@ export async function GET(request: NextRequest) {
         const errorText = await response.text();
         console.error('Google API error:', response.status, errorText);
       }
-      return NextResponse.json(
-        { success: false, error: errorDetail },
-        { status: 502 }
-      );
+      // Return empty images instead of an error status so the UI degrades gracefully
+      return NextResponse.json({ success: true, images: [], query });
     }
 
     const data = await response.json();
@@ -72,10 +72,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, images, query });
   } catch (err) {
-    console.error('Google Image Search error:', err);
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch images' },
-      { status: 500 }
-    );
+    clearTimeout(timeout);
+    console.error('Google Image Search error (returning empty):', err instanceof Error ? err.message : err);
+    // Graceful degradation: return empty images, not a 500
+    return NextResponse.json({ success: true, images: [], query });
   }
 }
