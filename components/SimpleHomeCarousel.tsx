@@ -32,11 +32,11 @@ function formatPrice(price: number): string {
   return `$${(price / 1000).toFixed(0)}K`;
 }
 
-function buildZillowUrl(location: string, minPrice: number, maxPrice: number): string {
-  const formatted = location.toLowerCase()
-    .replace(/,?\s+/g, '-')
-    .replace(/[^a-z0-9-]/g, '');
-  return `https://www.zillow.com/homes/${formatted}_rb/?searchQueryState=%7B%22pagination%22%3A%7B%7D%2C%22isMapVisible%22%3Afalse%2C%22filterState%22%3A%7B%22price%22%3A%7B%22min%22%3A${minPrice}%2C%22max%22%3A${maxPrice}%7D%2C%22beds%22%3A%7B%22min%22%3A2%7D%7D%2C%22isListVisible%22%3Atrue%7D`;
+function buildRealtorUrl(location: string, minPrice: number, maxPrice: number): string {
+  const formatted = location.trim()
+    .replace(/,\s*/g, '_')
+    .replace(/\s+/g, '-');
+  return `https://www.realtor.com/realestateandhomes-search/${formatted}/price-${minPrice}-${maxPrice}/beds-2`;
 }
 
 // Deterministic gradient palette for cards without photos
@@ -157,9 +157,9 @@ export default function SimpleHomeCarousel({
     );
   }
 
-  // Error or empty state -- Zillow fallback
+  // Error or empty state -- Realtor.com fallback
   if (error || homes.length === 0) {
-    const zillowUrl = buildZillowUrl(location, minPrice, maxPrice);
+    const realtorUrl = buildRealtorUrl(location, minPrice, maxPrice);
 
     return (
       <div className="space-y-4">
@@ -184,11 +184,11 @@ export default function SimpleHomeCarousel({
               </h4>
               <p className="text-sm text-[#6B7280] mb-4">
                 {error
-                  ? "We couldn't load listings right now. Browse homes on Zillow instead."
-                  : `No listings found in this price range. Try browsing on Zillow for more options.`}
+                  ? "We couldn't load listings right now. Browse homes on Realtor.com instead."
+                  : `No listings found in this price range. Try browsing on Realtor.com for more options.`}
               </p>
               <a
-                href={zillowUrl}
+                href={realtorUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-[#5BA4E5] to-[#4A93D4] text-white rounded-xl hover:from-[#4A93D4] hover:to-[#3982C3] transition-all transform hover:scale-105 font-bold text-lg shadow-xl"
@@ -196,7 +196,7 @@ export default function SimpleHomeCarousel({
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                 </svg>
-                Browse on Zillow
+                Browse on Realtor.com
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                 </svg>
@@ -263,12 +263,12 @@ export default function SimpleHomeCarousel({
       {isSampleData && (
         <div className="text-center pt-1">
           <a
-            href={buildZillowUrl(location, minPrice, maxPrice)}
+            href={buildRealtorUrl(location, minPrice, maxPrice)}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 text-sm text-[#5BA4E5] hover:text-[#4A93D4] font-medium transition-colors"
           >
-            Browse live listings on Zillow
+            Browse live listings on Realtor.com
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
             </svg>

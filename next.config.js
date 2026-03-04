@@ -3,7 +3,6 @@ const nextConfig = {
   images: {
     domains: [
       'images.unsplash.com',
-      'photos.zillowstatic.com',
       'maps.googleapis.com',
       'ssl.cdn-redfin.com',
       'ap.rdcpix.com',
@@ -13,11 +12,7 @@ const nextConfig = {
         protocol: 'https',
         hostname: '**.unsplash.com',
       },
-      {
-        protocol: 'https',
-        hostname: '**.zillowstatic.com',
-      },
-      {
+{
         protocol: 'https',
         hostname: '**.rdcpix.com',
       },
