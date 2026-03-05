@@ -23,34 +23,301 @@ function parseLocation(location: string): { city: string; stateCode: string } {
   const trimmed = location.trim();
   const lower = trimmed.toLowerCase();
 
-  // Full state name
   if (STATE_ABBREVIATIONS[lower]) {
     return { city: '', stateCode: STATE_ABBREVIATIONS[lower] };
   }
-
-  // Already a 2-letter code
   if (/^[A-Z]{2}$/i.test(trimmed)) {
     return { city: '', stateCode: trimmed.toUpperCase() };
   }
-
-  // "City, ST" format
   if (trimmed.includes(',')) {
     const parts = trimmed.split(',').map(p => p.trim());
     const cityPart = parts[0];
     const statePart = parts[1] || '';
-
     let stateCode = '';
     if (/^[A-Z]{2}$/i.test(statePart)) {
       stateCode = statePart.toUpperCase();
     } else if (STATE_ABBREVIATIONS[statePart.toLowerCase()]) {
       stateCode = STATE_ABBREVIATIONS[statePart.toLowerCase()];
     }
-
     return { city: cityPart, stateCode };
   }
-
-  // Just a city name
   return { city: trimmed, stateCode: '' };
+}
+
+const HEADERS = {
+  'X-RapidAPI-Key': process.env.RAPIDAPI_KEY || '',
+  'X-RapidAPI-Host': process.env.RAPIDAPI_HOST || 'realtor-search.p.rapidapi.com',
+};
+
+/**
+ * Try multiple endpoint patterns for the realtor-search API.
+ * Different RapidAPI Realtor wrappers use different URL structures.
+ * We try them in order and use the first one that returns data.
+ */
+async function fetchFromRealtorAPI(
+  city: string,
+  stateCode: string,
+  minPrice: number,
+  maxPrice: number,
+): Promise<{ properties: any[]; source: string } | null> {
+  const host = process.env.RAPIDAPI_HOST || 'realtor-search.p.rapidapi.com';
+  const baseUrl = `https://${host}`;
+
+  // Build location query string
+  const locationQuery = city && stateCode
+    ? `${city}, ${stateCode}`
+    : city || stateCode;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+
+  // List of endpoint patterns to try (different realtor-search APIs use different paths)
+  const endpoints = [
+    // Pattern 1: GET /properties with query params
+    {
+      url: `${baseUrl}/properties?location=${encodeURIComponent(locationQuery)}&minPrice=${minPrice}&maxPrice=${maxPrice}&limit=12&status=for_sale`,
+      method: 'GET' as const,
+      body: undefined,
+    },
+    // Pattern 2: GET /search with location
+    {
+      url: `${baseUrl}/search?location=${encodeURIComponent(locationQuery)}&price_min=${minPrice}&price_max=${maxPrice}&limit=12`,
+      method: 'GET' as const,
+      body: undefined,
+    },
+    // Pattern 3: POST /properties/list (like the old realtor.p.rapidapi.com)
+    {
+      url: `${baseUrl}/properties/list`,
+      method: 'POST' as const,
+      body: JSON.stringify({
+        limit: 12,
+        offset: 0,
+        status: ['for_sale'],
+        sort: { direction: 'desc', field: 'list_date' },
+        list_price: { min: minPrice, max: maxPrice },
+        ...(city ? { city } : {}),
+        ...(stateCode ? { state_code: stateCode } : {}),
+      }),
+    },
+    // Pattern 4: POST /properties/v3/list
+    {
+      url: `${baseUrl}/properties/v3/list`,
+      method: 'POST' as const,
+      body: JSON.stringify({
+        limit: 12,
+        offset: 0,
+        status: ['for_sale'],
+        sort: { direction: 'desc', field: 'list_date' },
+        list_price: { min: minPrice, max: maxPrice },
+        ...(city ? { city } : {}),
+        ...(stateCode ? { state_code: stateCode } : {}),
+      }),
+    },
+    // Pattern 5: GET /forsale with different param names
+    {
+      url: `${baseUrl}/forsale?location=${encodeURIComponent(locationQuery)}&price_min=${minPrice}&price_max=${maxPrice}&limit=12&sort=newest`,
+      method: 'GET' as const,
+      body: undefined,
+    },
+  ];
+
+  try {
+    for (const endpoint of endpoints) {
+      try {
+        const headers: Record<string, string> = {
+          ...HEADERS,
+        };
+        if (endpoint.method === 'POST') {
+          headers['Content-Type'] = 'application/json';
+        }
+
+        console.log(`[homes/search] Trying: ${endpoint.method} ${endpoint.url}`);
+
+        const response = await fetch(endpoint.url, {
+          method: endpoint.method,
+          headers,
+          body: endpoint.body,
+          signal: controller.signal,
+        });
+
+        console.log(`[homes/search] Response: ${response.status} from ${endpoint.url}`);
+
+        if (!response.ok) {
+          // Try next endpoint
+          continue;
+        }
+
+        const data = await response.json();
+
+        // Try to extract properties from various response shapes
+        const properties = extractProperties(data);
+
+        if (properties.length > 0) {
+          console.log(`[homes/search] Found ${properties.length} properties from ${endpoint.url}`);
+          return { properties, source: 'Realtor.com' };
+        }
+
+        // Log the response shape to help debug
+        console.log(`[homes/search] Response shape from ${endpoint.url}:`, JSON.stringify(Object.keys(data)).slice(0, 200));
+      } catch (endpointErr) {
+        // If aborted, don't try more endpoints
+        if (controller.signal.aborted) throw endpointErr;
+        console.log(`[homes/search] Endpoint failed: ${endpoint.url}`, endpointErr instanceof Error ? endpointErr.message : '');
+        continue;
+      }
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  return null;
+}
+
+/**
+ * Extract property listings from various possible API response shapes.
+ */
+function extractProperties(data: any): any[] {
+  if (!data) return [];
+
+  // Common response paths used by different Realtor APIs
+  const paths = [
+    data.data?.home_search?.results,
+    data.data?.results,
+    data.results,
+    data.properties,
+    data.listings,
+    data.data?.properties,
+    data.data?.listings,
+    data.homes,
+    data.data?.homes,
+    data.data,
+  ];
+
+  for (const candidate of paths) {
+    if (Array.isArray(candidate) && candidate.length > 0) {
+      return candidate;
+    }
+  }
+
+  // If data itself is an array
+  if (Array.isArray(data) && data.length > 0) {
+    return data;
+  }
+
+  return [];
+}
+
+/**
+ * Normalize a single property from various API formats into our Home interface.
+ */
+function normalizeProperty(prop: any): {
+  id: string;
+  address: string;
+  city: string;
+  state: string;
+  zipcode: string;
+  price: number;
+  bedrooms: number;
+  bathrooms: number;
+  sqft: number;
+  homeType: string;
+  photoUrl: string;
+  listingUrl: string;
+  status: string;
+} {
+  // Handle nested location/address structures (realtor.p.rapidapi.com format)
+  const loc = prop.location || {};
+  const addr = loc.address || prop.address || {};
+  const desc = prop.description || {};
+
+  // Extract address string
+  let address = '';
+  if (typeof addr === 'string') {
+    address = addr;
+  } else {
+    address = addr.line || addr.street_name || addr.street || addr.full || prop.street_address || prop.address_line || '';
+  }
+
+  // Extract city
+  const city = addr.city || prop.city || loc.city || '';
+
+  // Extract state
+  const state = addr.state_code || addr.state || prop.state_code || prop.state || loc.state_code || '';
+
+  // Extract zipcode
+  const zipcode = addr.postal_code || addr.zip || prop.zip || prop.zipcode || prop.postal_code || loc.postal_code || '';
+
+  // Extract price
+  const price = prop.list_price || prop.price || prop.listPrice || desc.price || 0;
+
+  // Extract bedrooms/bathrooms
+  const bedrooms = desc.beds || desc.bedrooms || prop.beds || prop.bedrooms || 0;
+  const bathrooms = desc.baths || desc.bathrooms || prop.baths || prop.bathrooms || 0;
+
+  // Extract sqft
+  const sqft = desc.sqft || prop.sqft || prop.square_feet || prop.lot_sqft || desc.lot_sqft || 0;
+
+  // Extract home type
+  const homeType = desc.type || prop.type || prop.property_type || prop.homeType || 'Single Family';
+
+  // Extract photo URL — try multiple paths
+  let photoUrl = '';
+  if (prop.primary_photo?.href) {
+    photoUrl = prop.primary_photo.href;
+  } else if (prop.photo?.href) {
+    photoUrl = prop.photo.href;
+  } else if (typeof prop.thumbnail === 'string' && prop.thumbnail.startsWith('http')) {
+    photoUrl = prop.thumbnail;
+  } else if (typeof prop.image === 'string' && prop.image.startsWith('http')) {
+    photoUrl = prop.image;
+  } else if (typeof prop.photo_url === 'string' && prop.photo_url.startsWith('http')) {
+    photoUrl = prop.photo_url;
+  } else if (typeof prop.imageUrl === 'string' && prop.imageUrl.startsWith('http')) {
+    photoUrl = prop.imageUrl;
+  } else if (Array.isArray(prop.photos) && prop.photos.length > 0) {
+    const first = prop.photos[0];
+    photoUrl = (typeof first === 'string' ? first : first?.href || first?.url || '') || '';
+  } else if (Array.isArray(prop.images) && prop.images.length > 0) {
+    const first = prop.images[0];
+    photoUrl = (typeof first === 'string' ? first : first?.href || first?.url || '') || '';
+  }
+
+  // Build listing URL
+  let listingUrl = '';
+  if (prop.permalink) {
+    listingUrl = prop.permalink.startsWith('http')
+      ? prop.permalink
+      : `https://www.realtor.com/realestateandhomes-detail/${prop.permalink}`;
+  } else if (prop.url && typeof prop.url === 'string') {
+    listingUrl = prop.url.startsWith('http') ? prop.url : `https://www.realtor.com${prop.url}`;
+  } else if (prop.detail_url) {
+    listingUrl = prop.detail_url.startsWith('http') ? prop.detail_url : `https://www.realtor.com${prop.detail_url}`;
+  } else if (prop.property_id) {
+    listingUrl = `https://www.realtor.com/realestateandhomes-detail/${prop.property_id}`;
+  } else if (prop.listing_id) {
+    listingUrl = `https://www.realtor.com/realestateandhomes-detail/${prop.listing_id}`;
+  } else {
+    // Fallback: build a search URL for the specific city
+    const citySlug = (city || '').replace(/\s+/g, '-');
+    const stateSlug = state || '';
+    listingUrl = `https://www.realtor.com/realestateandhomes-search/${citySlug}_${stateSlug}`;
+  }
+
+  return {
+    id: prop.property_id || prop.listing_id || prop.id || String(Math.random()),
+    address,
+    city,
+    state,
+    zipcode,
+    price,
+    bedrooms,
+    bathrooms,
+    sqft,
+    homeType,
+    photoUrl,
+    listingUrl,
+    status: prop.status || 'for_sale',
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -68,137 +335,53 @@ export async function POST(request: NextRequest) {
     const rapidApiKey = process.env.RAPIDAPI_KEY;
 
     if (!rapidApiKey) {
-      // No API key — return empty so the UI shows browse links
       return NextResponse.json({
         success: true,
         homes: [],
         count: 0,
-        source: 'Sample listings',
+        source: 'no_api_key',
       });
     }
 
-    const { city: searchCity, stateCode } = parseLocation(location);
-
-    // Build the POST body for Realtor API v3
-    const apiBody: Record<string, unknown> = {
-      limit: 12,
-      offset: 0,
-      status: ['for_sale'],
-      sort: { direction: 'desc', field: 'list_date' },
-      list_price: { min: minPrice, max: maxPrice },
-    };
-
-    if (searchCity) apiBody.city = searchCity;
-    if (stateCode) apiBody.state_code = stateCode;
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+    const { city, stateCode } = parseLocation(location);
 
     try {
-      const response = await fetch('https://realtor.p.rapidapi.com/properties/v3/list', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-RapidAPI-Key': rapidApiKey,
-          'X-RapidAPI-Host': 'realtor.p.rapidapi.com',
-        },
-        body: JSON.stringify(apiBody),
-        signal: controller.signal,
-      });
+      const result = await fetchFromRealtorAPI(city, stateCode, minPrice, maxPrice);
 
-      clearTimeout(timeout);
-
-      if (!response.ok) {
-        throw new Error(`API returned ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      // Extract properties from various possible response shapes
-      let properties: any[] = [];
-      if (data.data?.home_search?.results) {
-        properties = data.data.home_search.results;
-      } else if (data.data?.results) {
-        properties = data.data.results;
-      } else if (Array.isArray(data.properties)) {
-        properties = data.properties;
-      } else if (Array.isArray(data.listings)) {
-        properties = data.listings;
-      }
-
-      if (properties.length === 0) {
+      if (!result || result.properties.length === 0) {
+        console.log('[homes/search] No properties found from any endpoint');
         return NextResponse.json({
           success: true,
           homes: [],
           count: 0,
-          source: 'Realtor.com',
+          source: 'no_results',
         });
       }
 
-      const homes = properties.slice(0, 12).map((prop: any) => {
-        const loc = prop.location || {};
-        const address = loc.address || {};
-        const description = prop.description || {};
+      const homes = result.properties.slice(0, 12).map(normalizeProperty);
 
-        // Extract photo URL - try multiple paths
-        let photoUrl = '';
-        if (prop.primary_photo?.href) {
-          photoUrl = prop.primary_photo.href;
-        } else if (Array.isArray(prop.photos) && prop.photos.length > 0) {
-          photoUrl = prop.photos[0]?.href || prop.photos[0] || '';
-        } else if (prop.thumbnail) {
-          photoUrl = prop.thumbnail;
-        }
-
-        // Build direct listing URL using permalink (the real specific listing link)
-        let listingUrl = '';
-        if (prop.permalink) {
-          listingUrl = `https://www.realtor.com/realestateandhomes-detail/${prop.permalink}`;
-        } else if (prop.property_id) {
-          listingUrl = `https://www.realtor.com/realestateandhomes-detail/${prop.property_id}`;
-        } else {
-          // Fallback to search page for this city
-          const city = (address.city || '').replace(/\s+/g, '-');
-          const st = address.state_code || address.state || '';
-          listingUrl = `https://www.realtor.com/realestateandhomes-search/${city}_${st}`;
-        }
-
-        return {
-          id: prop.property_id || prop.listing_id || String(Math.random()),
-          address: address.line || address.street_name || '',
-          city: address.city || '',
-          state: address.state_code || address.state || '',
-          zipcode: address.postal_code || '',
-          price: prop.list_price || 0,
-          bedrooms: description.beds || description.bedrooms || 0,
-          bathrooms: description.baths || description.bathrooms || 0,
-          sqft: description.sqft || description.lot_sqft || 0,
-          homeType: description.type || 'Single Family',
-          photoUrl,
-          listingUrl,
-          status: prop.status || 'for_sale',
-        };
-      });
+      // Log first home shape for debugging
+      if (homes.length > 0) {
+        console.log('[homes/search] First normalized home:', JSON.stringify(homes[0]).slice(0, 300));
+      }
 
       return NextResponse.json({
         success: true,
         homes,
         count: homes.length,
-        source: 'Realtor.com',
+        source: result.source,
       });
     } catch (fetchErr) {
-      clearTimeout(timeout);
-      console.error('Realtor API fetch error:', fetchErr instanceof Error ? fetchErr.message : fetchErr);
-      // Network error / timeout — return empty so UI shows browse links
+      console.error('[homes/search] All endpoints failed:', fetchErr instanceof Error ? fetchErr.message : fetchErr);
       return NextResponse.json({
         success: true,
         homes: [],
         count: 0,
-        source: 'Sample listings',
+        source: 'api_error',
       });
     }
   } catch (error) {
-    console.error('Search error:', error);
+    console.error('[homes/search] Request error:', error);
     return NextResponse.json(
       {
         success: false,
@@ -210,10 +393,60 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET() {
+// Debug endpoint - shows API config and lets you test manually
+export async function GET(request: NextRequest) {
+  const testLocation = request.nextUrl.searchParams.get('test');
+
+  if (testLocation) {
+    // Test mode: try to fetch and return raw API response shape
+    const { city, stateCode } = parseLocation(testLocation);
+    const host = process.env.RAPIDAPI_HOST || 'realtor-search.p.rapidapi.com';
+
+    const locationQuery = city && stateCode ? `${city}, ${stateCode}` : city || stateCode;
+
+    const endpoints = [
+      `https://${host}/properties?location=${encodeURIComponent(locationQuery)}&minPrice=200000&maxPrice=500000&limit=3`,
+      `https://${host}/search?location=${encodeURIComponent(locationQuery)}&price_min=200000&price_max=500000&limit=3`,
+      `https://${host}/forsale?location=${encodeURIComponent(locationQuery)}&price_min=200000&price_max=500000&limit=3`,
+    ];
+
+    const results: any[] = [];
+
+    for (const url of endpoints) {
+      try {
+        const res = await fetch(url, {
+          headers: HEADERS,
+          signal: AbortSignal.timeout(8000),
+        });
+        const text = await res.text();
+        let parsed;
+        try { parsed = JSON.parse(text); } catch { parsed = text.slice(0, 500); }
+        results.push({
+          url,
+          status: res.status,
+          keys: parsed && typeof parsed === 'object' ? Object.keys(parsed) : null,
+          preview: JSON.stringify(parsed).slice(0, 500),
+        });
+      } catch (e) {
+        results.push({
+          url,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+
+    return NextResponse.json({
+      host,
+      apiKeyConfigured: !!process.env.RAPIDAPI_KEY,
+      locationParsed: { city, stateCode },
+      endpointTests: results,
+    });
+  }
+
   return NextResponse.json({
     status: 'ready',
-    message: 'Real estate search API',
+    message: 'Real estate search API - add ?test=Idaho to test endpoints',
     apiKeyConfigured: !!process.env.RAPIDAPI_KEY,
+    apiHost: process.env.RAPIDAPI_HOST || '(not set)',
   });
 }
