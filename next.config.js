@@ -12,7 +12,7 @@ const nextConfig = {
         protocol: 'https',
         hostname: '**.unsplash.com',
       },
-{
+      {
         protocol: 'https',
         hostname: '**.rdcpix.com',
       },
@@ -23,6 +23,14 @@ const nextConfig = {
       {
         protocol: 'https',
         hostname: '**.hdnux.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.realtor.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.mredllc.com',
       },
     ],
   },

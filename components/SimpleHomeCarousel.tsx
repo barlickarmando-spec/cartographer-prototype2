@@ -29,15 +29,55 @@ function formatPrice(price: number): string {
   if (price >= 1000000) {
     return `$${(price / 1000000).toFixed(1)}M`;
   }
-  return `$${(price / 1000).toFixed(0)}K`;
+  return `$${Math.round(price / 1000)}K`;
 }
 
-function buildRealtorUrl(location: string, minPrice: number, maxPrice: number): string {
-  const formatted = location.trim()
-    .replace(/,\s*/g, '_')
-    .replace(/\s+/g, '-');
-  return `https://www.realtor.com/realestateandhomes-search/${formatted}/price-${minPrice}-${maxPrice}/beds-2`;
+function formatPriceFull(price: number): string {
+  return `$${price.toLocaleString()}`;
 }
+
+/**
+ * Build a Realtor.com search URL with exact location + price range filters.
+ * Realtor.com URL format: /realestateandhomes-search/{City_ST}/price-{min}-{max}
+ */
+function buildRealtorSearchUrl(location: string, minPrice: number, maxPrice: number, options?: {
+  beds?: number;
+  type?: 'single-family' | 'condo' | 'apartment';
+}): string {
+  // Parse "City, ST" or just state name
+  let slug = '';
+  const trimmed = location.trim();
+
+  if (trimmed.includes(',')) {
+    // "Boise, ID" -> "Boise_ID"
+    const parts = trimmed.split(',').map(p => p.trim());
+    const city = parts[0].replace(/\s+/g, '-');
+    const state = parts[1]?.toUpperCase() || '';
+    slug = `${city}_${state}`;
+  } else if (/^[A-Z]{2}$/i.test(trimmed)) {
+    // "ID" -> state code
+    slug = trimmed.toUpperCase();
+  } else {
+    // Full state name like "Idaho" -> replace spaces with -
+    slug = trimmed.replace(/\s+/g, '-');
+  }
+
+  let url = `https://www.realtor.com/realestateandhomes-search/${slug}/price-${minPrice}-${maxPrice}`;
+
+  if (options?.beds) {
+    url += `/beds-${options.beds}`;
+  }
+  if (options?.type === 'single-family') {
+    url += '/type-single-family-home';
+  } else if (options?.type === 'condo') {
+    url += '/type-condo-townhome';
+  }
+
+  return url;
+}
+
+const MAX_HOMES = 8;
+const HOMES_PER_PAGE = 2;
 
 const CARD_GRADIENTS = [
   'from-[#EFF6FF] to-[#DBEAFE]',
@@ -49,9 +89,6 @@ const CARD_GRADIENTS = [
   'from-[#FFF7ED] to-[#FFEDD5]',
   'from-[#F0FDFA] to-[#CCFBF1]',
 ];
-
-const MAX_HOMES = 8;
-const HOMES_PER_PAGE = 2;
 
 export default function SimpleHomeCarousel({
   location,
@@ -72,6 +109,7 @@ export default function SimpleHomeCarousel({
 
   const displayHomes = homes.slice(0, MAX_HOMES);
   const totalPages = Math.ceil(displayHomes.length / HOMES_PER_PAGE);
+  const hasRealListings = displayHomes.length > 0 && source !== 'Sample listings';
 
   useEffect(() => {
     let cancelled = false;
@@ -92,11 +130,18 @@ export default function SimpleHomeCarousel({
 
         if (!cancelled) {
           if (data.success && data.homes && data.homes.length > 0) {
-            const filtered = data.homes.filter(
-              (h: Home) => h.price >= minPrice && h.price <= maxPrice
+            // Only use homes that have actual photos and real listing URLs
+            const realHomes = data.homes.filter(
+              (h: Home) => h.photoUrl && h.photoUrl.startsWith('http') && h.price >= minPrice && h.price <= maxPrice
             );
-            setHomes(filtered.length > 0 ? filtered.slice(0, MAX_HOMES) : data.homes.slice(0, MAX_HOMES));
-            setSource(data.source || '');
+            if (realHomes.length > 0) {
+              setHomes(realHomes.slice(0, MAX_HOMES));
+              setSource(data.source || '');
+            } else {
+              // No homes with real photos - show browse interface instead
+              setHomes([]);
+              setSource(data.source || 'Sample listings');
+            }
           } else {
             setHomes([]);
             setSource('');
@@ -158,45 +203,12 @@ export default function SimpleHomeCarousel({
     );
   }
 
-  // Error or empty
-  if (error || homes.length === 0) {
-    const realtorUrl = buildRealtorUrl(location, minPrice, maxPrice);
-    return (
-      <div className="space-y-3">
-        <div>
-          <h3 className="text-base font-semibold text-[#2C3E50] mb-1">{location} Homes ~ {priceLabel}</h3>
-          <p className="text-xs text-[#6B7280]">{formatPrice(minPrice)} - {formatPrice(maxPrice)} price range</p>
-        </div>
-        <div className="bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE] border-2 border-[#5BA4E5] rounded-xl p-4 shadow">
-          <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 bg-[#5BA4E5] text-white p-2 rounded-full">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-              </svg>
-            </div>
-            <div className="flex-1">
-              <h4 className="font-bold text-[#2C3E50] text-sm mb-1">Browse homes in {location}</h4>
-              <p className="text-xs text-[#6B7280] mb-3">
-                {error ? "Couldn't load listings. Browse on Realtor.com instead." : 'No listings in this price range. Try Realtor.com for more options.'}
-              </p>
-              <a href={realtorUrl} target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#5BA4E5] to-[#4A93D4] text-white rounded-lg hover:from-[#4A93D4] hover:to-[#3982C3] transition-all font-semibold text-sm shadow">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                </svg>
-                Browse on Realtor.com
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-              </a>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+  // No real listings available — show the browse-on-Realtor.com interface
+  if (!hasRealListings) {
+    return <BrowseRealtorInterface location={location} minPrice={minPrice} maxPrice={maxPrice} targetPrice={targetPrice} />;
   }
 
-  const isSampleData = source === 'Sample listings';
+  // Real listings with photos available — show paginated carousel
   const visibleStart = currentPage * HOMES_PER_PAGE;
   const visibleHomes = displayHomes.slice(visibleStart, visibleStart + HOMES_PER_PAGE);
 
@@ -208,7 +220,7 @@ export default function SimpleHomeCarousel({
           <h3 className="text-base font-semibold text-[#2C3E50] mb-0.5">{location} Homes ~ {priceLabel}</h3>
           <p className="text-xs text-[#6B7280]">
             {formatPrice(minPrice)} - {formatPrice(maxPrice)} | {displayHomes.length} listing{displayHomes.length !== 1 ? 's' : ''}
-            {isSampleData && <span className="ml-1 text-[#9CA3AF]">(sample)</span>}
+            {source && <span className="ml-1 text-[#9CA3AF]">via {source}</span>}
           </p>
         </div>
         <div className="flex items-center gap-1.5">
@@ -259,18 +271,6 @@ export default function SimpleHomeCarousel({
         </div>
       )}
 
-      {isSampleData && (
-        <div className="text-center pt-1">
-          <a href={buildRealtorUrl(location, minPrice, maxPrice)} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-xs text-[#5BA4E5] hover:text-[#4A93D4] font-medium transition-colors">
-            Browse live listings on Realtor.com
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-            </svg>
-          </a>
-        </div>
-      )}
-
       {/* Full-screen modal */}
       {modalHome && (
         <FullScreenCarouselModal
@@ -281,6 +281,140 @@ export default function SimpleHomeCarousel({
           onSetIndex={(idx) => { setModalIndex(idx); setModalHome(displayHomes[idx]); }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * When no real listings with photos are available, show a clean interface
+ * with direct links to properly-filtered Realtor.com search pages.
+ */
+function BrowseRealtorInterface({
+  location,
+  minPrice,
+  maxPrice,
+  targetPrice,
+}: {
+  location: string;
+  minPrice: number;
+  maxPrice: number;
+  targetPrice: number;
+}) {
+  const priceLabel = formatPrice(targetPrice);
+
+  // Build several filtered search links for different home types
+  const searchLinks = [
+    {
+      label: 'All Homes',
+      description: `${formatPriceFull(minPrice)} – ${formatPriceFull(maxPrice)}`,
+      url: buildRealtorSearchUrl(location, minPrice, maxPrice),
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
+      ),
+      gradient: 'from-[#EFF6FF] to-[#DBEAFE]',
+      iconColor: 'text-blue-500',
+    },
+    {
+      label: 'Single Family',
+      description: 'Houses with yards',
+      url: buildRealtorSearchUrl(location, minPrice, maxPrice, { type: 'single-family' }),
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
+        </svg>
+      ),
+      gradient: 'from-[#F0FDF4] to-[#DCFCE7]',
+      iconColor: 'text-green-500',
+    },
+    {
+      label: 'Condos & Townhomes',
+      description: 'Lower maintenance',
+      url: buildRealtorSearchUrl(location, minPrice, maxPrice, { type: 'condo' }),
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        </svg>
+      ),
+      gradient: 'from-[#EDE9FE] to-[#DDD6FE]',
+      iconColor: 'text-purple-500',
+    },
+    {
+      label: '3+ Bedrooms',
+      description: 'Family-sized homes',
+      url: buildRealtorSearchUrl(location, minPrice, maxPrice, { beds: 3 }),
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+        </svg>
+      ),
+      gradient: 'from-[#FEF3C7] to-[#FDE68A]',
+      iconColor: 'text-amber-500',
+    },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-base font-semibold text-[#2C3E50] mb-0.5">{location} Homes ~ {priceLabel}</h3>
+        <p className="text-xs text-[#6B7280]">
+          Browse real listings on Realtor.com in your price range
+        </p>
+      </div>
+
+      {/* Search link cards - 2 per row */}
+      <div className="grid grid-cols-2 gap-3">
+        {searchLinks.map((link, idx) => (
+          <a
+            key={idx}
+            href={link.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group bg-white rounded-xl border border-[#E5E7EB] overflow-hidden hover:shadow-lg hover:border-[#5BA4E5] transition-all duration-200"
+          >
+            <div className={`bg-gradient-to-br ${link.gradient} p-4 flex items-center justify-center h-24`}>
+              <div className={`${link.iconColor} group-hover:scale-110 transition-transform duration-200`}>
+                {link.icon}
+              </div>
+            </div>
+            <div className="p-3">
+              <div className="flex items-center justify-between mb-0.5">
+                <p className="text-sm font-semibold text-[#2C3E50]">{link.label}</p>
+                <svg className="w-3.5 h-3.5 text-[#9CA3AF] group-hover:text-[#5BA4E5] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </div>
+              <p className="text-[10px] text-[#6B7280]">{link.description}</p>
+            </div>
+          </a>
+        ))}
+      </div>
+
+      {/* Main CTA */}
+      <div className="bg-gradient-to-r from-[#EFF6FF] to-[#DBEAFE] border border-[#BFDBFE] rounded-xl p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex-shrink-0 bg-[#5BA4E5] text-white p-2.5 rounded-full shadow">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-[#2C3E50]">See all listings in {location}</p>
+            <p className="text-xs text-[#6B7280]">
+              {formatPriceFull(minPrice)} – {formatPriceFull(maxPrice)} on Realtor.com
+            </p>
+          </div>
+          <a
+            href={buildRealtorSearchUrl(location, minPrice, maxPrice)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-shrink-0 px-4 py-2 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-colors font-semibold text-sm shadow"
+          >
+            Browse
+          </a>
+        </div>
+      </div>
     </div>
   );
 }
@@ -356,9 +490,6 @@ function FullScreenCarouselModal({
   if (!home) return null;
 
   const gradient = CARD_GRADIENTS[currentIndex % CARD_GRADIENTS.length];
-  const listingUrl = home.listingUrl.startsWith('http')
-    ? home.listingUrl
-    : `https://www.realtor.com/realestateandhomes-detail/${home.listingUrl}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
@@ -447,9 +578,9 @@ function FullScreenCarouselModal({
           </div>
 
           <div className="mt-auto pt-4 border-t border-[#E5E7EB]">
-            <a href={listingUrl} target="_blank" rel="noopener noreferrer"
+            <a href={home.listingUrl} target="_blank" rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-gradient-to-r from-[#5BA4E5] to-[#4A93D4] text-white rounded-xl hover:from-[#4A93D4] hover:to-[#3982C3] transition-all font-semibold text-sm shadow">
-              View Full Listing
+              View Full Listing on Realtor.com
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
