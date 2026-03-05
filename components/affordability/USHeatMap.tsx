@@ -2,8 +2,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { ComposableMap, Geographies, Geography, Marker } from 'react-simple-maps';
-import { scaleSequential } from 'd3-scale';
-import { interpolateGreens, interpolateBlues } from 'd3-scale-chromatic';
+import { createSequentialScale, interpolateGreens, interpolateBlues } from '@/lib/color-scale';
 import { CITY_COORDINATES } from '@/lib/us-city-coordinates';
 import HeatMapTooltip from './HeatMapTooltip';
 import MapLegend from './MapLegend';
@@ -50,7 +49,7 @@ export default function USHeatMap({
     const min = Math.min(...values);
     const max = Math.max(...values);
     const interpolator = mode === 'value' ? interpolateGreens : interpolateBlues;
-    const scale = scaleSequential(interpolator).domain([min, max]);
+    const scale = createSequentialScale(interpolator, [min, max]);
 
     return { colorScale: scale, minVal: min, maxVal: max };
   }, [stateData, mode]);
@@ -61,7 +60,7 @@ export default function USHeatMap({
       if (!calc || !calc.isViable || !colorScale) return GRAY;
       const val = mode === 'value' ? calc.maxHomeValue : calc.sqft;
       if (val <= 0) return GRAY;
-      return colorScale(val) as string;
+      return colorScale(val);
     },
     [stateData, mode, colorScale]
   );

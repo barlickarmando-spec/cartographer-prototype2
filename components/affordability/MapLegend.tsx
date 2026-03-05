@@ -1,8 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { scaleSequential } from 'd3-scale';
-import { interpolateGreens, interpolateBlues } from 'd3-scale-chromatic';
+import { createSequentialScale, interpolateGreens, interpolateBlues } from '@/lib/color-scale';
 import { formatCurrency } from '@/lib/utils';
 
 interface MapLegendProps {
@@ -14,7 +13,7 @@ interface MapLegendProps {
 export default function MapLegend({ mode, min, max }: MapLegendProps) {
   const colorScale = useMemo(() => {
     const interpolator = mode === 'value' ? interpolateGreens : interpolateBlues;
-    return scaleSequential(interpolator).domain([min, max]);
+    return createSequentialScale(interpolator, [min, max]);
   }, [mode, min, max]);
 
   const stops = 20;
