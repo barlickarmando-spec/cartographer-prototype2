@@ -139,56 +139,91 @@ async function autoCompleteLocation(query: string): Promise<string | null> {
 }
 
 // ── Step 2: Search for-sale listings ────────────────────────────────
+// Makes multiple API calls with different strategies to collect enough
+// in-range listings (target: 8+).
 async function searchForSale(
   locationId: string,
   minPrice: number,
   maxPrice: number,
 ): Promise<any[] | null> {
-  const params = new URLSearchParams({
-    location: locationId,
-    sort_by: 'RelevantListings',
-    search_within_x_miles: '10',
-  });
+  const collected: any[] = [];
+  const seenIds = new Set<string>();
 
-  const url = `${BASE_URL}/property/search-sale?${params.toString()}`;
-  console.log(`[homes/search] Search for sale: ${url}`);
+  // Helper: run one search and collect unique results
+  async function doSearch(extraParams: Record<string, string>, label: string): Promise<void> {
+    const params = new URLSearchParams({
+      location: locationId,
+      search_within_x_miles: '10',
+      ...extraParams,
+    });
 
-  const res = await fetch(url, {
-    headers: HEADERS,
-    signal: AbortSignal.timeout(10000),
-  });
+    const url = `${BASE_URL}/property/search-sale?${params.toString()}`;
+    console.log(`[homes/search] Search (${label}): ${url}`);
 
-  if (!res.ok) {
-    console.log(`[homes/search] Search failed: ${res.status}`);
-    const text = await res.text().catch(() => '');
-    console.log(`[homes/search] Response body: ${text.slice(0, 300)}`);
-    return null;
-  }
+    try {
+      const res = await fetch(url, {
+        headers: HEADERS,
+        signal: AbortSignal.timeout(10000),
+      });
 
-  const json = await res.json();
-  console.log(`[homes/search] Search response keys: ${JSON.stringify(Object.keys(json))}`);
-
-  // Extract the listings array from whichever response shape we get
-  const listings = json.data || json.properties || json.results || json.listings || json.homes || [];
-
-  if (Array.isArray(listings) && listings.length > 0) {
-    console.log(`[homes/search] Found ${listings.length} listings`);
-    console.log(`[homes/search] First listing keys: ${JSON.stringify(Object.keys(listings[0]))}`);
-    return listings;
-  }
-
-  // Maybe the data is nested one level deeper
-  if (json.data && typeof json.data === 'object' && !Array.isArray(json.data)) {
-    for (const key of Object.keys(json.data)) {
-      if (Array.isArray(json.data[key]) && json.data[key].length > 0) {
-        console.log(`[homes/search] Found ${json.data[key].length} listings in data.${key}`);
-        return json.data[key];
+      if (!res.ok) {
+        console.log(`[homes/search] Search (${label}) failed: ${res.status}`);
+        return;
       }
+
+      const json = await res.json();
+      let listings = json.data || json.properties || json.results || json.listings || json.homes || [];
+
+      if (!Array.isArray(listings) && json.data && typeof json.data === 'object') {
+        for (const key of Object.keys(json.data)) {
+          if (Array.isArray(json.data[key]) && json.data[key].length > 0) {
+            listings = json.data[key];
+            break;
+          }
+        }
+      }
+
+      if (!Array.isArray(listings)) return;
+      console.log(`[homes/search] Search (${label}): ${listings.length} results`);
+
+      for (const item of listings) {
+        const id = item.property_id || item.listing_id || item.id || '';
+        if (id && seenIds.has(id)) continue;
+        if (id) seenIds.add(id);
+        collected.push(item);
+      }
+    } catch (e) {
+      console.log(`[homes/search] Search (${label}) error:`, e instanceof Error ? e.message : e);
     }
   }
 
-  console.log(`[homes/search] No listings found. Response preview: ${JSON.stringify(json).slice(0, 500)}`);
-  return null;
+  // Strategy 1: Sort by price (low to high) — gets cheaper homes first
+  await doSearch({ sort_by: 'Price_Low' }, 'price_low');
+
+  // If we already have enough in range, stop early
+  const inRange = () => collected.filter(item => {
+    const price = item.list_price || item.price || item.description?.price || 0;
+    return price >= minPrice && price <= maxPrice;
+  }).length;
+
+  if (inRange() >= 8) {
+    console.log(`[homes/search] Got ${inRange()} in range after 1 call`);
+    return collected;
+  }
+
+  // Strategy 2: Sort by price (high to low) — different set of results
+  await doSearch({ sort_by: 'Price_High' }, 'price_high');
+
+  if (inRange() >= 8) {
+    console.log(`[homes/search] Got ${inRange()} in range after 2 calls`);
+    return collected;
+  }
+
+  // Strategy 3: Relevant listings (default sort) — may surface different homes
+  await doSearch({ sort_by: 'RelevantListings' }, 'relevant');
+
+  console.log(`[homes/search] Total collected: ${collected.length}, in range: ${inRange()}`);
+  return collected.length > 0 ? collected : null;
 }
 
 // ── Step 3: Get photos for a property ───────────────────────────────
@@ -456,7 +491,7 @@ export async function GET(request: NextRequest) {
 
     for (const fmt of locationFormats) {
       try {
-        const searchUrl = `${BASE_URL}/property/search-sale?location=${encodeURIComponent(fmt.value)}&sort_by=RelevantListings&search_within_x_miles=10`;
+        const searchUrl = `${BASE_URL}/property/search-sale?location=${encodeURIComponent(fmt.value)}&sort_by=Price_Low&search_within_x_miles=10`;
         const searchRes = await fetch(searchUrl, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
         const searchJson = await searchRes.json();
 
