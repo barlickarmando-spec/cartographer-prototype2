@@ -240,7 +240,9 @@ function normalizeProperty(prop: any): {
   const bedrooms = desc.beds || desc.bedrooms || prop.beds || prop.bedrooms || 0;
   const bathrooms = desc.baths || desc.bathrooms || prop.baths || prop.bathrooms || 0;
   const sqft = desc.sqft || prop.sqft || prop.square_feet || prop.lot_sqft || desc.lot_sqft || 0;
-  const homeType = desc.type || prop.type || prop.property_type || prop.homeType || 'Single Family';
+  const rawType = desc.type || prop.type || prop.property_type || prop.homeType || 'single_family';
+  // Convert snake_case to Title Case (e.g., "single_family" → "Single Family")
+  const homeType = rawType.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
 
   // Photo URL — try all common paths
   let photoUrl = '';
