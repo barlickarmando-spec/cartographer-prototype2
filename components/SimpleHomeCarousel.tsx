@@ -76,7 +76,7 @@ function buildRealtorSearchUrl(location: string, minPrice: number, maxPrice: num
   return url;
 }
 
-const MAX_HOMES = 8;
+const MAX_HOMES = 24;
 const HOMES_PER_PAGE = 2;
 
 const CARD_GRADIENTS = [
@@ -88,6 +88,10 @@ const CARD_GRADIENTS = [
   'from-[#E0F2FE] to-[#BAE6FD]',
   'from-[#FFF7ED] to-[#FFEDD5]',
   'from-[#F0FDFA] to-[#CCFBF1]',
+  'from-[#FEF2F2] to-[#FECACA]',
+  'from-[#ECFDF5] to-[#A7F3D0]',
+  'from-[#EFF6FF] to-[#BFDBFE]',
+  'from-[#FDF4FF] to-[#E9D5FF]',
 ];
 
 export default function SimpleHomeCarousel({
@@ -188,10 +192,10 @@ export default function SimpleHomeCarousel({
           <h3 className="text-base font-semibold text-[#2C3E50] mb-1">{location} Homes ~ {priceLabel}</h3>
           <p className="text-xs text-[#6B7280]">Searching for homes...</p>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[0, 1].map((i) => (
             <div key={i} className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden animate-pulse">
-              <div className="h-32 bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE]" />
+              <div className="h-[50vh] sm:h-[60vh] bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE]" />
               <div className="p-3 space-y-2">
                 <div className="h-4 bg-[#E5E7EB] rounded w-20" />
                 <div className="h-3 bg-[#E5E7EB] rounded w-32" />
@@ -239,8 +243,8 @@ export default function SimpleHomeCarousel({
         </div>
       </div>
 
-      {/* 2-at-a-time grid */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Listings grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {visibleHomes.map((home, idx) => {
           const globalIdx = visibleStart + idx;
           return (
@@ -426,7 +430,7 @@ function CompactHomeCard({ home, index, onClick }: { home: Home; index: number; 
   return (
     <button onClick={onClick}
       className="text-left bg-white rounded-xl border border-[#E5E7EB] overflow-hidden hover:shadow-lg transition-all duration-200 group cursor-pointer w-full">
-      <div className={`relative h-64 bg-gradient-to-br ${gradient} overflow-hidden`}>
+      <div className={`relative h-[50vh] sm:h-[60vh] bg-gradient-to-br ${gradient} overflow-hidden`}>
         {home.photoUrl && !imgError ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img src={home.photoUrl} alt={`Home at ${home.address}`}
@@ -494,7 +498,7 @@ function FullScreenCarouselModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative bg-white rounded-2xl shadow-2xl w-[98vw] h-[96vh] overflow-hidden flex flex-col md:flex-row"
+      <div className="relative bg-white shadow-2xl w-screen h-screen overflow-hidden flex flex-col md:flex-row"
         onClick={(e) => e.stopPropagation()}>
         {/* Close */}
         <button onClick={onClose}
@@ -504,8 +508,8 @@ function FullScreenCarouselModal({
           </svg>
         </button>
 
-        {/* Left: Image */}
-        <div className={`relative w-full md:w-3/5 h-80 md:h-full bg-gradient-to-br ${gradient}`}>
+        {/* Left: Image — takes up most of the screen */}
+        <div className={`relative w-full md:w-2/3 h-[50vh] md:h-full bg-gradient-to-br ${gradient}`}>
           {home.photoUrl && !imgError ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img src={home.photoUrl} alt={`Home at ${home.address}`} className="w-full h-full object-cover"
@@ -542,7 +546,7 @@ function FullScreenCarouselModal({
         </div>
 
         {/* Right: Details */}
-        <div className="w-full md:w-2/5 p-6 flex flex-col justify-between overflow-y-auto">
+        <div className="w-full md:w-1/3 p-6 flex flex-col justify-between overflow-y-auto">
           <div>
             <div className="mb-4">
               <p className="text-3xl font-bold text-[#2C3E50]">{formatPrice(home.price)}</p>

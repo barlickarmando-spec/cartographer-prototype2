@@ -144,11 +144,13 @@ async function searchForSale(
   minPrice: number,
   maxPrice: number,
 ): Promise<any[] | null> {
-  // Single call with wide radius to maximize results
+  // Include price filters so the API returns relevant listings
   const params = new URLSearchParams({
     location: locationId,
     sort_by: 'RelevantListings',
     search_within_x_miles: '50',
+    price_min: String(minPrice),
+    price_max: String(maxPrice),
   });
 
   const url = `${BASE_URL}/property/search-sale?${params.toString()}`;
@@ -226,13 +228,24 @@ async function getPhotos(propertyId: string, listingId: string): Promise<string>
 function upgradePhotoUrl(url: string): string {
   if (!url) return url;
 
-  // RDC/rdcpix URLs use patterns like "-w480_h360.jpg" or "-w{n}_h{n}_x2.jpg"
-  // Replace with large resolution
-  let upgraded = url.replace(/-w\d+_h\d+(_x2)?/g, '-w1024_h768');
+  let upgraded = url;
 
-  // Some URLs use "s.jpg" (small), "m.jpg" (medium), "l.jpg" (large), "od.jpg" (original)
-  // Try to upgrade to large
-  upgraded = upgraded.replace(/\/([^/]+)s\.jpg$/i, '/$1l.jpg');
+  // rdcpix URLs use letter suffixes for size: s=small, m=medium, l=large, od=original
+  // Example working large URL: http://nh.rdcpix.com/<hash>l-f<id>l.jpg
+  if (/rdcpix\.com/i.test(upgraded)) {
+    // Pattern: <hash><size>-f<id><size>.jpg → replace size letters with 'l' (large)
+    // Handle dimension-based URLs first: strip -w{n}_h{n} entirely
+    upgraded = upgraded.replace(/-w\d+_h\d+(_x2)?/g, '');
+    // Upgrade size suffix before -f to 'l': e.g. ...3s-f... → ...3l-f...
+    upgraded = upgraded.replace(/([0-9a-f])[smt](-f)/i, '$1l$2');
+    // Upgrade trailing size suffix: e.g. ...932s.jpg → ...932l.jpg
+    upgraded = upgraded.replace(/([0-9a-f])[smt](\.jpg)/i, '$1l$2');
+  } else {
+    // Non-rdcpix URLs: try dimension upgrade
+    upgraded = upgraded.replace(/-w\d+_h\d+(_x2)?/g, '-w1024_h768');
+    // s.jpg → l.jpg for other CDNs
+    upgraded = upgraded.replace(/\/([^/]+)s\.jpg$/i, '/$1l.jpg');
+  }
 
   // If URL has a "thumbs" path segment, try removing it for full-size
   upgraded = upgraded.replace(/\/thumbs\//, '/');
@@ -376,10 +389,10 @@ export async function POST(request: NextRequest) {
     // Step 4: Strictly filter to price range — never show homes outside budget
     homes = homes.filter(h => h.price >= minPrice && h.price <= maxPrice);
     debug.inPriceRange = homes.length;
-    homes = homes.slice(0, 12);
+    homes = homes.slice(0, 24);
 
     // Step 5: Fetch high-res photos via get-photos endpoint for all listings with property IDs
-    const withIds = homes.filter(h => h._propertyId).slice(0, 8);
+    const withIds = homes.filter(h => h._propertyId).slice(0, 24);
     if (withIds.length > 0) {
       debug.fetchingPhotosFor = withIds.length;
       const photoPromises = withIds.map(async (home) => {

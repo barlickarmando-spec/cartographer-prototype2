@@ -17,6 +17,10 @@ const nextConfig = {
         hostname: '**.rdcpix.com',
       },
       {
+        protocol: 'http',
+        hostname: '**.rdcpix.com',
+      },
+      {
         protocol: 'https',
         hostname: '**.cdn-redfin.com',
       },
