@@ -91,28 +91,24 @@ async function autoCompleteLocation(query: string): Promise<string | null> {
     return null;
   }
 
-  // For city queries, prefer a city-type result; for state, prefer state-type
-  // The location param for search-sale appears to accept zip codes
-  // Look for: postal_code, slug_id, city name, or geo_id
+  // The search-sale API wants "City, ST" format (confirmed via localtionSuggestion)
+  // Priority: City+State > zip code > slug_id > geo_id
+  const first = results[0];
+
+  // Best: "City, ST" format
+  if (first.city && first.state_code) {
+    return `${first.city}, ${first.state_code}`;
+  }
+
+  // Zip code
   for (const r of results) {
-    // If there's a zip code in the result, use it (most reliable for search)
     if (r.postal_code) return r.postal_code;
   }
 
-  // Try slug_id (e.g., "Boise_ID" or "Idaho")
-  const first = results[0];
+  // State name (for state-only queries)
+  if (first.state && !first.city) return first.state;
   if (first.slug_id) return first.slug_id;
-
-  // Try city name
-  if (first.city) {
-    const st = first.state_code || '';
-    return st ? `${first.city}, ${st}` : first.city;
-  }
-
-  // Try geo_id
   if (first.geo_id) return first.geo_id;
-
-  // Last resort: use the _id field
   if (first._id) return first._id;
 
   console.log('[homes/search] Auto-complete: no usable ID in result:', JSON.stringify(first).slice(0, 200));
@@ -130,6 +126,7 @@ async function searchForSale(
   const params = new URLSearchParams({
     location: locationId,
     sort_by: 'RelevantListings',
+    search_within_x_miles: '0',
   });
 
   const url = `${BASE_URL}/property/search-sale?${params.toString()}`;
@@ -414,16 +411,13 @@ export async function GET(request: NextRequest) {
     const acFirst = steps[0]?.firstResult ? JSON.parse(steps[0].firstResult) : null;
     const locationFormats: { label: string; value: string }[] = [];
 
-    if (locationId) locationFormats.push({ label: 'slug_id', value: locationId });
-    if (acFirst?.geo_id) locationFormats.push({ label: 'geo_id', value: acFirst.geo_id });
+    // Based on testing: API wants "City, ST" format + search_within_x_miles param
     if (acFirst?.city && acFirst?.state_code) locationFormats.push({ label: 'city_state', value: `${acFirst.city}, ${acFirst.state_code}` });
-    if (acFirst?.city) locationFormats.push({ label: 'city_only', value: acFirst.city });
-    // Try a known Boise zip code as a sanity check
-    locationFormats.push({ label: 'zip_83702', value: '83702' });
+    if (locationId) locationFormats.push({ label: 'resolved_id', value: locationId });
 
     for (const fmt of locationFormats) {
       try {
-        const searchUrl = `${BASE_URL}/property/search-sale?location=${encodeURIComponent(fmt.value)}&sort_by=RelevantListings`;
+        const searchUrl = `${BASE_URL}/property/search-sale?location=${encodeURIComponent(fmt.value)}&sort_by=RelevantListings&search_within_x_miles=0`;
         const searchRes = await fetch(searchUrl, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
         const searchJson = await searchRes.json();
 
