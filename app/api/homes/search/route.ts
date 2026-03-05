@@ -94,9 +94,12 @@ function upgradePhotoUrl(url: string): string {
   if (!url) return url;
   let upgraded = url;
   if (/rdcpix\.com/i.test(upgraded)) {
-    // rdcpix URLs use -w{W}_h{H} for sizing. Remove small constraints or upgrade them.
-    // Don't touch the hash/format codes (e.g. -m0xd, -m1234) — only size dimensions.
-    upgraded = upgraded.replace(/-w\d+_h\d+(_x2)?/g, '-w1024_h768');
+    // rdcpix photo URLs come in various formats:
+    //   .../abc123-m0xd-w300_rd_q80.jpg   (realty-in-us: w + rd + q params)
+    //   .../abc123-m0xd-w480_h360.jpg     (width + height)
+    //   .../abc123s.jpg                   (size suffix: s/t/m/l)
+    // Replace the entire sizing segment after the hash-format code with large dimensions
+    upgraded = upgraded.replace(/-w\d+[^.]*(?=\.jpg|\.jpeg|\.png|\.webp)/i, '-w1024_h768');
     upgraded = upgraded.replace(/\/thumbs\//, '/');
   } else {
     upgraded = upgraded.replace(/-w\d+_h\d+(_x2)?/g, '-w1024_h768');
