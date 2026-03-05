@@ -1,11 +1,9 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
-import { geoAlbersUsa, geoPath } from 'd3-geo';
-import { feature } from 'topojson-client';
-import type { Topology, GeometryCollection } from 'topojson-specification';
+import { useState, useMemo, useCallback } from 'react';
 import { createSequentialScale, interpolateGreens, interpolateBlues } from '@/lib/color-scale';
-import { CITY_COORDINATES } from '@/lib/us-city-coordinates';
+import statePathsData from '@/lib/us-state-paths.json';
+import cityPositionsData from '@/lib/us-city-projected.json';
 import HeatMapTooltip from './HeatMapTooltip';
 import MapLegend from './MapLegend';
 import type { LocationCalculation } from '@/hooks/useAffordabilityCalculations';
@@ -13,6 +11,9 @@ import type { LocationCalculation } from '@/hooks/useAffordabilityCalculations';
 const GRAY = '#E5E7EB';
 const WIDTH = 960;
 const HEIGHT = 600;
+
+const statePaths = statePathsData as { name: string; d: string }[];
+const cityPositions = cityPositionsData as unknown as Record<string, [number, number]>;
 
 interface USHeatMapProps {
   stateData: Map<string, LocationCalculation>;
@@ -29,12 +30,6 @@ interface TooltipState {
   position: { x: number; y: number };
 }
 
-interface StateFeature {
-  type: 'Feature';
-  properties: { name: string };
-  geometry: GeoJSON.Geometry;
-}
-
 export default function USHeatMap({
   stateData,
   cityData,
@@ -44,31 +39,7 @@ export default function USHeatMap({
   onLocationClick,
 }: USHeatMapProps) {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
-  const [stateFeatures, setStateFeatures] = useState<StateFeature[]>([]);
 
-  // Load TopoJSON on mount
-  useEffect(() => {
-    fetch('/data/us-states-10m.json')
-      .then((res) => res.json())
-      .then((topology: Topology) => {
-        const geojson = feature(
-          topology,
-          topology.objects.states as GeometryCollection
-        );
-        setStateFeatures(geojson.features as unknown as StateFeature[]);
-      })
-      .catch(console.error);
-  }, []);
-
-  const projection = useMemo(() => {
-    return geoAlbersUsa().scale(1200).translate([WIDTH / 2, HEIGHT / 2]);
-  }, []);
-
-  const pathGenerator = useMemo(() => {
-    return geoPath().projection(projection);
-  }, [projection]);
-
-  // ID → state name lookup (us-atlas uses FIPS codes, properties have name)
   const { colorScale, minVal, maxVal } = useMemo(() => {
     const values: number[] = [];
     const field = mode === 'value' ? 'maxHomeValue' : 'sqft';
@@ -118,19 +89,17 @@ export default function USHeatMap({
     setTooltip(null);
   }, []);
 
-  // Project city coordinates
+  // Build city markers from pre-projected positions
   const cityMarkers = useMemo(() => {
     const markers: { name: string; x: number; y: number; calc: LocationCalculation }[] = [];
     cityData.forEach((calc, cityName) => {
-      const coords = CITY_COORDINATES[cityName];
-      if (!coords) return;
-      const projected = projection([coords[0], coords[1]]);
-      if (projected) {
-        markers.push({ name: cityName, x: projected[0], y: projected[1], calc });
+      const pos = cityPositions[cityName];
+      if (pos) {
+        markers.push({ name: cityName, x: pos[0], y: pos[1], calc });
       }
     });
     return markers;
-  }, [cityData, projection]);
+  }, [cityData]);
 
   return (
     <div className="relative">
@@ -154,23 +123,21 @@ export default function USHeatMap({
         style={{ maxHeight: '70vh' }}
       >
         {/* State shapes */}
-        {stateFeatures.map((feat, i) => {
-          const stateName = feat.properties.name;
-          const fill = getFillColor(stateName);
-          const d = pathGenerator(feat as unknown as GeoJSON.Feature) || '';
-          const calc = stateData.get(stateName);
+        {statePaths.map((state, i) => {
+          const fill = getFillColor(state.name);
+          const calc = stateData.get(state.name);
 
           return (
             <path
               key={i}
-              d={d}
+              d={state.d}
               fill={fill}
               stroke="#FFFFFF"
               strokeWidth={0.5}
               cursor="pointer"
-              onClick={() => onLocationClick(stateName)}
+              onClick={() => onLocationClick(state.name)}
               onMouseEnter={(e) => {
-                if (calc) handleMouseEnter(stateName, calc, e);
+                if (calc) handleMouseEnter(state.name, calc, e);
               }}
               onMouseMove={handleMouseMove}
               onMouseLeave={handleMouseLeave}
