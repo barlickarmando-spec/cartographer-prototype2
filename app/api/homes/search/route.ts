@@ -268,6 +268,68 @@ function upgradePhotoUrl(url: string): string {
   return upgraded;
 }
 
+// ── Fallback: US Real Estate API (us-real-estate.p.rapidapi.com) ────
+// This API supports structured city/state_code/price params and works
+// for locations where the realtor-search auto-complete flow fails.
+async function searchUSRealEstateAPI(
+  city: string,
+  stateCode: string,
+  minPrice: number,
+  maxPrice: number,
+): Promise<any[] | null> {
+  if (!stateCode) return null; // This API requires state_code
+
+  const FALLBACK_HOST = 'us-real-estate.p.rapidapi.com';
+  const url = new URL(`https://${FALLBACK_HOST}/v2/for-sale`);
+
+  if (city) url.searchParams.append('city', city);
+  url.searchParams.append('state_code', stateCode);
+  url.searchParams.append('price_min', String(minPrice));
+  url.searchParams.append('price_max', String(maxPrice));
+  url.searchParams.append('limit', '42');
+  url.searchParams.append('offset', '0');
+
+  console.log(`[homes/search] Fallback API: ${url.toString()}`);
+
+  try {
+    const res = await fetch(url.toString(), {
+      headers: {
+        'X-RapidAPI-Key': API_KEY,
+        'X-RapidAPI-Host': FALLBACK_HOST,
+      },
+      signal: AbortSignal.timeout(12000),
+    });
+
+    if (!res.ok) {
+      console.log(`[homes/search] Fallback API failed: ${res.status}`);
+      return null;
+    }
+
+    const json = await res.json();
+
+    // This API returns data in data.home_search.results or data.results
+    let properties: any[] = [];
+    if (json.data?.home_search?.results) {
+      properties = json.data.home_search.results;
+    } else if (json.data?.results) {
+      properties = json.data.results;
+    } else if (Array.isArray(json.data)) {
+      properties = json.data;
+    } else if (Array.isArray(json.results)) {
+      properties = json.results;
+    }
+
+    if (properties.length > 0) {
+      console.log(`[homes/search] Fallback API found ${properties.length} properties`);
+      return properties;
+    }
+  } catch (e) {
+    console.log(`[homes/search] Fallback API error:`, e instanceof Error ? e.message : e);
+  }
+
+  return null;
+}
+
 // ── Normalize a listing into our Home interface ─────────────────────
 function normalizeProperty(prop: any): {
   id: string;
@@ -379,16 +441,33 @@ export async function POST(request: NextRequest) {
     const { city, stateCode } = parseLocation(location);
     const searchQuery = buildSearchQuery(city, stateCode);
     debug.searchQuery = searchQuery;
+    debug.parsedCity = city;
+    debug.parsedStateCode = stateCode;
 
     // Step 1: Auto-complete to get location ID
     const locationId = await autoCompleteLocation(searchQuery);
     debug.locationId = locationId;
-    if (!locationId) {
-      return NextResponse.json({ success: true, homes: [], count: 0, source: 'location_not_found', debug });
+
+    // Step 2: Search for-sale listings (primary API)
+    let listings: any[] | null = null;
+    let apiSource = 'realtor-search';
+
+    if (locationId) {
+      listings = await searchForSale(locationId, minPrice, maxPrice);
+      debug.primaryApiCount = listings?.length || 0;
     }
 
-    // Step 2: Search for-sale listings
-    const listings = await searchForSale(locationId, minPrice, maxPrice);
+    // Step 2b: Fallback to US Real Estate API if primary returned nothing
+    if (!listings || listings.length === 0) {
+      debug.tryingFallbackApi = true;
+      // For state-only queries, use the state capital for better results
+      const fallbackCity = city || (stateCode ? (STATE_CAPITALS[stateCode] || '') : '');
+      const fallbackState = stateCode || '';
+      listings = await searchUSRealEstateAPI(fallbackCity, fallbackState, minPrice, maxPrice);
+      debug.fallbackApiCount = listings?.length || 0;
+      if (listings && listings.length > 0) apiSource = 'us-real-estate';
+    }
+
     debug.rawListingCount = listings?.length || 0;
     if (!listings || listings.length === 0) {
       return NextResponse.json({ success: true, homes: [], count: 0, source: 'no_results', debug });
