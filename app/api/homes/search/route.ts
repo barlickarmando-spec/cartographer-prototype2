@@ -94,18 +94,11 @@ function upgradePhotoUrl(url: string): string {
   if (!url) return url;
   let upgraded = url;
   if (/rdcpix\.com/i.test(upgraded)) {
-    // rdcpix URLs have size codes in two places:
-    //   https://ap.rdcpix.com/<hash><size>-m<id><size>.jpg
-    // Size codes: s=small(140px), t=tiny, m=medium(280px), l=large(640px), od=original
-    // Strip any explicit dimension params first
+    // rdcpix size codes: s=small(140px), t=tiny, m=medium(280px), l=large(640px)
+    // Upgrade s/t/m to l (large) — 'od' (original) often 404s so stick with 'l'
     upgraded = upgraded.replace(/-w\d+_h\d+(_x2)?/g, '');
-    // Replace ALL single-letter size codes (s/t/m) with 'od' (original) throughout the URL path
-    // Pattern: size letter right before a dash+letter or before .jpg
-    upgraded = upgraded.replace(/([0-9a-f])[stm](-[a-z])/gi, '$1od$2');
-    upgraded = upgraded.replace(/([0-9a-f])[stm](\.jpg)/gi, '$1od$2');
-    // Also upgrade 'l' (large=640px) to 'od' (original) for max resolution
-    upgraded = upgraded.replace(/([0-9a-f])l(-[a-z])/gi, '$1od$2');
-    upgraded = upgraded.replace(/([0-9a-f])l(\.jpg)/gi, '$1od$2');
+    upgraded = upgraded.replace(/([0-9a-f])[stm](-[a-z])/gi, '$1l$2');
+    upgraded = upgraded.replace(/([0-9a-f])[stm](\.jpg)/gi, '$1l$2');
   } else {
     upgraded = upgraded.replace(/-w\d+_h\d+(_x2)?/g, '-w1024_h768');
     upgraded = upgraded.replace(/\/([^/]+)s\.jpg$/i, '/$1l.jpg');
