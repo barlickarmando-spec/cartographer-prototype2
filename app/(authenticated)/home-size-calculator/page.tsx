@@ -618,84 +618,88 @@ export default function HomeSizeCalculatorPage() {
 
         {/* Filters row */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          {/* Quality Filter - Searchable Dropdown */}
-          <div ref={qualityDropdownRef} className="relative">
+          {/* Quality Filter - Searchable Multi-select Dropdown */}
+          <div ref={qualityDropdownRef}>
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">Quality</label>
-            <button
-              onClick={() => { setQualityDropdownOpen(!qualityDropdownOpen); setQualitySearch(''); }}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm text-left bg-white flex items-center justify-between hover:border-[#4CAF50] transition-colors"
-            >
-              <span className="text-gray-900 truncate">
-                {qualityFilters.length === 3
-                  ? 'Show All'
-                  : qualityFilters.map(q => q === 'nice' ? 'Nice Area' : q === 'average' ? 'Average Area' : 'Any Area').join(', ')}
-              </span>
-              <svg className={`w-4 h-4 text-gray-400 transition-transform shrink-0 ml-2 ${qualityDropdownOpen ? 'rotate-180' : ''}`}
-                fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
 
+            {/* Selected tags */}
+            {qualityFilters.length > 0 && qualityFilters.length < 3 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {qualityFilters.map(q => {
+                  const label = q === 'nice' ? 'Nice Area' : q === 'average' ? 'Average Area' : 'Any Area';
+                  return (
+                    <span key={q} className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#EFF6FF] text-gray-800 rounded-full text-xs border border-[#5BA4E5]">
+                      {label}
+                      <button onClick={() => toggleQuality(q)} className="text-[#5BA4E5] hover:text-[#4A93D4] font-bold ml-0.5">×</button>
+                    </span>
+                  );
+                })}
+                <button onClick={() => setQualityFilters(['nice', 'average', 'any'])} className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1">
+                  Select all
+                </button>
+              </div>
+            )}
+
+            {/* Search input */}
+            <div className="relative">
+              <input
+                type="text"
+                value={qualitySearch}
+                onChange={e => setQualitySearch(e.target.value)}
+                onFocus={() => setQualityDropdownOpen(true)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm bg-white focus:border-[#4CAF50] focus:ring-2 focus:ring-[#4CAF50] focus:ring-opacity-20 outline-none transition-all"
+                placeholder="Search quality..."
+              />
+              <button
+                onMouseDown={e => { e.preventDefault(); setQualityDropdownOpen(!qualityDropdownOpen); }}
+                className="absolute right-3 top-3.5 text-gray-400"
+              >
+                {qualityDropdownOpen ? '\u25B2' : '\u25BC'}
+              </button>
+            </div>
+
+            {/* Dropdown list */}
             {qualityDropdownOpen && (
-              <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
-                <div className="p-2 border-b border-gray-100">
-                  <input
-                    type="text"
-                    value={qualitySearch}
-                    onChange={e => setQualitySearch(e.target.value)}
-                    placeholder="Search quality..."
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#4CAF50] focus:border-transparent"
-                    autoFocus
-                  />
-                </div>
-                <div className="p-1">
-                  {/* Show All option */}
-                  {(!qualitySearch.trim() || 'show all'.includes(qualitySearch.toLowerCase())) && (
-                    <button
-                      onClick={() => { setQualityFilters(['nice', 'average', 'any']); setQualityDropdownOpen(false); }}
-                      className={`w-full text-left px-3 py-2.5 text-sm rounded-lg transition-colors flex items-center justify-between ${
-                        qualityFilters.length === 3 ? 'bg-[#E8F5E9] font-semibold text-[#2E7D32]' : 'hover:bg-gray-50'
+              <div className="mt-1 border border-gray-200 rounded-xl bg-white shadow-lg overflow-hidden">
+                {/* Show All option */}
+                {(!qualitySearch.trim() || 'show all'.includes(qualitySearch.toLowerCase())) && (
+                  <label className={`flex items-center px-4 py-2.5 cursor-pointer transition-all text-sm hover:bg-gray-50 border-b border-gray-100 ${
+                    qualityFilters.length === 3 ? 'bg-[#EFF6FF]' : ''
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={qualityFilters.length === 3}
+                      onChange={() => setQualityFilters(qualityFilters.length === 3 ? [] : ['nice', 'average', 'any'])}
+                      className="w-3.5 h-3.5 text-[#5BA4E5] border-gray-300 rounded focus:ring-[#5BA4E5] mr-3"
+                    />
+                    Show All
+                  </label>
+                )}
+                {([
+                  { key: 'nice' as QualityFilter, label: 'Nice Area' },
+                  { key: 'average' as QualityFilter, label: 'Average Area' },
+                  { key: 'any' as QualityFilter, label: 'Any Area' },
+                ]).filter(opt =>
+                  !qualitySearch.trim() || opt.label.toLowerCase().includes(qualitySearch.toLowerCase())
+                ).map(opt => {
+                  const isSelected = qualityFilters.includes(opt.key);
+                  return (
+                    <label
+                      key={opt.key}
+                      className={`flex items-center px-4 py-2.5 cursor-pointer transition-all text-sm hover:bg-gray-50 ${
+                        isSelected ? 'bg-[#EFF6FF]' : ''
                       }`}
                     >
-                      <span>Show All</span>
-                      {qualityFilters.length === 3 && (
-                        <svg className="w-4 h-4 text-[#4CAF50]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
-                    </button>
-                  )}
-                  <div className="border-t border-gray-100 my-1" />
-                  {([
-                    { key: 'nice' as QualityFilter, label: 'Nice Area', desc: 'Conservative — higher price per sqft' },
-                    { key: 'average' as QualityFilter, label: 'Average Area', desc: 'Middle ground estimate' },
-                    { key: 'any' as QualityFilter, label: 'Any Area', desc: 'Aggressive — biggest home regardless' },
-                  ]).filter(opt =>
-                    !qualitySearch.trim() || opt.label.toLowerCase().includes(qualitySearch.toLowerCase()) || opt.desc.toLowerCase().includes(qualitySearch.toLowerCase())
-                  ).map(opt => {
-                    const colors = getQualityColor(opt.key);
-                    const isSelected = qualityFilters.includes(opt.key);
-                    return (
-                      <button
-                        key={opt.key}
-                        onClick={() => toggleQuality(opt.key)}
-                        className={`w-full text-left px-3 py-2.5 text-sm rounded-lg transition-colors flex items-center justify-between ${
-                          isSelected ? `${colors.bg} font-semibold` : 'hover:bg-gray-50'
-                        }`}
-                      >
-                        <div>
-                          <span className={isSelected ? colors.text : 'text-gray-900'}>{opt.label}</span>
-                          <p className="text-xs text-gray-400 mt-0.5">{opt.desc}</p>
-                        </div>
-                        {isSelected && (
-                          <svg className={`w-4 h-4 shrink-0 ml-2 ${colors.text}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleQuality(opt.key)}
+                        className="w-3.5 h-3.5 text-[#5BA4E5] border-gray-300 rounded focus:ring-[#5BA4E5] mr-3"
+                      />
+                      {opt.label}
+                    </label>
+                  );
+                })}
               </div>
             )}
           </div>
