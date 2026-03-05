@@ -96,6 +96,7 @@ export default function HomeSizeCalculatorPage() {
 
   // Location
   const [selectedLocation, setSelectedLocation] = useState<string>('');
+  const [defaultLocation, setDefaultLocation] = useState<string>('');
   const [locationDropdownOpen, setLocationDropdownOpen] = useState(false);
   const [locationSearch, setLocationSearch] = useState('');
   const locationDropdownRef = useRef<HTMLDivElement>(null);
@@ -117,6 +118,7 @@ export default function HomeSizeCalculatorPage() {
   const [sizeResults, setSizeResults] = useState<SizeResult[]>([]);
   const [recommendations, setRecommendations] = useState<RecommendedLocation[]>([]);
   const [calcLoading, setCalcLoading] = useState(false);
+  const [pendingRecalc, setPendingRecalc] = useState(false);
 
   // ===== LOAD DATA =====
   useEffect(() => {
@@ -134,13 +136,21 @@ export default function HomeSizeCalculatorPage() {
     const saved = getSavedLocations();
     setSavedLocations(saved);
 
-    // Default location
-    if (saved.length > 0) {
-      setSelectedLocation(saved[0]);
+    // Default location: use last-viewed from profile, or first saved, or onboarding location
+    let defaultLoc = '';
+    const lastViewed = typeof window !== 'undefined' ? localStorage.getItem('lastViewedLocation') : null;
+    if (lastViewed && (saved.includes(lastViewed) || answers.currentLocation === lastViewed || answers.exactLocation === lastViewed)) {
+      defaultLoc = lastViewed;
+    } else if (saved.length > 0) {
+      defaultLoc = saved[0];
     } else if (answers.currentLocation) {
-      setSelectedLocation(answers.currentLocation);
+      defaultLoc = answers.currentLocation;
     } else if (answers.exactLocation) {
-      setSelectedLocation(answers.exactLocation);
+      defaultLoc = answers.exactLocation;
+    }
+    if (defaultLoc) {
+      setSelectedLocation(defaultLoc);
+      setDefaultLocation(defaultLoc);
     }
 
     setLoading(false);
@@ -163,7 +173,12 @@ export default function HomeSizeCalculatorPage() {
   const filteredLocationOptions = locationSearch.trim()
     ? allLocationOptions.filter(opt =>
         opt.label.toLowerCase().includes(locationSearch.toLowerCase())
-      ).slice(0, 20)
+      ).sort((a, b) => {
+        // Saved locations first
+        const aIsSaved = savedLocations.includes(a.label) ? 0 : 1;
+        const bIsSaved = savedLocations.includes(b.label) ? 0 : 1;
+        return aIsSaved - bIsSaved;
+      }).slice(0, 20)
     : [];
 
   const statesWithCities: Record<string, string[]> = {};
@@ -309,6 +324,14 @@ export default function HomeSizeCalculatorPage() {
       setCalcLoading(false);
     }, 50);
   }, [profile, selectedLocation, searchMode, timeValue, timeUnit, sizeValue, qualityFilters, homePreference]);
+
+  // Auto-recalculate when location changes from recommendation click
+  useEffect(() => {
+    if (pendingRecalc) {
+      setPendingRecalc(false);
+      handleCalculate();
+    }
+  }, [pendingRecalc, handleCalculate]);
 
   // Generate location recommendations
   const generateRecommendations = useCallback((currentResult: CalculationResult) => {
@@ -479,8 +502,11 @@ export default function HomeSizeCalculatorPage() {
               onClick={() => setLocationDropdownOpen(!locationDropdownOpen)}
               className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm text-left bg-white flex items-center justify-between hover:border-[#4CAF50] transition-colors"
             >
-              <span className={selectedLocation ? 'text-gray-900' : 'text-gray-400'}>
+              <span className={`flex items-center gap-2 ${selectedLocation ? 'text-gray-900' : 'text-gray-400'}`}>
                 {selectedLocation || 'Select a location...'}
+                {selectedLocation && selectedLocation === defaultLocation && (
+                  <span className="text-[10px] font-semibold text-[#4CAF50] bg-[#E8F5E9] border border-[#C8E6C9] px-1.5 py-0.5 rounded-full">Default</span>
+                )}
               </span>
               <svg className={`w-4 h-4 text-gray-400 transition-transform ${locationDropdownOpen ? 'rotate-180' : ''}`}
                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -507,9 +533,12 @@ export default function HomeSizeCalculatorPage() {
                   <div className="p-1">
                     {filteredLocationOptions.map(opt => (
                       <button key={opt.id} onClick={() => { setSelectedLocation(opt.label); setLocationDropdownOpen(false); setLocationSearch(''); }}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-[#E8F5E9] rounded-lg transition-colors">
-                        {opt.label}
-                        <span className="ml-1 text-xs text-gray-400">({opt.type})</span>
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-[#E8F5E9] rounded-lg transition-colors flex items-center gap-2">
+                        <span>{opt.label}</span>
+                        {savedLocations.includes(opt.label) && (
+                          <span className="text-[10px] font-semibold text-[#4CAF50] bg-[#E8F5E9] border border-[#C8E6C9] px-1.5 py-0.5 rounded-full">Saved</span>
+                        )}
+                        <span className="ml-auto text-xs text-gray-400">({opt.type})</span>
                       </button>
                     ))}
                   </div>
@@ -533,10 +562,13 @@ export default function HomeSizeCalculatorPage() {
                         <div className="p-1">
                           {savedLocations.map(loc => (
                             <button key={loc} onClick={() => { setSelectedLocation(loc); setLocationDropdownOpen(false); }}
-                              className={`w-full text-left px-3 py-2 text-sm hover:bg-[#E8F5E9] rounded-lg transition-colors ${
+                              className={`w-full text-left px-3 py-2 text-sm hover:bg-[#E8F5E9] rounded-lg transition-colors flex items-center gap-2 ${
                                 selectedLocation === loc ? 'bg-[#E8F5E9] font-semibold' : ''
                               }`}>
-                              {loc}
+                              <span>{loc}</span>
+                              {loc === defaultLocation && (
+                                <span className="text-[10px] font-semibold text-[#4CAF50] bg-[#E8F5E9] border border-[#C8E6C9] px-1.5 py-0.5 rounded-full">Default</span>
+                              )}
                             </button>
                           ))}
                         </div>
@@ -713,10 +745,7 @@ export default function HomeSizeCalculatorPage() {
                       onClick={() => {
                         setSelectedLocation(rec.location);
                         setCalculated(false);
-                        // Auto-recalculate
-                        setTimeout(() => {
-                          handleCalculate();
-                        }, 100);
+                        setPendingRecalc(true);
                       }}
                       className="text-left bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-lg transition-all duration-300 group cursor-pointer"
                     >
