@@ -366,10 +366,9 @@ export async function POST(request: NextRequest) {
     debug.samplePhotoUrl = homes.find(h => h.photoUrl)?.photoUrl || 'none';
     debug.pricesFound = homes.slice(0, 5).map(h => h.price);
 
-    // Step 4: Prefer homes in price range, but keep all if too few match
-    const priceFiltered = homes.filter(h => h.price >= minPrice && h.price <= maxPrice);
-    debug.inPriceRange = priceFiltered.length;
-    homes = priceFiltered.length >= 2 ? priceFiltered : homes;
+    // Step 4: Strictly filter to price range — never show homes outside budget
+    homes = homes.filter(h => h.price >= minPrice && h.price <= maxPrice);
+    debug.inPriceRange = homes.length;
     homes = homes.slice(0, 12);
 
     // Step 5: For homes without photos, try get-photos endpoint (limit to 8 to avoid rate limits)
