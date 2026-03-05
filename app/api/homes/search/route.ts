@@ -144,46 +144,61 @@ async function searchForSale(
   minPrice: number,
   maxPrice: number,
 ): Promise<any[] | null> {
-  // Include price filters so the API returns relevant listings
-  const params = new URLSearchParams({
-    location: locationId,
-    sort_by: 'RelevantListings',
-    search_within_x_miles: '50',
-    price_min: String(minPrice),
-    price_max: String(maxPrice),
-  });
+  // Try with price filters first, then fall back without them
+  const paramSets = [
+    // Attempt 1: with price filters
+    new URLSearchParams({
+      location: locationId,
+      sort_by: 'RelevantListings',
+      search_within_x_miles: '50',
+      price_min: String(minPrice),
+      price_max: String(maxPrice),
+    }),
+    // Attempt 2: without price filters (API may not support them)
+    new URLSearchParams({
+      location: locationId,
+      sort_by: 'RelevantListings',
+      search_within_x_miles: '50',
+    }),
+  ];
 
-  const url = `${BASE_URL}/property/search-sale?${params.toString()}`;
-  console.log(`[homes/search] Search for sale: ${url}`);
+  for (const params of paramSets) {
+    const url = `${BASE_URL}/property/search-sale?${params.toString()}`;
+    console.log(`[homes/search] Search for sale: ${url}`);
 
-  const res = await fetch(url, {
-    headers: HEADERS,
-    signal: AbortSignal.timeout(10000),
-  });
+    try {
+      const res = await fetch(url, {
+        headers: HEADERS,
+        signal: AbortSignal.timeout(10000),
+      });
 
-  if (!res.ok) {
-    console.log(`[homes/search] Search failed: ${res.status}`);
-    return null;
-  }
-
-  const json = await res.json();
-  let listings = json.data || json.properties || json.results || json.listings || json.homes || [];
-
-  if (!Array.isArray(listings) && json.data && typeof json.data === 'object') {
-    for (const key of Object.keys(json.data)) {
-      if (Array.isArray(json.data[key]) && json.data[key].length > 0) {
-        listings = json.data[key];
-        break;
+      if (!res.ok) {
+        console.log(`[homes/search] Search failed: ${res.status}`);
+        continue;
       }
+
+      const json = await res.json();
+      let listings = json.data || json.properties || json.results || json.listings || json.homes || [];
+
+      if (!Array.isArray(listings) && json.data && typeof json.data === 'object') {
+        for (const key of Object.keys(json.data)) {
+          if (Array.isArray(json.data[key]) && json.data[key].length > 0) {
+            listings = json.data[key];
+            break;
+          }
+        }
+      }
+
+      if (Array.isArray(listings) && listings.length > 0) {
+        console.log(`[homes/search] Found ${listings.length} listings`);
+        return listings;
+      }
+    } catch (e) {
+      console.log(`[homes/search] Search attempt error:`, e instanceof Error ? e.message : e);
     }
   }
 
-  if (Array.isArray(listings) && listings.length > 0) {
-    console.log(`[homes/search] Found ${listings.length} listings`);
-    return listings;
-  }
-
-  console.log(`[homes/search] No listings found`);
+  console.log(`[homes/search] No listings found after all attempts`);
   return null;
 }
 
@@ -386,9 +401,28 @@ export async function POST(request: NextRequest) {
     debug.samplePhotoUrl = homes.find(h => h.photoUrl)?.photoUrl || 'none';
     debug.pricesFound = homes.slice(0, 5).map(h => h.price);
 
-    // Step 4: Strictly filter to price range — never show homes outside budget
-    homes = homes.filter(h => h.price >= minPrice && h.price <= maxPrice);
-    debug.inPriceRange = homes.length;
+    // Step 4: Prefer homes in price range, but keep unpriced and near-range homes
+    // Sort: in-range first, then by closeness to target price
+    const targetPrice = (minPrice + maxPrice) / 2;
+    const priceSpan = maxPrice - minPrice;
+    const wideMin = minPrice - priceSpan * 0.5;
+    const wideMax = maxPrice + priceSpan * 0.5;
+
+    // Keep homes that are in wider range OR have no price listed
+    homes = homes.filter(h => h.price === 0 || (h.price >= wideMin && h.price <= wideMax));
+
+    // Sort: exact range first, then by distance from target
+    homes.sort((a, b) => {
+      const aInRange = a.price >= minPrice && a.price <= maxPrice ? 0 : 1;
+      const bInRange = b.price >= minPrice && b.price <= maxPrice ? 0 : 1;
+      if (aInRange !== bInRange) return aInRange - bInRange;
+      const aDist = a.price === 0 ? Infinity : Math.abs(a.price - targetPrice);
+      const bDist = b.price === 0 ? Infinity : Math.abs(b.price - targetPrice);
+      return aDist - bDist;
+    });
+
+    debug.inPriceRange = homes.filter(h => h.price >= minPrice && h.price <= maxPrice).length;
+    debug.totalAfterFilter = homes.length;
     homes = homes.slice(0, 24);
 
     // Step 5: Fetch high-res photos via get-photos endpoint for all listings with property IDs

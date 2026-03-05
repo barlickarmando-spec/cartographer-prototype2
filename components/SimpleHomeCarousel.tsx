@@ -134,18 +134,13 @@ export default function SimpleHomeCarousel({
 
         if (!cancelled) {
           if (data.success && data.homes && data.homes.length > 0) {
-            // Only use homes that have actual photos
-            const realHomes = data.homes.filter(
+            // Prefer homes with photos, but keep all real listings
+            const withPhotos = data.homes.filter(
               (h: Home) => h.photoUrl && h.photoUrl.startsWith('http')
             );
-            if (realHomes.length > 0) {
-              setHomes(realHomes.slice(0, MAX_HOMES));
-              setSource(data.source || '');
-            } else {
-              // No homes with real photos - show browse interface instead
-              setHomes([]);
-              setSource(data.source || 'Sample listings');
-            }
+            const allHomes = withPhotos.length > 0 ? withPhotos : data.homes;
+            setHomes(allHomes.slice(0, MAX_HOMES));
+            setSource(data.source || '');
           } else {
             setHomes([]);
             setSource('');
