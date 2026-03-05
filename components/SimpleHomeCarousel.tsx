@@ -426,11 +426,11 @@ function CompactHomeCard({ home, index, onClick }: { home: Home; index: number; 
   return (
     <button onClick={onClick}
       className="text-left bg-white rounded-xl border border-[#E5E7EB] overflow-hidden hover:shadow-lg transition-all duration-200 group cursor-pointer w-full">
-      <div className={`relative h-48 bg-gradient-to-br ${gradient} overflow-hidden`}>
+      <div className={`relative h-56 bg-gradient-to-br ${gradient} overflow-hidden`}>
         {home.photoUrl && !imgError ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img src={home.photoUrl} alt={`Home at ${home.address}`}
-            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             onError={() => setImgError(true)} loading="lazy" />
         ) : (
           <div className="flex flex-col items-center justify-center h-full gap-1">
@@ -493,7 +493,7 @@ function FullScreenCarouselModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative bg-white rounded-2xl shadow-2xl max-w-3xl w-[90vw] max-h-[85vh] overflow-hidden flex flex-col md:flex-row"
+      <div className="relative bg-white rounded-2xl shadow-2xl max-w-6xl w-[95vw] max-h-[95vh] overflow-hidden flex flex-col md:flex-row"
         onClick={(e) => e.stopPropagation()}>
         {/* Close */}
         <button onClick={onClose}
@@ -504,7 +504,7 @@ function FullScreenCarouselModal({
         </button>
 
         {/* Left: Image */}
-        <div className={`relative w-full md:w-1/2 h-64 md:h-auto min-h-[280px] bg-gradient-to-br ${gradient}`}>
+        <div className={`relative w-full md:w-3/5 h-72 md:h-auto min-h-[400px] bg-gradient-to-br ${gradient}`}>
           {home.photoUrl && !imgError ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img src={home.photoUrl} alt={`Home at ${home.address}`} className="w-full h-full object-cover"
@@ -541,7 +541,7 @@ function FullScreenCarouselModal({
         </div>
 
         {/* Right: Details */}
-        <div className="w-full md:w-1/2 p-6 flex flex-col justify-between overflow-y-auto">
+        <div className="w-full md:w-2/5 p-6 flex flex-col justify-between overflow-y-auto">
           <div>
             <div className="mb-4">
               <p className="text-3xl font-bold text-[#2C3E50]">{formatPrice(home.price)}</p>
