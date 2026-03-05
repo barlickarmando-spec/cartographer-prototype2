@@ -652,11 +652,11 @@ function FullScreenCarouselModal({
           </svg>
         </button>
 
-        {/* Left: Image — contained at native resolution, no stretching */}
-        <div className={`relative w-full md:w-2/3 h-[50vh] md:h-full bg-[#1a1a2e] flex items-center justify-center`}>
+        {/* Left: Image */}
+        <div className={`relative w-full md:w-2/3 h-[50vh] md:h-full bg-[#1a1a2e]`}>
           {home.photoUrl && !imgError ? (
             /* eslint-disable-next-line @next/next/no-img-element */
-            <img src={home.photoUrl} alt={`Home at ${home.address}`} className="max-w-full max-h-full object-contain"
+            <img src={home.photoUrl} alt={`Home at ${home.address}`} className="w-full h-full object-cover"
               onError={() => setImgError(true)} />
           ) : (
             <div className={`flex flex-col items-center justify-center w-full h-full gap-3 bg-gradient-to-br ${gradient}`}>

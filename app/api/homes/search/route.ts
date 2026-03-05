@@ -92,9 +92,12 @@ function buildSearchQuery(city: string, stateCode: string): string {
 
 function upgradePhotoUrl(url: string): string {
   if (!url) return url;
-  // Don't manipulate rdcpix URLs — the API returns working sizes and
-  // rewriting params has caused blurry/broken images. Just clean up thumbs path.
-  return url.replace(/\/thumbs\//, '/');
+  // Only bump the numeric width/height values — keep URL structure intact
+  // -w300_h200.jpg → -w1280_h960.jpg   -w300_rd_q80.jpg → -w1280_rd_q80.jpg
+  let upgraded = url.replace(/(-w)\d+/, '$11280');
+  upgraded = upgraded.replace(/(_h)\d+/, '$1960');
+  upgraded = upgraded.replace(/\/thumbs\//, '/');
+  return upgraded;
 }
 
 const MAX_LISTINGS = 42;
