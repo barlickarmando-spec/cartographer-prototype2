@@ -13,12 +13,17 @@ export default function LoginPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    
-    // Simulate a brief loading state for UX
-    await new Promise((r) => setTimeout(r, 500));
-    
-    // FACADE: Skip auth completely, go straight to onboarding
-    router.push("/onboarding");
+
+    try {
+      // Brief loading state for UX
+      await new Promise((r) => setTimeout(r, 400));
+
+      // Navigate to onboarding — use window.location as primary
+      // because router.push can silently fail if hydration is incomplete
+      window.location.href = "/onboarding";
+    } catch {
+      window.location.href = "/onboarding";
+    }
   }
 
   return (

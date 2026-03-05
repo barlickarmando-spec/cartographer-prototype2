@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { OnboardingAnswers, DebtEntry, AnnualExpense } from "@/lib/onboarding/types";
 import { getAllLocations, getOccupationList } from "@/lib/data-extraction";
 import { STATE_CODES, STATE_NAMES, getStateFlagPath } from "@/lib/state-flags";
@@ -508,25 +508,6 @@ function Step2HouseholdType({ answers, updateAnswer }: StepProps) {
                 </div>
               )}
 
-              {/* Info for "don't know count" */}
-              {answers.kidsKnowledge === 'dont-know-count' && (
-                <div className="bg-[#EFF6FF] border border-[#5BA4E5] rounded-lg p-4">
-                  <p className="text-sm text-[#2C3E50]">
-                    We&apos;ll run scenarios for 1, 2, and 3 kids and recommend the most viable plan for your situation.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Unsure about kids - info note */}
-          {answers.kidsPlan === 'unsure' && (
-            <div className="mt-4">
-              <div className="bg-[#EFF6FF] border border-[#5BA4E5] rounded-lg p-4">
-                <p className="text-sm text-[#2C3E50]">
-                  We&apos;ll model 1 kid at age 32 as a baseline and stress-test your plan as if you had 2 kids to ensure sustainability.
-                </p>
-              </div>
             </div>
           )}
 
@@ -586,9 +567,6 @@ function Step2HouseholdType({ answers, updateAnswer }: StepProps) {
           <label className="block text-sm font-medium text-[#2C3E50] mb-2">
             Should we set any of these hard rules?
           </label>
-          <p className="text-sm text-[#9CA3AF] mb-4">
-            These are hard parameters for the formula and will affect your calculations
-          </p>
           <div className="space-y-3">
             {[
               { value: 'debt-before-kids', label: 'Pay off all student debt before having kids' },
@@ -709,12 +687,6 @@ function Step3AgeOccupation({ answers, updateAnswer }: StepProps) {
             ))}
           </select>
 
-          {/* Salary note */}
-          {answers.userOccupation && (
-            <p className="mt-2 text-xs text-[#9CA3AF]">
-              Salary is automatically adjusted per location based on regional data for this occupation.
-            </p>
-          )}
         </div>
 
         {/* Partner Occupation - if linked */}
@@ -735,25 +707,8 @@ function Step3AgeOccupation({ answers, updateAnswer }: StepProps) {
                 ))}
               </select>
 
-              {/* Partner salary note */}
-              {answers.partnerOccupation && (
-                <p className="mt-2 text-xs text-[#9CA3AF]">
-                  Partner salary is automatically adjusted per location based on regional data.
-                </p>
-              )}
             </div>
           </>
-        )}
-
-        {/* Info note about income doubling */}
-        {answers.relationshipStatus === 'single' && (answers.relationshipPlans === 'yes' || answers.relationshipPlans === 'unsure') && (
-          <div className="bg-[#EFF6FF] border border-[#5BA4E5] rounded-lg p-4">
-            <p className="text-sm text-[#2C3E50]">
-              <strong>Note:</strong> Since you&apos;re planning a relationship but don&apos;t have a partner yet,
-              we&apos;ll use income doubling (your salary × 2) when you enter a relationship unless you
-              specify a partner occupation later.
-            </p>
-          </div>
         )}
 
       </div>
@@ -857,7 +812,6 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
         {/* Additional Debts — Dynamic List */}
         <div>
           <h3 className="font-semibold text-[#2C3E50] mb-2">Additional Debts (Optional)</h3>
-          <p className="text-sm text-[#9CA3AF] mb-4">Add any debts beyond student loans. Each can have optional conditions.</p>
 
           <div className="space-y-3">
             {(answers.additionalDebts || []).map((debt, idx) => (
@@ -989,23 +943,44 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
               </div>
             ))}
 
-            <button
-              onClick={() => {
-                const debts = [...(answers.additionalDebts || [])];
-                debts.push({ type: 'other', totalDebt: 0, interestRate: 0.06 });
-                updateAnswer('additionalDebts', debts);
-              }}
-              className="w-full py-3 border-2 border-dashed border-[#D1D5DB] rounded-lg text-sm text-[#6B7280] hover:border-[#5BA4E5] hover:text-[#5BA4E5] transition-all"
-            >
-              + Add Debt
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  const debts = [...(answers.additionalDebts || [])];
+                  debts.push({ type: 'cc-debt', totalDebt: 0, interestRate: 0.216 });
+                  updateAnswer('additionalDebts', debts);
+                }}
+                className="flex-1 py-2.5 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-all shadow-sm text-sm font-medium"
+              >
+                + Credit Card
+              </button>
+              <button
+                onClick={() => {
+                  const debts = [...(answers.additionalDebts || [])];
+                  debts.push({ type: 'car-debt', totalDebt: 0, interestRate: 0.07 });
+                  updateAnswer('additionalDebts', debts);
+                }}
+                className="flex-1 py-2.5 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-all shadow-sm text-sm font-medium"
+              >
+                + Car Loan
+              </button>
+              <button
+                onClick={() => {
+                  const debts = [...(answers.additionalDebts || [])];
+                  debts.push({ type: 'other', totalDebt: 0, interestRate: 0.06 });
+                  updateAnswer('additionalDebts', debts);
+                }}
+                className="flex-1 py-2.5 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-all shadow-sm text-sm font-medium"
+              >
+                + Additional
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Additional Annual Expenses */}
         <div>
           <h3 className="font-semibold text-[#2C3E50] mb-2">Annual Expenses (Optional)</h3>
-          <p className="text-sm text-[#9CA3AF] mb-4">Add recurring annual costs that affect your budget.</p>
 
           <div className="space-y-3">
             {(answers.additionalExpenses || []).map((expense, idx) => (
@@ -1069,8 +1044,21 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
                       placeholder="Now"
                     />
                   </div>
-                  <div className="flex items-end">
-                    <label className="flex items-center gap-2 text-xs text-[#6B7280] cursor-pointer pb-2">
+                  <div className="flex flex-col justify-end gap-1">
+                    <label className="flex items-center gap-2 text-xs text-[#6B7280] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={expense.onlyAfterDebtFree || false}
+                        onChange={(e) => {
+                          const expenses = [...(answers.additionalExpenses || [])];
+                          expenses[idx] = { ...expenses[idx], onlyAfterDebtFree: e.target.checked || undefined };
+                          updateAnswer('additionalExpenses', expenses);
+                        }}
+                        className="w-3.5 h-3.5 text-[#5BA4E5] border-[#D1D5DB] rounded focus:ring-[#5BA4E5]"
+                      />
+                      Only after debt-free
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-[#6B7280] cursor-pointer">
                       <input
                         type="checkbox"
                         checked={expense.onlyIfViable || false}
@@ -1094,7 +1082,7 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
                 expenses.push({ label: '', annualCost: 0 });
                 updateAnswer('additionalExpenses', expenses);
               }}
-              className="w-full py-3 border-2 border-dashed border-[#D1D5DB] rounded-lg text-sm text-[#6B7280] hover:border-[#5BA4E5] hover:text-[#5BA4E5] transition-all"
+              className="w-full py-2.5 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-all shadow-sm text-sm font-medium"
             >
               + Add Annual Expense
             </button>
@@ -1235,6 +1223,125 @@ function getStateCodeForLocation(loc: any): string {
   // For cities, extract state from displayName like "Austin, TX"
   const parts = loc.displayName.split(', ');
   return (parts[1] || '').trim();
+}
+
+// Reusable searchable multi-select dropdown for filters (regions, climate, etc.)
+function FilterSearchDropdown({
+  label,
+  description,
+  options,
+  selectedValues,
+  onToggle,
+  onClearAll,
+}: {
+  label: string;
+  description: string;
+  options: string[];
+  selectedValues: string[];
+  onToggle: (value: string) => void;
+  onClearAll?: () => void;
+}) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  const filtered = options.filter(opt =>
+    opt.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div ref={containerRef}>
+      <label className="block text-sm font-medium text-[#2C3E50] mb-2">{label}</label>
+      <p className="text-xs text-[#9CA3AF] mb-3">{description}</p>
+
+      {/* Selected tags */}
+      {selectedValues.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {selectedValues.map(val => (
+            <span
+              key={val}
+              className="inline-flex items-center gap-1 px-3 py-1 bg-[#EFF6FF] text-[#2C3E50] rounded-full text-sm border border-[#5BA4E5]"
+            >
+              {val}
+              <button
+                onClick={() => onToggle(val)}
+                className="text-[#5BA4E5] hover:text-[#4A93D4] font-bold ml-1"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          {onClearAll && (
+            <button
+              onClick={onClearAll}
+              className="text-xs text-[#9CA3AF] hover:text-red-500 px-2 py-1"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Search input */}
+      <div className="relative">
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          onFocus={() => setIsOpen(true)}
+          className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all text-sm"
+          placeholder={`Search ${label.toLowerCase().replace(' (optional)', '')}...`}
+        />
+        <button
+          onMouseDown={(e) => { e.preventDefault(); setIsOpen(!isOpen); }}
+          className="absolute right-3 top-3.5 text-[#6B7280]"
+        >
+          {isOpen ? '▲' : '▼'}
+        </button>
+      </div>
+
+      {/* Dropdown list */}
+      {isOpen && (
+        <div className="mt-2 max-h-48 overflow-y-auto border border-[#E5E7EB] rounded-lg bg-white">
+          {filtered.length === 0 ? (
+            <div className="px-4 py-3 text-sm text-[#9CA3AF]">No matches</div>
+          ) : (
+            filtered.map(opt => {
+              const isSelected = selectedValues.includes(opt);
+              return (
+                <label
+                  key={opt}
+                  className={`flex items-center px-4 py-2.5 cursor-pointer transition-all text-sm hover:bg-[#F3F4F6] ${
+                    isSelected ? 'bg-[#EFF6FF]' : ''
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggle(opt)}
+                    className="w-3.5 h-3.5 text-[#5BA4E5] border-[#D1D5DB] rounded focus:ring-[#5BA4E5] mr-3"
+                  />
+                  {opt}
+                </label>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Reusable searchable location dropdown
@@ -1566,30 +1673,12 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
           />
         )}
 
-        {/* No Idea Info */}
-        {answers.locationSituation === 'no-idea' && (
-          <div className="bg-[#EFF6FF] border border-[#5BA4E5] rounded-lg p-5">
-            <p className="text-sm text-[#2C3E50] mb-2">
-              <strong>We&apos;ll analyze all {allLocations.length} locations</strong> (states + major cities) and recommend the best fits based on:
-            </p>
-            <ul className="text-sm text-[#6B7280] space-y-1 ml-4">
-              <li>• Your occupation and expected salary</li>
-              <li>• Cost of living for your household type</li>
-              <li>• Housing affordability</li>
-              <li>• Years to achieve your financial goals</li>
-            </ul>
-          </div>
-        )}
-
-        {/* Salary Override for current location - shown after location selection */}
-        {answers.locationSituation && (
+        {/* Salary Override for current location - only when user specifies a location */}
+        {(answers.locationSituation === 'know-exactly' || answers.locationSituation === 'currently-live-may-move') && (
           <div>
             <label className="block text-sm font-medium text-[#2C3E50] mb-2">
               Current salary (optional)
             </label>
-            <p className="text-xs text-[#9CA3AF] mb-2">
-              If you know your current salary, enter it here. This will be used for your current location; other locations will use regional averages for your occupation.
-            </p>
             <div className="relative">
               <span className="absolute left-4 top-3.5 text-[#6B7280]">$</span>
               <input
@@ -1604,15 +1693,12 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
           </div>
         )}
 
-        {/* Partner Salary - only if in a financially linked relationship */}
-        {answers.locationSituation && answers.relationshipStatus === 'linked' && (
+        {/* Partner Salary - only when user specifies a location and is in a linked relationship */}
+        {(answers.locationSituation === 'know-exactly' || answers.locationSituation === 'currently-live-may-move') && answers.relationshipStatus === 'linked' && (
           <div>
             <label className="block text-sm font-medium text-[#2C3E50] mb-2">
               Partner&apos;s current salary (optional)
             </label>
-            <p className="text-xs text-[#9CA3AF] mb-2">
-              If you know your partner&apos;s current salary, enter it here. If left blank and no partner occupation is set, income doubling (your salary × 2) will be used.
-            </p>
             <div className="relative">
               <span className="absolute left-4 top-3.5 text-[#6B7280]">$</span>
               <input
@@ -1629,108 +1715,68 @@ function Step6Location({ answers, updateAnswer }: StepProps) {
 
         {/* Region Filter */}
         {answers.locationSituation && answers.locationSituation !== 'know-exactly' && (
-          <div>
-            <label className="block text-sm font-medium text-[#2C3E50] mb-2">
-              Filter by Region (optional)
-            </label>
-            <p className="text-xs text-[#9CA3AF] mb-3">Select regions to focus your analysis on specific areas.</p>
-            <div className="grid grid-cols-2 gap-2">
-              {Object.keys(REGIONS).map(region => {
-                const isSelected = (answers.locationRegions || []).includes(region);
-                return (
-                  <label
-                    key={region}
-                    className={`flex items-center px-3 py-2 rounded-lg border cursor-pointer transition-all text-sm ${
-                      isSelected ? 'border-[#5BA4E5] bg-[#EFF6FF]' : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => {
-                        const regions = [...(answers.locationRegions || [])];
-                        if (isSelected) {
-                          updateAnswer('locationRegions', regions.filter(r => r !== region));
-                        } else {
-                          updateAnswer('locationRegions', [...regions, region]);
-                        }
-                      }}
-                      className="w-3.5 h-3.5 text-[#5BA4E5] border-[#D1D5DB] rounded focus:ring-[#5BA4E5] mr-2"
-                    />
-                    {region}
-                  </label>
-                );
-              })}
-            </div>
-          </div>
+          <FilterSearchDropdown
+            label="Filter by Region (optional)"
+            description="Select regions to focus your analysis on specific areas."
+            options={Object.keys(REGIONS)}
+            selectedValues={answers.locationRegions || []}
+            onToggle={(region) => {
+              const regions = [...(answers.locationRegions || [])];
+              if (regions.includes(region)) {
+                updateAnswer('locationRegions', regions.filter(r => r !== region));
+              } else {
+                updateAnswer('locationRegions', [...regions, region]);
+              }
+            }}
+            onClearAll={() => updateAnswer('locationRegions', [])}
+          />
         )}
 
         {/* Climate/Weather Filter */}
         {answers.locationSituation && answers.locationSituation !== 'know-exactly' && (
-          <div>
-            <label className="block text-sm font-medium text-[#2C3E50] mb-2">
-              Filter by Climate (optional)
-            </label>
-            <p className="text-xs text-[#9CA3AF] mb-3">Narrow results to locations matching your climate preference.</p>
-            <div className="grid grid-cols-2 gap-2">
-              {Object.keys(WEATHER_CATEGORIES).map(climate => {
-                const isSelected = (answers.locationClimate || []).includes(climate);
-                return (
-                  <label
-                    key={climate}
-                    className={`flex items-center px-3 py-2 rounded-lg border cursor-pointer transition-all text-sm ${
-                      isSelected ? 'border-[#5BA4E5] bg-[#EFF6FF]' : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => {
-                        const climates = [...(answers.locationClimate || [])];
-                        if (isSelected) {
-                          updateAnswer('locationClimate', climates.filter(c => c !== climate));
-                        } else {
-                          updateAnswer('locationClimate', [...climates, climate]);
-                        }
-                      }}
-                      className="w-3.5 h-3.5 text-[#5BA4E5] border-[#D1D5DB] rounded focus:ring-[#5BA4E5] mr-2"
-                    />
-                    {climate}
-                  </label>
-                );
-              })}
-            </div>
-          </div>
+          <FilterSearchDropdown
+            label="Filter by Climate (optional)"
+            description="Narrow results to locations matching your climate preference."
+            options={Object.keys(WEATHER_CATEGORIES)}
+            selectedValues={answers.locationClimate || []}
+            onToggle={(climate) => {
+              const climates = [...(answers.locationClimate || [])];
+              if (climates.includes(climate)) {
+                updateAnswer('locationClimate', climates.filter(c => c !== climate));
+              } else {
+                updateAnswer('locationClimate', [...climates, climate]);
+              }
+            }}
+            onClearAll={() => updateAnswer('locationClimate', [])}
+          />
         )}
 
-        {/* Location Priority Mode */}
+        {/* Location Type Preference */}
         {answers.locationSituation && (
           <div>
-            <label className="block text-sm font-medium text-[#2C3E50] mb-2">
-              Ranking Priority
+            <label className="block text-sm font-medium text-[#2C3E50] mb-3">
+              Location type preference
             </label>
-            <p className="text-xs text-[#9CA3AF] mb-3">How should we prioritize when ranking locations?</p>
             <div className="space-y-2">
               {[
-                { value: 'combination', label: 'Balanced (Recommended)' },
-                { value: 'affordability', label: 'Affordability First' },
-                { value: 'climate', label: 'Climate Preference' },
-                { value: 'location', label: 'Location Preference' },
+                { value: 'cities', label: 'Cities' },
+                { value: 'towns', label: 'Towns / Outside of the city' },
+                { value: 'both', label: 'Both' },
               ].map(option => (
                 <label
                   key={option.value}
                   className={`flex items-center w-full px-4 py-3 rounded-lg border cursor-pointer transition-all ${
-                    (answers.locationPriority || 'combination') === option.value
+                    (answers.locationTypePreference || 'both') === option.value
                       ? 'border-[#5BA4E5] bg-[#EFF6FF]'
                       : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
                   }`}
                 >
                   <input
                     type="radio"
-                    name="locationPriority"
+                    name="locationTypePreference"
                     value={option.value}
-                    checked={(answers.locationPriority || 'combination') === option.value}
-                    onChange={(e) => updateAnswer('locationPriority', e.target.value as any)}
+                    checked={(answers.locationTypePreference || 'both') === option.value}
+                    onChange={(e) => updateAnswer('locationTypePreference', e.target.value as any)}
                     className="w-4 h-4 text-[#5BA4E5] border-[#D1D5DB] focus:ring-[#5BA4E5]"
                   />
                   <span className="ml-3 text-sm text-[#2C3E50]">{option.label}</span>
@@ -1849,7 +1895,7 @@ function Step7Confirmation({ answers, onEditStep }: { answers: Partial<Onboardin
           {(answers.locationClimate || []).length > 0 && (
             <p>Climate: <span className="text-[#2C3E50] font-medium">{answers.locationClimate!.join(', ')}</span></p>
           )}
-          <p>Priority: <span className="text-[#2C3E50] font-medium">{answers.locationPriority || 'Balanced'}</span></p>
+          <p>Type: <span className="text-[#2C3E50] font-medium">{answers.locationTypePreference === 'cities' ? 'Cities' : answers.locationTypePreference === 'towns' ? 'Towns' : 'Both'}</span></p>
           {answers.currentSalaryOverride && (
             <p>Current salary override: <span className="text-[#2C3E50] font-medium">${answers.currentSalaryOverride.toLocaleString()}</span></p>
           )}

@@ -9,7 +9,7 @@ import type { OnboardingAnswers } from "@/lib/onboarding/types";
 import { normalizeOnboardingAnswers } from "@/lib/onboarding/normalize";
 import { getOnboardingAnswers, setOnboardingAnswers, setUserProfile, setSavedLocations } from "@/lib/storage";
 import { getAllLocationOptions } from "@/lib/locations";
-import { resolveLocationFilters } from "@/lib/location-filters";
+import { resolveLocationFilters, filterLocationsByTypePreference } from "@/lib/location-filters";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -72,6 +72,17 @@ export default function OnboardingPage() {
           // Auto-save explicitly selected locations as favorites
           setSavedLocations([...profile.selectedLocations]);
         }
+      }
+
+      // Filter by location type preference (cities vs towns)
+      if (profile.locationTypePreference !== 'both') {
+        const allOpts = getAllLocationOptions();
+        locations = filterLocationsByTypePreference(
+          locations,
+          profile.locationTypePreference,
+          profile.selectedLocations,
+          allOpts.filter(o => o.type === 'city').map(o => ({ label: o.label, state: o.state })),
+        );
       }
 
       const results = locations.map(loc => {

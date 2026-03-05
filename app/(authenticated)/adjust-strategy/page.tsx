@@ -9,6 +9,7 @@ import {
   Step3AgeOccupation,
   Step4FinancialPortfolio,
   Step5Allocation,
+  Step6Location,
 } from "@/components/onboarding/OnboardingWizard";
 import type { OnboardingAnswers } from "@/lib/onboarding/types";
 import { normalizeOnboardingAnswers } from "@/lib/onboarding/normalize";
@@ -20,12 +21,14 @@ import {
   setSavedLocations,
 } from "@/lib/storage";
 import { getAllLocationOptions } from "@/lib/locations";
+import { filterLocationsByTypePreference } from "@/lib/location-filters";
 
 const STEPS = [
   { key: 2, label: "Household Planning" },
   { key: 3, label: "Job & Occupation" },
   { key: 4, label: "Financial Portfolio" },
   { key: 5, label: "Allocation" },
+  { key: 6, label: "Location" },
 ] as const;
 
 export default function AdjustStrategyPage() {
@@ -85,6 +88,17 @@ export default function AdjustStrategyPage() {
         } else {
           // "no idea" users — recalculate all locations (states + cities)
           locations = getAllLocationOptions().map((o) => o.label);
+        }
+
+        // Filter by location type preference (cities vs towns)
+        if (profile.locationTypePreference !== 'both') {
+          const allOpts = getAllLocationOptions();
+          locations = filterLocationsByTypePreference(
+            locations,
+            profile.locationTypePreference,
+            profile.selectedLocations,
+            allOpts.filter(o => o.type === 'city').map(o => ({ label: o.label, state: o.state })),
+          );
         }
 
         const results = locations
@@ -172,6 +186,9 @@ export default function AdjustStrategyPage() {
           )}
           {step.key === 5 && (
             <Step5Allocation answers={answers} updateAnswer={updateAnswer} />
+          )}
+          {step.key === 6 && (
+            <Step6Location answers={answers} updateAnswer={updateAnswer} />
           )}
         </div>
 

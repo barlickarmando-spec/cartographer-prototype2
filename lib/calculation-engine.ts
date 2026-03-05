@@ -291,10 +291,67 @@ function calculateAutoApproach(
       console.error('calculateAutoApproach: Profile validation errors:', validationErrors);
       return createErrorResult(locationName, locationData, `Invalid profile: ${validationErrors.join(', ')}`);
     }
-    
+
+    // === UNSURE ABOUT KIDS: cascading scenario logic ===
+    // 1) Calculate with 1 kid at 32 — kid viability section provides 2nd kid buffer info
+    // 2) If score <= 5, fall back to 0 kids but preserve kid viability data
+    if (profile.kidsPlan === 'unsure' && (profile.numKids || 0) === 0) {
+      const kidAge = profile.plannedKidAges?.[0] || 32;
+
+      // Try 1 kid — year-by-year will show 1 kid born, kid viability shows 2nd/3rd feasibility
+      const oneKidResult = calculateAutoApproach(
+        { ...profile, kidsPlan: 'yes', plannedKidAges: [kidAge], declaredKidCount: 1 },
+        locationName, simulationYears
+      );
+      if (oneKidResult && oneKidResult.numericScore > 5) {
+        return oneKidResult;
+      }
+
+      // 1-kid not viable — fall back to no kids but preserve kid viability data
+      const noKidResult = calculateAutoApproach(
+        { ...profile, kidsPlan: 'no', plannedKidAges: [], declaredKidCount: 0 },
+        locationName, simulationYears
+      );
+      if (noKidResult && oneKidResult) {
+        // Attach kid viability from 1-kid run so profile page can still show the section
+        noKidResult.kidViability = oneKidResult.kidViability;
+      }
+      return noKidResult;
+    }
+
+    // Pre-compute kid viability to find minimum viable ages
+    // When kids-asap-viable is selected, use these ages as hard birth dates
+    const kidViability = calculateKidViability(profile, locationData);
+    const hasAsapRule = profile.hardRules && profile.hardRules.includes('kids-asap-viable');
+
+    let simProfile = profile;
+    if (hasAsapRule && profile.kidsPlan !== 'no') {
+      // Respect the user's declared kid count — don't inflate beyond what they asked for
+      const userWantedKids = Math.min(3, profile.declaredKidCount || (profile.plannedKidAges?.length || 0));
+      const allViableAges: number[] = [];
+      if (kidViability.firstKid.isViable && kidViability.firstKid.minimumAge != null) {
+        allViableAges.push(kidViability.firstKid.minimumAge);
+      }
+      if (kidViability.secondKid.isViable && kidViability.secondKid.minimumAge != null) {
+        allViableAges.push(kidViability.secondKid.minimumAge);
+      }
+      if (kidViability.thirdKid.isViable && kidViability.thirdKid.minimumAge != null) {
+        allViableAges.push(kidViability.thirdKid.minimumAge);
+      }
+      // Only take as many viable ages as the user actually wants
+      const viableAges = allViableAges.slice(0, userWantedKids);
+      if (viableAges.length > 0) {
+        simProfile = {
+          ...profile,
+          plannedKidAges: viableAges,
+          declaredKidCount: viableAges.length,
+        };
+      }
+    }
+
     // Run year-by-year simulation
     console.log(`Starting simulation for ${locationName}, ${simulationYears} years`);
-    const simulation = runYearByYearSimulation(profile, locationData, simulationYears);
+    const simulation = runYearByYearSimulation(simProfile, locationData, simulationYears);
     
     if (simulation.snapshots.length === 0) {
       return createErrorResult(locationName, locationData, 'Simulation produced no results');
@@ -338,8 +395,7 @@ function calculateAutoApproach(
       houseProjections, locationPricePerSqft, requiredHousePrice, largeHousePrice, requiredSqFt
     );
 
-    // Kid viability
-    const kidViability = calculateKidViability(profile, locationData);
+    // Kid viability (already computed above, before main simulation)
 
     // Numeric Score (0-10 precision) — now includes Home Size Fit component
     const numericScore = calculateNumericScore(
@@ -365,27 +421,6 @@ function calculateAutoApproach(
     const fastestHomeProjection = calculateFastestToTarget(
       fastestHomeSqFt, locationPricePerSqft, profile, locationData, simulation.snapshots
     );
-
-    // === STRICT NON-VIABLE CHECK: "unsure" about kids → account for 1 kid ===
-    // If user is "unsure" about kids and not already flagged as no-viable-path,
-    // check if adding 1 kid would put them in the red (COL > income).
-    if (viability !== 'no-viable-path' && profile.kidsPlan === 'unsure' && (profile.numKids || 0) === 0) {
-      // Determine household type with 1 kid
-      const relStatus = profile.relationshipStatus === 'linked' ? 'linked' : 'single';
-      const withKidHousehold = determineHouseholdType(relStatus as any, profile.numEarners, 1);
-      const colKeyWithKid = getAdjustedCOLKey(withKidHousehold);
-      const adjustedCOLWithKid = locationData.adjustedCOL[colKeyWithKid] || 0;
-
-      // Check if COL with 1 kid + housing exceeds income
-      const year1Income = simulation.snapshots[0]?.totalIncome ?? 0;
-      const year1Housing = simulation.snapshots[0]?.housingCost ?? 0;
-      const totalCOLWithKid = adjustedCOLWithKid + year1Housing;
-
-      if (totalCOLWithKid > year1Income) {
-        // Adding 1 kid would put them in the red
-        viability = 'no-viable-path' as ViabilityClass;
-      }
-    }
 
     // Generate recommendations and warnings (now sqft-aware)
     const recommendations = generateRecommendations(
@@ -610,33 +645,41 @@ function runYearByYearSimulation(
     
     // === LIFE EVENT: KIDS BORN ===
     let kidBornThisYear = 0;
-    if (profile.plannedKidAges && profile.plannedKidAges.length > 0) {
-      const kidIndex = profile.plannedKidAges.findIndex(age => age === ageThisYear);
-      if (kidIndex >= 0) {
-        // Check hard rules — now checks ALL active debt, not just student loans
-        const canHaveKid = checkKidHardRules(profile.hardRules, loanDebt, hasMortgage, ccDebtAmount);
-        if (canHaveKid) {
+    const maxPlannedKids = Math.min(3, profile.declaredKidCount || (profile.plannedKidAges?.length || 0));
+    const hasAsapRule = profile.hardRules && profile.hardRules.includes('kids-asap-viable');
+    const canHaveKidByRules = checkKidHardRules(profile.hardRules, loanDebt, hasMortgage, ccDebtAmount);
+
+    if (hasAsapRule && profile.plannedKidAges && profile.plannedKidAges.length > 0) {
+      // kids-asap-viable: birth kids at pre-computed minimum viable ages
+      // BUT still respect stacking hard rules (debt-before-kids, mortgage-before-kids)
+      // Priority: pay off debt → get mortgage → have kids ASAP
+      const kidsScheduled = profile.plannedKidAges.filter(age => age <= ageThisYear).length;
+      if (kidsScheduled > currentNumKids && currentNumKids < 3) {
+        if (canHaveKidByRules) {
           currentNumKids++;
           kidBornThisYear = currentNumKids;
           const relStatus = relationshipStarted ? 'linked' : 'single';
           currentHouseholdType = determineHouseholdType(relStatus as any, currentNumEarners, currentNumKids);
-          debugNotes.push(`Kid #${kidBornThisYear} born at age ${ageThisYear}`);
+          debugNotes.push(`Kid #${kidBornThisYear} born at age ${ageThisYear} (kids-asap-viable)`);
         } else {
-          debugNotes.push(`Kid blocked by hard rules at age ${ageThisYear}`);
+          debugNotes.push(`Kid deferred at age ${ageThisYear} — waiting for hard rule conditions (debt/mortgage)`);
         }
       }
-    }
-
-    // === KIDS-ASAP-VIABLE HARD RULE ===
-    // If user has this rule, trigger a kid birth when conditions are right, even if not the planned age
-    if (profile.hardRules && profile.hardRules.includes('kids-asap-viable') && kidBornThisYear === 0) {
-      const maxPlannedKids = profile.declaredKidCount || (profile.plannedKidAges?.length || 0);
-      if (currentNumKids < maxPlannedKids && lastYearScore >= 5 && savings > 5000) {
-        currentNumKids++;
-        kidBornThisYear = currentNumKids;
-        const relStatus = relationshipStarted ? 'linked' : 'single';
-        currentHouseholdType = determineHouseholdType(relStatus as any, currentNumEarners, currentNumKids);
-        debugNotes.push(`Kid #${kidBornThisYear} born at age ${ageThisYear} (kids-asap-viable triggered)`);
+    } else if (profile.plannedKidAges && profile.plannedKidAges.length > 0) {
+      // Standard path: check if a kid is scheduled at or after planned age
+      // kidsOwed tracks kids whose planned age has passed but were blocked by hard rules
+      const kidsOwed = profile.plannedKidAges.filter(age => age <= ageThisYear).length - currentNumKids;
+      if (kidsOwed > 0 && currentNumKids < 3) {
+        if (canHaveKidByRules) {
+          currentNumKids++;
+          kidBornThisYear = currentNumKids;
+          const relStatus = relationshipStarted ? 'linked' : 'single';
+          currentHouseholdType = determineHouseholdType(relStatus as any, currentNumEarners, currentNumKids);
+          const wasDeferred = !profile.plannedKidAges.includes(ageThisYear);
+          debugNotes.push(`Kid #${kidBornThisYear} born at age ${ageThisYear}${wasDeferred ? ' (deferred by hard rules)' : ''}`);
+        } else {
+          debugNotes.push(`Kid deferred by hard rules at age ${ageThisYear}`);
+        }
       }
     }
 
@@ -669,15 +712,23 @@ function runYearByYearSimulation(
 
     // === CALCULATE INCOME ===
     // Salary override: use user's known salary for their current location, location averages elsewhere
-    const userIncome = (profile.currentSalaryOverride && locationData.name === profile.currentSalaryLocation)
+    const userIncome = (profile.currentSalaryOverride && locationData.displayName === profile.currentSalaryLocation)
       ? profile.currentSalaryOverride
       : getSalary(locationData.name, profile.userOccupation, profile.userSalary);
     let partnerIncome = 0;
     
     if (currentNumEarners === 2) {
       if (profile.partnerOccupation) {
-        partnerIncome = getSalary(locationData.name, profile.partnerOccupation, profile.partnerSalary);
+        // Use partner salary override for current location, location averages elsewhere
+        const partnerSalaryForLocation = (profile.partnerSalary && locationData.displayName === profile.currentSalaryLocation)
+          ? profile.partnerSalary
+          : getSalary(locationData.name, profile.partnerOccupation, undefined);
+        partnerIncome = partnerSalaryForLocation;
         debugNotes.push(`Partner income from occupation: $${partnerIncome}`);
+      } else if (profile.partnerSalary) {
+        // Partner salary provided directly without occupation
+        partnerIncome = profile.partnerSalary;
+        debugNotes.push(`Partner income from manual salary: $${partnerIncome}`);
       } else if (profile.usePartnerIncomeDoubling || relationshipStarted) {
         // Income doubling rule
         partnerIncome = userIncome;
@@ -700,10 +751,11 @@ function runYearByYearSimulation(
     const colKey = getAdjustedCOLKey(currentHouseholdType);
     const baseCOL = locationData.adjustedCOL[colKey] || 0;
 
-    // Add annual expenses (conditional on age and viability)
+    // Add annual expenses (conditional on age, debt-free status, and viability)
     let annualExpensesTotal = 0;
     for (const expense of profile.annualExpenses || []) {
       if (expense.startAge && ageThisYear < expense.startAge) continue;
+      if (expense.onlyAfterDebtFree && loanDebt > 0) continue;
       if (expense.onlyIfViable && lastYearScore < 5) continue;
       annualExpensesTotal += expense.annualCost;
     }

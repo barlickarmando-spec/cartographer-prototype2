@@ -56,6 +56,7 @@ export interface AnnualExpense {
   label: string;
   annualCost: number;
   startAge?: number;            // Optional: only applies from this age
+  onlyAfterDebtFree?: boolean;  // Optional: only activate after all debt paid
   onlyIfViable?: boolean;       // Optional: only if viability >= 5
 }
 
@@ -64,6 +65,9 @@ export type KidsKnowledge = 'know-count' | 'dont-know-count';
 
 // === STEP 6: Location Priority ===
 export type LocationPriority = 'affordability' | 'climate' | 'location' | 'combination';
+
+// === STEP 6: Location Type Preference ===
+export type LocationTypePreference = 'cities' | 'towns' | 'both';
 
 // === STEP 6: Location ===
 export type LocationSituation =
@@ -125,6 +129,7 @@ export interface OnboardingAnswers {
   locationRegions: string[]; // Selected region filters
   locationClimate: string[]; // Selected climate/weather filters
   locationPriority: LocationPriority; // Ranking emphasis
+  locationTypePreference?: LocationTypePreference; // Cities vs towns preference
 }
 
 // === Normalized User Profile (For Calculations) ===
@@ -188,6 +193,7 @@ export interface UserProfile {
   locationRegions: string[];
   locationClimate: string[];
   locationPriority: LocationPriority;
+  locationTypePreference: LocationTypePreference;
 }
 
 // === Household Type Enum (12 Types) ===

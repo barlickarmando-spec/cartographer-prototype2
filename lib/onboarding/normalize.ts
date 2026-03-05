@@ -103,8 +103,11 @@ export function normalizeOnboardingAnswers(answers: OnboardingAnswers): UserProf
     relationshipStatus === 'linked' && !partnerOccupation && !partnerSalary;
 
   // Salary override for current location
+  // Derive currentSalaryLocation from the user's selected location
   const currentSalaryOverride = answers.currentSalaryOverride;
-  const currentSalaryLocation = answers.currentSalaryLocation;
+  const currentSalaryLocation = answers.currentSalaryLocation
+    || answers.currentLocation
+    || answers.exactLocation;
 
   // === Debt ===
   const userLoanDebt = answers.userStudentLoanDebt || 0;
@@ -182,6 +185,7 @@ export function normalizeOnboardingAnswers(answers: OnboardingAnswers): UserProf
   const locationRegions = answers.locationRegions || [];
   const locationClimate = answers.locationClimate || [];
   const locationPriority = answers.locationPriority || 'combination';
+  const locationTypePreference = answers.locationTypePreference || 'both';
 
   // === Build Profile ===
   return {
@@ -225,5 +229,6 @@ export function normalizeOnboardingAnswers(answers: OnboardingAnswers): UserProf
     locationRegions,
     locationClimate,
     locationPriority,
+    locationTypePreference,
   };
 }
