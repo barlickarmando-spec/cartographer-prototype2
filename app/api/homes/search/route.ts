@@ -511,7 +511,7 @@ async function fallbackSearchListings(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { location, minPrice, maxPrice } = body;
+    const { location, minPrice, maxPrice, preferredApi } = body;
 
     if (!location || !minPrice || !maxPrice) {
       return NextResponse.json(
@@ -536,28 +536,35 @@ export async function POST(request: NextRequest) {
     let totalAvailable = 0;
     let source = 'none';
 
-    // ── Try primary API (realtor-search) ──
-    try {
-      const locationId = await primaryAutoComplete(searchQuery);
-      debug.primaryLocationId = locationId;
+    // Determine API order based on preferredApi param
+    const tryPrimary = !preferredApi || preferredApi === 'realtor-search';
+    const tryFallback = !preferredApi || preferredApi === 'realty-in-us';
+    debug.preferredApi = preferredApi || 'auto';
 
-      if (locationId) {
-        const result = await primarySearchForSale(locationId, minPrice, maxPrice);
-        if (result && result.listings.length > 0) {
-          listings = result.listings;
-          totalAvailable = result.totalAvailable;
-          source = 'realtor-search';
+    // ── Try primary API (realtor-search) ──
+    if (tryPrimary) {
+      try {
+        const locationId = await primaryAutoComplete(searchQuery);
+        debug.primaryLocationId = locationId;
+
+        if (locationId) {
+          const result = await primarySearchForSale(locationId, minPrice, maxPrice);
+          if (result && result.listings.length > 0) {
+            listings = result.listings;
+            totalAvailable = result.totalAvailable;
+            source = 'realtor-search';
+          }
         }
+        debug.primaryCount = listings.length;
+      } catch (e) {
+        console.log('[homes/search] Primary API error:', e instanceof Error ? e.message : e);
+        debug.primaryError = e instanceof Error ? e.message : String(e);
       }
-      debug.primaryCount = listings.length;
-    } catch (e) {
-      console.log('[homes/search] Primary API error:', e instanceof Error ? e.message : e);
-      debug.primaryError = e instanceof Error ? e.message : String(e);
     }
 
-    // ── Fallback to realty-in-us if primary returned nothing ──
-    if (listings.length === 0) {
-      console.log('[homes/search] Primary returned no results, trying fallback (realty-in-us)...');
+    // ── Try realty-in-us (as fallback or if preferred) ──
+    if (listings.length === 0 && tryFallback) {
+      console.log('[homes/search] Trying realty-in-us...');
       try {
         const resolved = await fallbackAutoComplete(searchQuery);
         debug.fallbackResolved = resolved;
