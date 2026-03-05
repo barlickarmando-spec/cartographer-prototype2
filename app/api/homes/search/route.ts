@@ -589,12 +589,36 @@ export async function POST(request: NextRequest) {
     debug.normalizedCount = homes.length;
     debug.withPhotos = homes.filter(h => h.photoUrl).length;
 
-    // Strict price filter — only keep homes within the requested range
+    // Price filter with graceful degradation for mismatched markets
     const beforeFilter = homes.length;
-    homes = homes.filter(h => {
-      if (h.price === 0) return true; // keep listings with unknown price
+    const strictFiltered = homes.filter(h => {
+      if (h.price === 0) return true;
       return h.price >= minPrice && h.price <= maxPrice;
     });
+
+    const MIN_RESULTS = 6;
+    if (strictFiltered.length >= MIN_RESULTS) {
+      homes = strictFiltered;
+      debug.priceFilterMode = 'strict';
+    } else {
+      // Expand range by ±50%
+      const range = maxPrice - minPrice;
+      const expandedMin = Math.max(0, minPrice - range * 0.5);
+      const expandedMax = maxPrice + range * 0.5;
+      const expandedFiltered = homes.filter(h => {
+        if (h.price === 0) return true;
+        return h.price >= expandedMin && h.price <= expandedMax;
+      });
+
+      if (expandedFiltered.length >= MIN_RESULTS) {
+        homes = expandedFiltered;
+        debug.priceFilterMode = 'expanded';
+        debug.expandedRange = { min: expandedMin, max: expandedMax };
+      } else {
+        // Keep all results — real listings are better than fallback
+        debug.priceFilterMode = 'none';
+      }
+    }
     debug.filteredOut = beforeFilter - homes.length;
     debug.afterPriceFilter = homes.length;
 
