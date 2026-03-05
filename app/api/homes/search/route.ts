@@ -40,6 +40,23 @@ for (const [name, code] of Object.entries(STATE_ABBREVIATIONS)) {
   STATE_NAMES[code] = name.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
 }
 
+// State capitals for fallback when only a state is given
+const STATE_CAPITALS: Record<string, string> = {
+  'AL': 'Montgomery', 'AK': 'Anchorage', 'AZ': 'Phoenix', 'AR': 'Little Rock',
+  'CA': 'Los Angeles', 'CO': 'Denver', 'CT': 'Hartford', 'DE': 'Wilmington',
+  'FL': 'Miami', 'GA': 'Atlanta', 'HI': 'Honolulu', 'ID': 'Boise',
+  'IL': 'Chicago', 'IN': 'Indianapolis', 'IA': 'Des Moines', 'KS': 'Wichita',
+  'KY': 'Louisville', 'LA': 'New Orleans', 'ME': 'Portland', 'MD': 'Baltimore',
+  'MA': 'Boston', 'MI': 'Detroit', 'MN': 'Minneapolis', 'MS': 'Jackson',
+  'MO': 'Kansas City', 'MT': 'Billings', 'NE': 'Omaha', 'NV': 'Las Vegas',
+  'NH': 'Manchester', 'NJ': 'Newark', 'NM': 'Albuquerque', 'NY': 'New York',
+  'NC': 'Charlotte', 'ND': 'Fargo', 'OH': 'Columbus', 'OK': 'Oklahoma City',
+  'OR': 'Portland', 'PA': 'Philadelphia', 'RI': 'Providence', 'SC': 'Charleston',
+  'SD': 'Sioux Falls', 'TN': 'Nashville', 'TX': 'Houston', 'UT': 'Salt Lake City',
+  'VT': 'Burlington', 'VA': 'Virginia Beach', 'WA': 'Seattle', 'WV': 'Charleston',
+  'WI': 'Milwaukee', 'WY': 'Cheyenne',
+};
+
 // ── Location parsing ────────────────────────────────────────────────
 function parseLocation(location: string): { city: string; stateCode: string } {
   const trimmed = location.trim();
@@ -68,7 +85,7 @@ function buildSearchQuery(city: string, stateCode: string): string {
   return stateCode;
 }
 
-// ── Step 1: Auto-complete location → get a usable location identifier ──
+// ── Step 1: Auto-complete location → get a "City, ST" string ────────
 async function autoCompleteLocation(query: string): Promise<string | null> {
   const url = `${BASE_URL}/auto-complete?input=${encodeURIComponent(query)}`;
   console.log(`[homes/search] Auto-complete: ${url}`);
@@ -91,35 +108,31 @@ async function autoCompleteLocation(query: string): Promise<string | null> {
     return null;
   }
 
-  // The search-sale API wants "City, ST" format (confirmed via testing)
-  const first = results[0];
+  // The search-sale API works best with "City, ST" format.
+  // Priority: find any result with city + state_code.
 
-  // Best: "City, ST" format from first result
-  if (first.city && first.state_code) {
-    return `${first.city}, ${first.state_code}`;
-  }
-
-  // For state-only queries (e.g., "Idaho"), the first result is a state.
-  // Look for the first city-type result in the list to use instead.
-  if (first.area_type === 'state' || (first.state_code && !first.city)) {
-    const stateCode = first.state_code;
-    const cityResult = results.find((r: any) => r.area_type === 'city' && r.state_code === stateCode && r.city);
-    if (cityResult) {
-      console.log(`[homes/search] State query: using city "${cityResult.city}, ${cityResult.state_code}"`);
-      return `${cityResult.city}, ${cityResult.state_code}`;
+  // First, look for a city-type result anywhere in results
+  for (const r of results) {
+    if (r.city && r.state_code) {
+      console.log(`[homes/search] Resolved to: ${r.city}, ${r.state_code}`);
+      return `${r.city}, ${r.state_code}`;
     }
-    // No city in results — try the state's capital or largest city
-    // Fall through to other methods
   }
 
-  // Zip code
+  // For state-only queries, try the state's capital as fallback
+  const first = results[0];
+  if (first.state_code) {
+    const capital = STATE_CAPITALS[first.state_code];
+    if (capital) {
+      console.log(`[homes/search] State query fallback: using capital "${capital}, ${first.state_code}"`);
+      return `${capital}, ${first.state_code}`;
+    }
+  }
+
+  // Last resort: zip code or slug
   for (const r of results) {
     if (r.postal_code) return r.postal_code;
   }
-
-  if (first.slug_id) return first.slug_id;
-  if (first.geo_id) return first.geo_id;
-  if (first._id) return first._id;
 
   console.log('[homes/search] Auto-complete: no usable ID in result:', JSON.stringify(first).slice(0, 200));
   return null;
@@ -131,13 +144,14 @@ async function searchForSale(
   minPrice: number,
   maxPrice: number,
 ): Promise<any[] | null> {
-  // The search-sale endpoint example used a zip code for location
-  // We'll pass whatever identifier we got from auto-complete
   const params = new URLSearchParams({
     location: locationId,
     sort_by: 'RelevantListings',
-    search_within_x_miles: '0',
+    search_within_x_miles: '20',
   });
+  // Add price filters so the API returns results in range
+  if (minPrice > 0) params.set('price_min', String(minPrice));
+  if (maxPrice > 0) params.set('price_max', String(maxPrice));
 
   const url = `${BASE_URL}/property/search-sale?${params.toString()}`;
   console.log(`[homes/search] Search for sale: ${url}`);
@@ -345,12 +359,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, homes: [], count: 0, source: 'no_results' });
     }
 
-    // Step 3: Normalize listings
-    let homes = listings.slice(0, 12).map(normalizeProperty);
+    // Step 3: Normalize listings — take more since API now filters by price
+    let homes = listings.slice(0, 20).map(normalizeProperty);
 
-    // Step 4: Filter by price range
+    // Step 4: Filter by price range (secondary filter in case API returned extras)
     const priceFiltered = homes.filter(h => h.price >= minPrice && h.price <= maxPrice);
-    if (priceFiltered.length > 0) {
+    if (priceFiltered.length >= 4) {
       homes = priceFiltered;
     }
 
@@ -406,12 +420,16 @@ export async function GET(request: NextRequest) {
       const acData = acJson.data || acJson.results || acJson;
       const firstResult = Array.isArray(acData) && acData.length > 0 ? acData[0] : null;
 
-      // Extract location ID same way as autoCompleteLocation
-      if (firstResult?.postal_code) locationId = firstResult.postal_code;
-      else if (firstResult?.slug_id) locationId = firstResult.slug_id;
-      else if (firstResult?.city) locationId = firstResult.state_code ? `${firstResult.city}, ${firstResult.state_code}` : firstResult.city;
-      else if (firstResult?.geo_id) locationId = firstResult.geo_id;
-      else if (firstResult?._id) locationId = firstResult._id;
+      // Extract location ID — prefer City, ST format
+      if (Array.isArray(acData)) {
+        for (const r of acData) {
+          if (r.city && r.state_code) { locationId = `${r.city}, ${r.state_code}`; break; }
+        }
+      }
+      if (!locationId && firstResult?.postal_code) locationId = firstResult.postal_code;
+      if (!locationId && firstResult?.state_code && STATE_CAPITALS[firstResult.state_code]) {
+        locationId = `${STATE_CAPITALS[firstResult.state_code]}, ${firstResult.state_code}`;
+      }
 
       steps.push({
         step: 'auto-complete',
@@ -436,7 +454,7 @@ export async function GET(request: NextRequest) {
 
     for (const fmt of locationFormats) {
       try {
-        const searchUrl = `${BASE_URL}/property/search-sale?location=${encodeURIComponent(fmt.value)}&sort_by=RelevantListings&search_within_x_miles=0`;
+        const searchUrl = `${BASE_URL}/property/search-sale?location=${encodeURIComponent(fmt.value)}&sort_by=RelevantListings&search_within_x_miles=20`;
         const searchRes = await fetch(searchUrl, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
         const searchJson = await searchRes.json();
 
