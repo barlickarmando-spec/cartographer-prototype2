@@ -222,6 +222,24 @@ async function getPhotos(propertyId: string, listingId: string): Promise<string>
   return '';
 }
 
+// ── Upgrade photo URL to higher resolution ──────────────────────────
+function upgradePhotoUrl(url: string): string {
+  if (!url) return url;
+
+  // RDC/rdcpix URLs use patterns like "-w480_h360.jpg" or "-w{n}_h{n}_x2.jpg"
+  // Replace with large resolution
+  let upgraded = url.replace(/-w\d+_h\d+(_x2)?/g, '-w1024_h768');
+
+  // Some URLs use "s.jpg" (small), "m.jpg" (medium), "l.jpg" (large), "od.jpg" (original)
+  // Try to upgrade to large
+  upgraded = upgraded.replace(/\/([^/]+)s\.jpg$/i, '/$1l.jpg');
+
+  // If URL has a "thumbs" path segment, try removing it for full-size
+  upgraded = upgraded.replace(/\/thumbs\//, '/');
+
+  return upgraded;
+}
+
 // ── Normalize a listing into our Home interface ─────────────────────
 function normalizeProperty(prop: any): {
   id: string;
@@ -259,20 +277,21 @@ function normalizeProperty(prop: any): {
   // Convert snake_case to Title Case (e.g., "single_family" → "Single Family")
   const homeType = rawType.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
 
-  // Photo URL — try all common paths
+  // Photo URL — prefer photos array (often has larger images) over primary_photo thumbnail
   let photoUrl = '';
-  if (prop.primary_photo?.href) photoUrl = prop.primary_photo.href;
-  else if (prop.photo?.href) photoUrl = prop.photo.href;
-  else if (typeof prop.thumbnail === 'string' && prop.thumbnail.startsWith('http')) photoUrl = prop.thumbnail;
-  else if (typeof prop.image === 'string' && prop.image.startsWith('http')) photoUrl = prop.image;
-  else if (typeof prop.photo_url === 'string' && prop.photo_url.startsWith('http')) photoUrl = prop.photo_url;
-  else if (typeof prop.imageUrl === 'string' && prop.imageUrl.startsWith('http')) photoUrl = prop.imageUrl;
-  else if (Array.isArray(prop.photos) && prop.photos.length > 0) {
+  if (Array.isArray(prop.photos) && prop.photos.length > 0) {
     const f = prop.photos[0];
     photoUrl = typeof f === 'string' ? f : (f?.href || f?.url || '');
   }
+  if (!photoUrl && prop.primary_photo?.href) photoUrl = prop.primary_photo.href;
+  if (!photoUrl && prop.photo?.href) photoUrl = prop.photo?.href;
+  if (!photoUrl && typeof prop.thumbnail === 'string' && prop.thumbnail.startsWith('http')) photoUrl = prop.thumbnail;
+  if (!photoUrl && typeof prop.image === 'string' && prop.image.startsWith('http')) photoUrl = prop.image;
+  if (!photoUrl && typeof prop.photo_url === 'string' && prop.photo_url.startsWith('http')) photoUrl = prop.photo_url;
+  if (!photoUrl && typeof prop.imageUrl === 'string' && prop.imageUrl.startsWith('http')) photoUrl = prop.imageUrl;
 
-  // Don't modify photo URLs — we'll fetch high-res photos via get-photos endpoint
+  // Upgrade to higher resolution version
+  photoUrl = upgradePhotoUrl(photoUrl);
 
   // Listing URL — build from permalink or property_id
   let listingUrl = '';
@@ -365,7 +384,7 @@ export async function POST(request: NextRequest) {
       debug.fetchingPhotosFor = withIds.length;
       const photoPromises = withIds.map(async (home) => {
         const url = await getPhotos(home._propertyId!, home._listingId || '');
-        if (url) home.photoUrl = url; // Override thumbnail with high-res
+        if (url) home.photoUrl = upgradePhotoUrl(url);
       });
       await Promise.allSettled(photoPromises);
     }
@@ -374,6 +393,7 @@ export async function POST(request: NextRequest) {
     const cleaned = homes.map(({ _propertyId, _listingId, ...rest }) => rest);
     debug.finalCount = cleaned.length;
     debug.finalWithPhotos = cleaned.filter(h => h.photoUrl).length;
+    debug.photoUrls = cleaned.slice(0, 4).map(h => h.photoUrl || 'none');
 
     return NextResponse.json({
       success: true,

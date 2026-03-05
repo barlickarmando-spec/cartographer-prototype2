@@ -426,11 +426,12 @@ function CompactHomeCard({ home, index, onClick }: { home: Home; index: number; 
   return (
     <button onClick={onClick}
       className="text-left bg-white rounded-xl border border-[#E5E7EB] overflow-hidden hover:shadow-lg transition-all duration-200 group cursor-pointer w-full">
-      <div className={`relative h-56 bg-gradient-to-br ${gradient} overflow-hidden`}>
+      <div className={`relative h-64 bg-gradient-to-br ${gradient} overflow-hidden`}>
         {home.photoUrl && !imgError ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img src={home.photoUrl} alt={`Home at ${home.address}`}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            sizes="(min-width: 768px) 50vw, 100vw"
             onError={() => setImgError(true)} loading="lazy" />
         ) : (
           <div className="flex flex-col items-center justify-center h-full gap-1">
