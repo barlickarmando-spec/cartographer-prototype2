@@ -76,7 +76,7 @@ function buildRealtorSearchUrl(location: string, minPrice: number, maxPrice: num
   return url;
 }
 
-const MAX_HOMES = 42;
+const MAX_HOMES = 8;
 const HOMES_PER_PAGE = 2;
 
 const CARD_GRADIENTS = [

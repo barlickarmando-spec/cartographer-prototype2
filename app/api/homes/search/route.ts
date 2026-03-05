@@ -140,7 +140,7 @@ async function autoCompleteLocation(query: string): Promise<string | null> {
 
 // How many pages of results to fetch from the search API
 const MAX_PAGES = 5;
-const MAX_LISTINGS = 42;
+const MAX_LISTINGS = 8;
 
 // Extract listings array from various API response shapes
 function extractListings(json: any): any[] {
@@ -467,25 +467,24 @@ export async function POST(request: NextRequest) {
     debug.samplePhotoUrl = homes.find(h => h.photoUrl)?.photoUrl || 'none';
     debug.pricesFound = homes.slice(0, 5).map(h => h.price);
 
-    // Step 4: Sort — prefer homes with photos, then by closeness to target price
-    // No aggressive price filtering since the API already filtered by price range
+    // Step 4: Filter to only homes within the requested price range
     const targetPrice = (minPrice + maxPrice) / 2;
+    const inRange = homes.filter(h => h.price > 0 && h.price >= minPrice && h.price <= maxPrice);
+    debug.inPriceRange = inRange.length;
 
-    homes.sort((a, b) => {
-      // Prefer homes with photos
+    // Sort in-range homes: prefer photos, then by price closeness to target
+    inRange.sort((a, b) => {
       const aHasPhoto = a.photoUrl ? 0 : 1;
       const bHasPhoto = b.photoUrl ? 0 : 1;
       if (aHasPhoto !== bHasPhoto) return aHasPhoto - bHasPhoto;
 
-      // Then by price closeness to target
-      const aDist = a.price === 0 ? Infinity : Math.abs(a.price - targetPrice);
-      const bDist = b.price === 0 ? Infinity : Math.abs(b.price - targetPrice);
+      const aDist = Math.abs(a.price - targetPrice);
+      const bDist = Math.abs(b.price - targetPrice);
       return aDist - bDist;
     });
 
-    debug.inPriceRange = homes.filter(h => h.price >= minPrice && h.price <= maxPrice).length;
-    debug.totalAfterSort = homes.length;
-    homes = homes.slice(0, MAX_LISTINGS);
+    homes = inRange.slice(0, MAX_LISTINGS);
+    debug.totalAfterFilter = homes.length;
 
     // Step 5: Fetch high-res photos for listings missing them (limit to avoid excess API calls)
     const needPhotos = homes.filter(h => h._propertyId && !h.photoUrl).slice(0, 12);
