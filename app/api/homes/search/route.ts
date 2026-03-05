@@ -147,7 +147,7 @@ async function searchForSale(
   const params = new URLSearchParams({
     location: locationId,
     sort_by: 'RelevantListings',
-    search_within_x_miles: '0',
+    search_within_x_miles: '10',
   });
 
   const url = `${BASE_URL}/property/search-sale?${params.toString()}`;
@@ -279,10 +279,11 @@ function normalizeProperty(prop: any): {
   }
 
   // Upgrade Realtor.com photo URLs to larger size
-  // rdcpix.com size suffixes: s=small, e=medium, l=large
-  // e.g. https://ap.rdcpix.com/abc123s.jpg → abc123l.jpg
-  if (photoUrl && photoUrl.includes('rdcpix.com')) {
-    photoUrl = photoUrl.replace(/([-\w])s\.(jpg|jpeg|png|webp)/i, '$1l.$2');
+  // rdcpix.com URLs end with a size code before extension: s=small, l=large
+  // Example: https://ap.rdcpix.com/1234567890/abcdef0123456789abcdef0123456789s.jpg
+  // The size letter is always the very last char before the dot+extension
+  if (photoUrl && photoUrl.includes('rdcpix.com') && /s\.(jpg|jpeg|png|webp)(\?|$)/i.test(photoUrl)) {
+    photoUrl = photoUrl.replace(/s\.(jpg|jpeg|png|webp)/i, 'l.$1');
   }
 
   // Listing URL — build from permalink or property_id
@@ -456,7 +457,7 @@ export async function GET(request: NextRequest) {
 
     for (const fmt of locationFormats) {
       try {
-        const searchUrl = `${BASE_URL}/property/search-sale?location=${encodeURIComponent(fmt.value)}&sort_by=RelevantListings&search_within_x_miles=0`;
+        const searchUrl = `${BASE_URL}/property/search-sale?location=${encodeURIComponent(fmt.value)}&sort_by=RelevantListings&search_within_x_miles=10`;
         const searchRes = await fetch(searchUrl, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
         const searchJson = await searchRes.json();
 

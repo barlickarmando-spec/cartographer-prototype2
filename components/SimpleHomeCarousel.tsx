@@ -493,7 +493,7 @@ function FullScreenCarouselModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative bg-white rounded-2xl shadow-2xl max-w-6xl w-[95vw] max-h-[95vh] overflow-hidden flex flex-col md:flex-row"
+      <div className="relative bg-white rounded-2xl shadow-2xl w-[98vw] h-[96vh] overflow-hidden flex flex-col md:flex-row"
         onClick={(e) => e.stopPropagation()}>
         {/* Close */}
         <button onClick={onClose}
@@ -504,7 +504,7 @@ function FullScreenCarouselModal({
         </button>
 
         {/* Left: Image */}
-        <div className={`relative w-full md:w-3/5 h-72 md:h-auto min-h-[400px] bg-gradient-to-br ${gradient}`}>
+        <div className={`relative w-full md:w-3/5 h-80 md:h-full bg-gradient-to-br ${gradient}`}>
           {home.photoUrl && !imgError ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img src={home.photoUrl} alt={`Home at ${home.address}`} className="w-full h-full object-cover"
