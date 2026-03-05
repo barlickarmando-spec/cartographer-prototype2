@@ -114,7 +114,6 @@ export default function SimpleHomeCarousel({
   const [currentPage, setCurrentPage] = useState(0);
   const [modalHome, setModalHome] = useState<Home | null>(null);
   const [modalIndex, setModalIndex] = useState(0);
-  const [preferredApi, setPreferredApi] = useState<'realtor-search' | 'realty-in-us'>('realtor-search');
 
   const minPrice = Math.max(0, Math.round(targetPrice - priceRange));
   const maxPrice = Math.round(targetPrice + priceRange);
@@ -148,7 +147,7 @@ export default function SimpleHomeCarousel({
         const res = await fetch('/api/homes/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ location, minPrice, maxPrice, preferredApi }),
+          body: JSON.stringify({ location, minPrice, maxPrice }),
         });
 
         if (!res.ok) throw new Error('API error');
@@ -188,7 +187,7 @@ export default function SimpleHomeCarousel({
 
     fetchHomes();
     return () => { cancelled = true; };
-  }, [location, targetPrice, priceRange, minPrice, maxPrice, preferredApi]);
+  }, [location, targetPrice, priceRange, minPrice, maxPrice]);
 
   const goToPage = useCallback((page: number) => {
     if (page >= 0 && page < totalPages) setCurrentPage(page);
@@ -234,44 +233,18 @@ export default function SimpleHomeCarousel({
 
   // No real listings available — try Google Image fallback, then browse-on-Realtor.com
   if (!hasRealListings) {
-    const apiToggle = (
-      <div className="flex justify-end mb-2">
-        <button
-          onClick={() => {
-            setPreferredApi(preferredApi === 'realtor-search' ? 'realty-in-us' : 'realtor-search');
-            setCurrentPage(0);
-          }}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-[#E5E7EB] text-[10px] font-medium text-[#6B7280] hover:border-[#5BA4E5] hover:text-[#5BA4E5] hover:bg-[#EFF6FF] transition-colors"
-          title={`Currently using ${preferredApi}. Click to switch.`}
-        >
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-          </svg>
-          Try {preferredApi === 'realtor-search' ? 'US Realty' : 'Realtor Search'}
-        </button>
-      </div>
-    );
-
     if (googleImages.length > 0) {
       return (
-        <div>
-          {apiToggle}
-          <GoogleImageFallback
-            location={location}
-            targetPrice={targetPrice}
-            minPrice={minPrice}
-            maxPrice={maxPrice}
-            images={googleImages}
-          />
-        </div>
+        <GoogleImageFallback
+          location={location}
+          targetPrice={targetPrice}
+          minPrice={minPrice}
+          maxPrice={maxPrice}
+          images={googleImages}
+        />
       );
     }
-    return (
-      <div>
-        {apiToggle}
-        <BrowseRealtorInterface location={location} minPrice={minPrice} maxPrice={maxPrice} targetPrice={targetPrice} />
-      </div>
-    );
+    return <BrowseRealtorInterface location={location} minPrice={minPrice} maxPrice={maxPrice} targetPrice={targetPrice} />;
   }
 
   // Real listings with photos available — show paginated carousel
@@ -292,20 +265,7 @@ export default function SimpleHomeCarousel({
             {source && <span className="ml-1 text-[#9CA3AF]">via {source}</span>}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              setPreferredApi(preferredApi === 'realtor-search' ? 'realty-in-us' : 'realtor-search');
-              setCurrentPage(0);
-            }}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-[#E5E7EB] text-[10px] font-medium text-[#6B7280] hover:border-[#5BA4E5] hover:text-[#5BA4E5] hover:bg-[#EFF6FF] transition-colors"
-            title={`Currently using ${preferredApi}. Click to switch.`}
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-            </svg>
-            {preferredApi === 'realtor-search' ? 'Realtor Search' : 'US Realty'}
-          </button>
+        <div className="flex items-center gap-1.5">
           <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 0}
             className="p-1.5 rounded-full border border-[#E5E7EB] text-[#5BA4E5] disabled:opacity-30 disabled:cursor-default hover:bg-[#EFF6FF] transition-colors">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

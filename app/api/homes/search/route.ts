@@ -1,8 +1,8 @@
 // app/api/homes/search/route.ts
 //
 // Two-tier real estate search:
-// Primary:  realtor-search.p.rapidapi.com  (auto-complete → search-sale → get-photos)
-// Fallback: realty-in-us.p.rapidapi.com    (auto-complete → properties/v3/list)
+// Primary:  realty-in-us.p.rapidapi.com    (auto-complete → properties/v3/list)
+// Fallback: realtor-search.p.rapidapi.com  (auto-complete → search-sale → get-photos)
 
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -94,16 +94,14 @@ function upgradePhotoUrl(url: string): string {
   if (!url) return url;
   let upgraded = url;
   if (/rdcpix\.com/i.test(upgraded)) {
-    // rdcpix size codes: s=small(140px), t=tiny, m=medium(280px), l=large(640px)
-    // Upgrade s/t/m to l (large) — 'od' (original) often 404s so stick with 'l'
-    upgraded = upgraded.replace(/-w\d+_h\d+(_x2)?/g, '');
-    upgraded = upgraded.replace(/([0-9a-f])[stm](-[a-z])/gi, '$1l$2');
-    upgraded = upgraded.replace(/([0-9a-f])[stm](\.jpg)/gi, '$1l$2');
+    // rdcpix URLs use -w{W}_h{H} for sizing. Remove small constraints or upgrade them.
+    // Don't touch the hash/format codes (e.g. -m0xd, -m1234) — only size dimensions.
+    upgraded = upgraded.replace(/-w\d+_h\d+(_x2)?/g, '-w1024_h768');
+    upgraded = upgraded.replace(/\/thumbs\//, '/');
   } else {
     upgraded = upgraded.replace(/-w\d+_h\d+(_x2)?/g, '-w1024_h768');
-    upgraded = upgraded.replace(/\/([^/]+)s\.jpg$/i, '/$1l.jpg');
+    upgraded = upgraded.replace(/\/thumbs\//, '/');
   }
-  upgraded = upgraded.replace(/\/thumbs\//, '/');
   return upgraded;
 }
 
@@ -511,7 +509,7 @@ async function fallbackSearchListings(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { location, minPrice, maxPrice, preferredApi } = body;
+    const { location, minPrice, maxPrice } = body;
 
     if (!location || !minPrice || !maxPrice) {
       return NextResponse.json(
@@ -536,16 +534,32 @@ export async function POST(request: NextRequest) {
     let totalAvailable = 0;
     let source = 'none';
 
-    // Determine API order based on preferredApi param
-    const tryPrimary = !preferredApi || preferredApi === 'realtor-search';
-    const tryFallback = !preferredApi || preferredApi === 'realty-in-us';
-    debug.preferredApi = preferredApi || 'auto';
+    // ── Try primary API (realty-in-us) ──
+    try {
+      console.log('[homes/search] Trying primary (realty-in-us)...');
+      const resolved = await fallbackAutoComplete(searchQuery);
+      debug.primaryResolved = resolved;
 
-    // ── Try primary API (realtor-search) ──
-    if (tryPrimary) {
+      if (resolved) {
+        const result = await fallbackSearchListings(resolved, minPrice, maxPrice);
+        if (result && result.listings.length > 0) {
+          listings = result.listings;
+          totalAvailable = result.totalAvailable;
+          source = 'realty-in-us';
+        }
+      }
+      debug.primaryCount = listings.length;
+    } catch (e) {
+      console.log('[homes/search] Primary API error:', e instanceof Error ? e.message : e);
+      debug.primaryError = e instanceof Error ? e.message : String(e);
+    }
+
+    // ── Fallback to realtor-search if primary returned nothing ──
+    if (listings.length === 0) {
+      console.log('[homes/search] Primary returned no results, trying fallback (realtor-search)...');
       try {
         const locationId = await primaryAutoComplete(searchQuery);
-        debug.primaryLocationId = locationId;
+        debug.fallbackLocationId = locationId;
 
         if (locationId) {
           const result = await primarySearchForSale(locationId, minPrice, maxPrice);
@@ -553,28 +567,6 @@ export async function POST(request: NextRequest) {
             listings = result.listings;
             totalAvailable = result.totalAvailable;
             source = 'realtor-search';
-          }
-        }
-        debug.primaryCount = listings.length;
-      } catch (e) {
-        console.log('[homes/search] Primary API error:', e instanceof Error ? e.message : e);
-        debug.primaryError = e instanceof Error ? e.message : String(e);
-      }
-    }
-
-    // ── Try realty-in-us (as fallback or if preferred) ──
-    if (listings.length === 0 && tryFallback) {
-      console.log('[homes/search] Trying realty-in-us...');
-      try {
-        const resolved = await fallbackAutoComplete(searchQuery);
-        debug.fallbackResolved = resolved;
-
-        if (resolved) {
-          const result = await fallbackSearchListings(resolved, minPrice, maxPrice);
-          if (result && result.listings.length > 0) {
-            listings = result.listings;
-            totalAvailable = result.totalAvailable;
-            source = 'realty-in-us';
           }
         }
         debug.fallbackCount = listings.length;
