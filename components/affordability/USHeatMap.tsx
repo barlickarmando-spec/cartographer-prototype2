@@ -33,12 +33,6 @@ interface TooltipState {
   position: { x: number; y: number };
 }
 
-function getRatingColor(calc: LocationCalculation | undefined): string {
-  if (!calc) return GRAY;
-  const scale = createRatingColorScale();
-  return scale(calc.numericScore);
-}
-
 export default function USHeatMap({
   stateData,
   cityData,
@@ -76,24 +70,21 @@ export default function USHeatMap({
     setTooltip(null);
   }, []);
 
-  // Build city area shapes
   const cityShapes = useMemo(() => {
     const shapes: {
       name: string;
       d: string;
-      center: [number, number];
       calc: LocationCalculation;
     }[] = [];
     cityData.forEach((calc, cityName) => {
       const area = cityAreas[cityName];
       if (area) {
-        shapes.push({ name: cityName, d: area.d, center: area.center, calc });
+        shapes.push({ name: cityName, d: area.d, calc });
       }
     });
     return shapes;
   }, [cityData]);
 
-  // Compute insights from all location data
   const insights = useMemo(() => {
     const allLocations: LocationCalculation[] = [];
     stateData.forEach((calc) => allLocations.push(calc));
@@ -117,12 +108,16 @@ export default function USHeatMap({
       viable.length > 0
         ? viable.reduce((s, l) => s + l.maxHomeValue, 0) / viable.length
         : 0;
-    const highestValue = viable.length > 0
-      ? viable.reduce((best, l) => (l.maxHomeValue > best.maxHomeValue ? l : best))
-      : null;
-    const largestHome = viable.length > 0
-      ? viable.reduce((best, l) => (l.sqft > best.sqft ? l : best))
-      : null;
+    const highestValue =
+      viable.length > 0
+        ? viable.reduce((best, l) =>
+            l.maxHomeValue > best.maxHomeValue ? l : best
+          )
+        : null;
+    const largestHome =
+      viable.length > 0
+        ? viable.reduce((best, l) => (l.sqft > best.sqft ? l : best))
+        : null;
 
     return {
       bestLocations,
@@ -136,6 +131,10 @@ export default function USHeatMap({
       largestHome,
     };
   }, [stateData, cityData]);
+
+  // Build 5 legend swatches
+  const legendSteps = [10, 7.5, 5, 2.5, 0];
+  const legendLabels = ['Excellent', 'Good', 'Fair', 'Poor', 'Not viable'];
 
   return (
     <div className="relative">
@@ -153,7 +152,7 @@ export default function USHeatMap({
         </div>
       )}
 
-      <div className="flex gap-4">
+      <div className="flex items-start gap-3">
         {/* Map */}
         <div className="flex-1 min-w-0">
           <svg
@@ -161,11 +160,9 @@ export default function USHeatMap({
             className="w-full h-auto"
             style={{ maxHeight: '70vh' }}
           >
-            {/* State shapes */}
             {statePaths.map((state, i) => {
               const calc = stateData.get(state.name);
               const fill = getFillColor(calc);
-
               return (
                 <path
                   key={i}
@@ -180,12 +177,11 @@ export default function USHeatMap({
                   }}
                   onMouseMove={handleMouseMove}
                   onMouseLeave={handleMouseLeave}
-                  className="transition-colors hover:stroke-[#333] hover:stroke-[1.5]"
+                  className="transition-opacity hover:opacity-80"
                 />
               );
             })}
 
-            {/* City metro areas */}
             {cityShapes.map(({ name, d, calc }) => {
               const fill = getFillColor(calc);
               return (
@@ -193,149 +189,118 @@ export default function USHeatMap({
                   key={name}
                   d={d}
                   fill={fill}
-                  stroke="#333"
-                  strokeWidth={0.8}
-                  fillOpacity={0.85}
+                  stroke="rgba(0,0,0,0.25)"
+                  strokeWidth={0.6}
+                  fillOpacity={0.9}
                   cursor="pointer"
                   onClick={() => onLocationClick(name)}
                   onMouseEnter={(e) => handleMouseEnter(name, calc, e)}
                   onMouseMove={handleMouseMove}
                   onMouseLeave={handleMouseLeave}
-                  className="transition-colors hover:stroke-[#000] hover:stroke-[2]"
+                  className="transition-opacity hover:opacity-75"
                 />
               );
             })}
-
-            {/* City labels */}
-            {cityShapes.map(({ name, center }) => (
-              <text
-                key={`label-${name}`}
-                x={center[0]}
-                y={center[1]}
-                textAnchor="middle"
-                dominantBaseline="central"
-                className="pointer-events-none select-none"
-                fontSize={6}
-                fontWeight={600}
-                fill="#1a1a1a"
-                stroke="#fff"
-                strokeWidth={0.3}
-                paintOrder="stroke"
-              >
-                {name.length > 12 ? name.slice(0, 11) + '…' : name}
-              </text>
-            ))}
           </svg>
         </div>
 
-        {/* Legend / Key on the side */}
-        <div className="w-48 flex-shrink-0 py-2">
-          <h4 className="text-sm font-semibold text-gray-800 mb-3">
-            Affordability Rating
-          </h4>
-
-          {/* Vertical gradient bar */}
-          <div className="flex gap-2 mb-4">
-            <div className="flex flex-col justify-between text-[10px] text-gray-500 leading-tight py-0.5">
-              <span>10</span>
-              <span>8</span>
-              <span>5</span>
-              <span>2</span>
-              <span>0</span>
-            </div>
-            <div
-              className="w-5 rounded-sm flex-1"
-              style={{
-                background: `linear-gradient(to bottom, ${ratingScale(10)}, ${ratingScale(8)}, ${ratingScale(5)}, ${ratingScale(2)}, ${ratingScale(0)})`,
-              }}
-            />
-            <div className="flex flex-col justify-between text-[10px] text-gray-600 leading-tight py-0.5">
-              <span>Great</span>
-              <span>Good</span>
-              <span>Fair</span>
-              <span>Poor</span>
-              <span>Bad</span>
-            </div>
+        {/* Compact legend */}
+        <div className="w-28 flex-shrink-0 pt-6">
+          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Rating
+          </p>
+          <div className="space-y-1">
+            {legendSteps.map((score, i) => (
+              <div key={score} className="flex items-center gap-1.5">
+                <div
+                  className="w-3.5 h-3.5 rounded-[3px]"
+                  style={{
+                    backgroundColor:
+                      score === 0 ? GRAY : ratingScale(score),
+                  }}
+                />
+                <span className="text-[11px] text-gray-600 leading-none">
+                  {legendLabels[i]}
+                </span>
+              </div>
+            ))}
           </div>
-
-          {/* Legend items */}
-          <div className="space-y-2 text-xs text-gray-600 border-t border-gray-200 pt-3">
-            <div className="flex items-center gap-2">
-              <div
-                className="w-4 h-4 rounded-sm border border-gray-300"
-                style={{ backgroundColor: ratingScale(8) }}
-              />
-              <span>Highly affordable</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div
-                className="w-4 h-4 rounded-sm border border-gray-300"
-                style={{ backgroundColor: ratingScale(5) }}
-              />
-              <span>Neutral / borderline</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div
-                className="w-4 h-4 rounded-sm border border-gray-300"
-                style={{ backgroundColor: ratingScale(2) }}
-              />
-              <span>Unaffordable</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-sm bg-gray-200 border border-gray-300" />
-              <span>No data</span>
-            </div>
-            <div className="flex items-center gap-2 mt-1">
-              <div className="w-4 h-4 rounded-full border-2 border-gray-600 bg-transparent" />
-              <span>Metro area</span>
+          <div className="mt-3 pt-2 border-t border-gray-100">
+            <div className="flex items-center gap-1.5">
+              <svg width="14" height="14" viewBox="0 0 14 14">
+                <path
+                  d="M7,1 Q11,2 12,7 Q11,12 7,13 Q3,12 2,7 Q3,2 7,1Z"
+                  fill="none"
+                  stroke="#999"
+                  strokeWidth="1"
+                  strokeDasharray="2,1"
+                />
+              </svg>
+              <span className="text-[11px] text-gray-500 leading-none">
+                Metro area
+              </span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Insights section below the map */}
+      {/* Insights */}
       {insights && !isLoading && (
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 px-2">
+        <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
           {/* Most Affordable */}
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <h4 className="text-sm font-semibold text-green-800 mb-2">
+          <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2.5">
               Most Affordable
             </h4>
             <ul className="space-y-1.5">
-              {insights.bestLocations.map((loc) => (
+              {insights.bestLocations.map((loc, i) => (
                 <li
                   key={loc.name}
-                  className="flex justify-between items-center text-xs cursor-pointer hover:bg-green-100 rounded px-1 py-0.5"
+                  className="flex items-center gap-2 text-xs cursor-pointer hover:bg-gray-50 rounded px-1.5 py-1 -mx-1.5"
                   onClick={() => onLocationClick(loc.name)}
                 >
-                  <span className="text-green-900 font-medium truncate mr-2">
+                  <span className="text-gray-400 text-[10px] w-3">{i + 1}</span>
+                  <span className="text-gray-800 font-medium truncate flex-1">
                     {loc.name}
                   </span>
-                  <span className="text-green-700 font-semibold whitespace-nowrap">
-                    {loc.numericScore.toFixed(1)}/10
+                  <span
+                    className="font-semibold text-[11px] px-1.5 py-0.5 rounded"
+                    style={{
+                      backgroundColor: ratingScale(loc.numericScore) + '22',
+                      color: ratingScale(loc.numericScore),
+                    }}
+                  >
+                    {loc.numericScore.toFixed(1)}
                   </span>
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* Least Affordable (viable) */}
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <h4 className="text-sm font-semibold text-red-800 mb-2">
+          {/* Least Affordable */}
+          <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2.5">
               Least Affordable
             </h4>
             <ul className="space-y-1.5">
-              {insights.worstViable.map((loc) => (
+              {insights.worstViable.map((loc, i) => (
                 <li
                   key={loc.name}
-                  className="flex justify-between items-center text-xs cursor-pointer hover:bg-red-100 rounded px-1 py-0.5"
+                  className="flex items-center gap-2 text-xs cursor-pointer hover:bg-gray-50 rounded px-1.5 py-1 -mx-1.5"
                   onClick={() => onLocationClick(loc.name)}
                 >
-                  <span className="text-red-900 font-medium truncate mr-2">
+                  <span className="text-gray-400 text-[10px] w-3">{i + 1}</span>
+                  <span className="text-gray-800 font-medium truncate flex-1">
                     {loc.name}
                   </span>
-                  <span className="text-red-700 font-semibold whitespace-nowrap">
-                    {loc.numericScore.toFixed(1)}/10
+                  <span
+                    className="font-semibold text-[11px] px-1.5 py-0.5 rounded"
+                    style={{
+                      backgroundColor: ratingScale(loc.numericScore) + '22',
+                      color: ratingScale(loc.numericScore),
+                    }}
+                  >
+                    {loc.numericScore.toFixed(1)}
                   </span>
                 </li>
               ))}
@@ -343,41 +308,40 @@ export default function USHeatMap({
           </div>
 
           {/* Key Stats */}
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-            <h4 className="text-sm font-semibold text-gray-800 mb-2">
-              Key Stats
+          <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2.5">
+              Overview
             </h4>
-            <div className="space-y-2 text-xs text-gray-600">
+            <div className="space-y-2.5 text-xs">
               <div className="flex justify-between">
-                <span>Viable locations</span>
-                <span className="font-semibold text-gray-900">
-                  {insights.viableCount} / {insights.totalLocations}
+                <span className="text-gray-500">Viable</span>
+                <span className="font-semibold text-gray-800">
+                  {insights.viableCount}/{insights.totalLocations}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span>Not viable</span>
-                <span className="font-semibold text-red-600">
+                <span className="text-gray-500">Not viable</span>
+                <span className="font-semibold text-gray-800">
                   {insights.unviableCount}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span>Avg. rating</span>
-                <span className="font-semibold text-gray-900">
+                <span className="text-gray-500">Avg. rating</span>
+                <span className="font-semibold text-gray-800">
                   {insights.avgScore.toFixed(1)}/10
                 </span>
               </div>
               <div className="flex justify-between">
-                <span>Avg. home value</span>
-                <span className="font-semibold text-gray-900">
+                <span className="text-gray-500">Avg. home value</span>
+                <span className="font-semibold text-gray-800">
                   {formatCurrency(insights.avgHomeValue)}
                 </span>
               </div>
               {insights.highestValue && (
                 <div className="flex justify-between">
-                  <span>Highest value</span>
+                  <span className="text-gray-500">Top value</span>
                   <span
-                    className="font-semibold text-gray-900 truncate ml-2 cursor-pointer hover:text-blue-600"
-                    title={insights.highestValue.name}
+                    className="font-semibold text-gray-800 cursor-pointer hover:text-blue-600"
                     onClick={() => onLocationClick(insights.highestValue!.name)}
                   >
                     {formatCurrency(insights.highestValue.maxHomeValue)}
@@ -386,10 +350,9 @@ export default function USHeatMap({
               )}
               {insights.largestHome && (
                 <div className="flex justify-between">
-                  <span>Largest home</span>
+                  <span className="text-gray-500">Largest home</span>
                   <span
-                    className="font-semibold text-gray-900 truncate ml-2 cursor-pointer hover:text-blue-600"
-                    title={insights.largestHome.name}
+                    className="font-semibold text-gray-800 cursor-pointer hover:text-blue-600"
                     onClick={() => onLocationClick(insights.largestHome!.name)}
                   >
                     {insights.largestHome.sqft.toLocaleString()} sqft

@@ -28,15 +28,15 @@ function interpolateColorStops(stops: RGB[], t: number): string {
   );
 }
 
-// Red → Yellow → Green diverging ramp (for rating 0-10, 5 = neutral yellow)
+// Red → Warm neutral → Green diverging ramp (softer, more pleasing tones)
 const RED_YELLOW_GREEN_STOPS: RGB[] = [
-  [220, 53, 69],   // 0 - deep red (unaffordable)
-  [235, 100, 80],  // ~2
-  [245, 166, 35],  // ~4 - orange
-  [255, 215, 0],   // 5 - yellow (neutral)
-  [180, 210, 60],  // ~6
-  [76, 175, 80],   // ~8 - green
-  [27, 130, 50],   // 10 - deep green (very affordable)
+  [191, 64, 69],   // 0 - muted rose
+  [210, 110, 90],  // ~1.7 - dusty coral
+  [222, 158, 106], // ~3.3 - warm sand
+  [220, 200, 140], // 5 - soft wheat (neutral)
+  [168, 198, 120], // ~6.7 - sage
+  [98, 170, 100],  // ~8.3 - soft green
+  [52, 136, 75],   // 10 - deep forest green
 ];
 
 export function interpolateRatingColor(t: number): string {
