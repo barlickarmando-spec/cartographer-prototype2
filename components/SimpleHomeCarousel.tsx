@@ -77,7 +77,7 @@ function buildRealtorSearchUrl(location: string, minPrice: number, maxPrice: num
 }
 
 const MAX_HOMES = 24;
-const HOMES_PER_PAGE = 4;
+const HOMES_PER_PAGE = 2;
 
 const CARD_GRADIENTS = [
   'from-[#EFF6FF] to-[#DBEAFE]',
@@ -193,9 +193,9 @@ export default function SimpleHomeCarousel({
           <p className="text-xs text-[#6B7280]">Searching for homes...</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {[0, 1, 2, 3].map((i) => (
+          {[0, 1].map((i) => (
             <div key={i} className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden animate-pulse">
-              <div className="h-72 sm:h-80 bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE]" />
+              <div className="h-[50vh] sm:h-[60vh] bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE]" />
               <div className="p-3 space-y-2">
                 <div className="h-4 bg-[#E5E7EB] rounded w-20" />
                 <div className="h-3 bg-[#E5E7EB] rounded w-32" />
@@ -430,7 +430,7 @@ function CompactHomeCard({ home, index, onClick }: { home: Home; index: number; 
   return (
     <button onClick={onClick}
       className="text-left bg-white rounded-xl border border-[#E5E7EB] overflow-hidden hover:shadow-lg transition-all duration-200 group cursor-pointer w-full">
-      <div className={`relative h-72 sm:h-80 bg-gradient-to-br ${gradient} overflow-hidden`}>
+      <div className={`relative h-[50vh] sm:h-[60vh] bg-gradient-to-br ${gradient} overflow-hidden`}>
         {home.photoUrl && !imgError ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img src={home.photoUrl} alt={`Home at ${home.address}`}
