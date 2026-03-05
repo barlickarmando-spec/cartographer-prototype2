@@ -31,6 +31,8 @@ interface SizeResult {
 }
 
 interface TimeResult {
+  quality: QualityFilter;
+  qualityLabel: string;
   homeValue: number;
   homeSizeSqft: number;
   location: string;
@@ -114,7 +116,7 @@ export default function HomeSizeCalculatorPage() {
 
   // Results
   const [calculated, setCalculated] = useState(false);
-  const [timeResults, setTimeResults] = useState<TimeResult | null>(null);
+  const [timeResults, setTimeResults] = useState<TimeResult[]>([]);
   const [sizeResults, setSizeResults] = useState<SizeResult[]>([]);
   const [recommendations, setRecommendations] = useState<RecommendedLocation[]>([]);
   const [calcLoading, setCalcLoading] = useState(false);
@@ -220,18 +222,18 @@ export default function HomeSizeCalculatorPage() {
 
           const proj = result.houseProjections;
           // Find the closest projection or interpolate
-          let homeValue = 0;
+          let baseHomeValue = 0;
           if (years <= 3 && proj.threeYears?.canAfford) {
-            homeValue = proj.threeYears.maxSustainableHousePrice * (years / 3);
+            baseHomeValue = proj.threeYears.maxSustainableHousePrice * (years / 3);
           } else if (years <= 5 && proj.fiveYears?.canAfford) {
-            homeValue = proj.fiveYears.maxSustainableHousePrice * (years / 5);
+            baseHomeValue = proj.fiveYears.maxSustainableHousePrice * (years / 5);
           } else if (years <= 10 && proj.tenYears?.canAfford) {
-            homeValue = proj.tenYears.maxSustainableHousePrice * (years / 10);
+            baseHomeValue = proj.tenYears.maxSustainableHousePrice * (years / 10);
           } else if (years <= 15 && proj.fifteenYears?.canAfford) {
-            homeValue = proj.fifteenYears.maxSustainableHousePrice * (years / 15);
+            baseHomeValue = proj.fifteenYears.maxSustainableHousePrice * (years / 15);
           } else if (proj.maxAffordable?.canAfford) {
             const maxYears = proj.maxAffordable.year;
-            homeValue = proj.maxAffordable.maxSustainableHousePrice * Math.min(1, years / maxYears);
+            baseHomeValue = proj.maxAffordable.maxSustainableHousePrice * Math.min(1, years / maxYears);
           }
 
           // More accurate: recalculate using simulation year
@@ -239,26 +241,34 @@ export default function HomeSizeCalculatorPage() {
           const targetYear = Math.min(Math.ceil(years), simulation.length);
           const snapshot = simulation[targetYear - 1] || simulation[simulation.length - 1];
           if (snapshot) {
-            const pricePerSqft = getPricePerSqft(selectedLocation);
             const savings = snapshot.savingsNoMortgage;
-            // Rough estimate: home price = savings / 0.15 (down payment ~15%)
             const roughHomeValue = savings / 0.15;
-            if (roughHomeValue > homeValue) homeValue = roughHomeValue;
+            if (roughHomeValue > baseHomeValue) baseHomeValue = roughHomeValue;
           }
 
           // Use the actual projection if available
           if (proj.maxAffordable?.canAfford && years >= proj.maxAffordable.year) {
-            homeValue = proj.maxAffordable.maxSustainableHousePrice;
+            baseHomeValue = proj.maxAffordable.maxSustainableHousePrice;
           }
 
-          const homeSizeSqft = estimateHomeSizeSqft(homeValue, selectedLocation);
-
-          setTimeResults({
-            homeValue,
-            homeSizeSqft,
-            location: selectedLocation,
-            years: Math.round(years * 10) / 10,
+          // Generate per-quality results
+          const qualities: QualityFilter[] = qualityFilters.length > 0 ? qualityFilters : ['nice', 'average', 'any'];
+          const timeResultsList: TimeResult[] = qualities.map(quality => {
+            const multiplier = getQualityMultiplier(quality);
+            // In a nicer area, the same money buys less sqft (higher price/sqft)
+            // homeValue stays the same, but sqft changes based on quality
+            const adjustedSqft = estimateHomeSizeSqft(baseHomeValue / multiplier, selectedLocation);
+            return {
+              quality,
+              qualityLabel: getQualityLabel(quality),
+              homeValue: baseHomeValue,
+              homeSizeSqft: adjustedSqft,
+              location: selectedLocation,
+              years: Math.round(years * 10) / 10,
+            };
           });
+
+          setTimeResults(timeResultsList);
           setSizeResults([]);
         } else {
           // Search by size: how long to get a house of X sqft
@@ -311,7 +321,7 @@ export default function HomeSizeCalculatorPage() {
           }
 
           setSizeResults(results);
-          setTimeResults(null);
+          setTimeResults([]);
         }
 
         // Generate recommendations: "If You Want A Larger House"
@@ -601,23 +611,30 @@ export default function HomeSizeCalculatorPage() {
         {/* Filters row */}
         <div className="flex flex-wrap gap-4 mb-4">
           {/* Quality Filter */}
-          {searchMode === 'size' && (
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Quality</label>
-              <div className="flex gap-1.5">
-                {(['nice', 'average', 'any'] as QualityFilter[]).map(q => (
-                  <button key={q} onClick={() => toggleQuality(q)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-                      qualityFilters.includes(q)
-                        ? `${getQualityColor(q).bg} ${getQualityColor(q).text} ${getQualityColor(q).border}`
-                        : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
-                    }`}>
-                    {q === 'nice' ? 'Nice Area' : q === 'average' ? 'Average' : 'Any Area'}
-                  </button>
-                ))}
-              </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Quality</label>
+            <div className="flex gap-1.5">
+              {(['nice', 'average', 'any'] as QualityFilter[]).map(q => (
+                <button key={q} onClick={() => toggleQuality(q)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                    qualityFilters.includes(q)
+                      ? `${getQualityColor(q).bg} ${getQualityColor(q).text} ${getQualityColor(q).border}`
+                      : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                  }`}>
+                  {q === 'nice' ? 'Nice Area' : q === 'average' ? 'Average Area' : 'Any Area'}
+                </button>
+              ))}
+              <button
+                onClick={() => setQualityFilters(['nice', 'average', 'any'])}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                  qualityFilters.length === 3
+                    ? 'bg-[#E8F5E9] text-[#2E7D32] border-[#A5D6A7]'
+                    : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                }`}>
+                Show All
+              </button>
             </div>
-          )}
+          </div>
 
           {/* Home Preference */}
           <div>
@@ -655,21 +672,51 @@ export default function HomeSizeCalculatorPage() {
       {/* ===== RESULTS SECTION ===== */}
       {calculated && (
         <div className="space-y-6">
-          {/* Search by Time result */}
-          {searchMode === 'time' && timeResults && (
-            <div className="space-y-4">
-              <ResultCard
-                title={`Saving for ${timeResults.years} year${timeResults.years !== 1 ? 's' : ''} in ${timeResults.location}`}
-                homeValue={timeResults.homeValue}
-                homeSizeSqft={timeResults.homeSizeSqft}
-                location={timeResults.location}
-                accentColor="#5BA4E5"
-              />
-              <SimpleHomeCarousel
-                location={timeResults.location}
-                targetPrice={timeResults.homeValue}
-                priceRange={50000}
-              />
+          {/* Search by Time results */}
+          {searchMode === 'time' && timeResults.length > 0 && (
+            <div className="space-y-6">
+              {timeResults.map((tr) => {
+                const colors = getQualityColor(tr.quality);
+                return (
+                  <div key={tr.quality} className="space-y-4">
+                    <div className={`${colors.bg} border ${colors.border} rounded-2xl overflow-hidden`}>
+                      <div className="px-6 py-4 border-b border-gray-100/50">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`text-xs font-bold uppercase tracking-wider ${colors.text}`}>
+                            {tr.qualityLabel}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600">
+                          Saving for {tr.years} year{tr.years !== 1 ? 's' : ''} in {tr.location}
+                        </p>
+                      </div>
+                      <div className="px-6 py-5 bg-white/60">
+                        <div className="grid grid-cols-3 gap-4">
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Saving Time</p>
+                            <p className="text-2xl font-bold text-gray-900">
+                              {tr.years} yr{tr.years !== 1 ? 's' : ''}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Home Value</p>
+                            <p className="text-2xl font-bold text-gray-900">{formatCurrency(tr.homeValue)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Home Size</p>
+                            <p className="text-2xl font-bold text-gray-900">{formatSqft(tr.homeSizeSqft)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <SimpleHomeCarousel
+                      location={tr.location}
+                      targetPrice={tr.homeValue}
+                      priceRange={50000}
+                    />
+                  </div>
+                );
+              })}
             </div>
           )}
 
