@@ -117,6 +117,13 @@ export default function ProfilePage() {
     );
   }, [loadResults]);
 
+  // Reset homes tabs when location changes
+  useEffect(() => {
+    setShowMaxHomes(false);
+    setShowFastestHomes(false);
+    setShowCustomHomes(false);
+  }, [selectedResult]);
+
   // Close location dropdown on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -786,6 +793,7 @@ export default function ProfilePage() {
                 location={result.location}
                 showHomes={showMaxHomes}
                 onToggle={() => setShowMaxHomes(!showMaxHomes)}
+                prefetch
               />
             </div>
           </div>
@@ -1036,6 +1044,7 @@ export default function ProfilePage() {
                 location={result.location}
                 showHomes={showMaxHomes}
                 onToggle={() => setShowMaxHomes(!showMaxHomes)}
+                prefetch
               />
             )}
 
@@ -1622,9 +1631,10 @@ interface HouseProjectionCardProps {
   location: string;
   showHomes: boolean;
   onToggle: () => void;
+  prefetch?: boolean;
 }
 
-function HouseProjectionCard({ title, subtitle, projection, location, showHomes, onToggle }: HouseProjectionCardProps) {
+function HouseProjectionCard({ title, subtitle, projection, location, showHomes, onToggle, prefetch }: HouseProjectionCardProps) {
   const pricePerSqft = getPricePerSqft(location);
   const estimatedSqFt = Math.round(projection.maxSustainableHousePrice / pricePerSqft);
   
@@ -1706,8 +1716,9 @@ function HouseProjectionCard({ title, subtitle, projection, location, showHomes,
           </svg>
         </button>
 
-        {showHomes && (
-          <div className="px-6 pb-6">
+        {/* Pre-fetch: mount carousel hidden to start API call early; otherwise lazy mount */}
+        {(showHomes || prefetch) && (
+          <div className={showHomes ? 'px-6 pb-6' : 'hidden'}>
             <SimpleHomeCarousel
               location={location}
               targetPrice={projection.maxSustainableHousePrice}
