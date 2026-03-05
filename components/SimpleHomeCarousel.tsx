@@ -82,7 +82,7 @@ function buildRealtorSearchUrl(location: string, minPrice: number, maxPrice: num
   return url;
 }
 
-const MAX_HOMES = 42;
+const MAX_HOMES = 8;
 const HOMES_PER_PAGE = 2;
 
 const CARD_GRADIENTS = [
@@ -219,7 +219,7 @@ export default function SimpleHomeCarousel({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[0, 1].map((i) => (
             <div key={i} className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden animate-pulse">
-              <div className="h-[50vh] sm:h-[60vh] bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE]" />
+              <div className="aspect-[4/3] bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE]" />
               <div className="p-3 space-y-2">
                 <div className="h-4 bg-[#E5E7EB] rounded w-20" />
                 <div className="h-3 bg-[#E5E7EB] rounded w-32" />
@@ -387,7 +387,7 @@ function GoogleImageFallback({
               rel="noopener noreferrer"
               className="group bg-white rounded-xl border border-[#E5E7EB] overflow-hidden hover:shadow-lg hover:border-[#5BA4E5] transition-all duration-200"
             >
-              <div className={`relative h-[40vh] sm:h-[50vh] bg-gradient-to-br ${gradient} overflow-hidden`}>
+              <div className={`relative aspect-[4/3] bg-gradient-to-br ${gradient} overflow-hidden`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={img.url}
@@ -575,12 +575,11 @@ function CompactHomeCard({ home, index, onClick }: { home: Home; index: number; 
   return (
     <button onClick={onClick}
       className="text-left bg-white rounded-xl border border-[#E5E7EB] overflow-hidden hover:shadow-lg transition-all duration-200 group cursor-pointer w-full">
-      <div className={`relative h-[50vh] sm:h-[60vh] bg-gradient-to-br ${gradient} overflow-hidden`}>
+      <div className={`relative aspect-[4/3] bg-gradient-to-br ${gradient} overflow-hidden`}>
         {home.photoUrl && !imgError ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img src={home.photoUrl} alt={`Home at ${home.address}`}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            sizes="(min-width: 768px) 50vw, 100vw"
             onError={() => setImgError(true)} loading="lazy" />
         ) : (
           <div className="flex flex-col items-center justify-center h-full gap-1">
@@ -642,8 +641,8 @@ function FullScreenCarouselModal({
   const gradient = CARD_GRADIENTS[currentIndex % CARD_GRADIENTS.length];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative bg-white shadow-2xl w-screen h-screen overflow-hidden flex flex-col md:flex-row"
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="relative bg-white shadow-2xl w-full max-w-4xl max-h-[90vh] rounded-2xl overflow-hidden flex flex-col md:flex-row"
         onClick={(e) => e.stopPropagation()}>
         {/* Close */}
         <button onClick={onClose}
@@ -653,14 +652,14 @@ function FullScreenCarouselModal({
           </svg>
         </button>
 
-        {/* Left: Image — takes up most of the screen */}
-        <div className={`relative w-full md:w-2/3 h-[50vh] md:h-full bg-gradient-to-br ${gradient}`}>
+        {/* Left: Image */}
+        <div className={`relative w-full md:w-3/5 h-[40vh] md:h-auto md:min-h-[500px] bg-[#1a1a2e]`}>
           {home.photoUrl && !imgError ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img src={home.photoUrl} alt={`Home at ${home.address}`} className="w-full h-full object-cover"
               onError={() => setImgError(true)} />
           ) : (
-            <div className="flex flex-col items-center justify-center h-full gap-3">
+            <div className={`flex flex-col items-center justify-center w-full h-full gap-3 bg-gradient-to-br ${gradient}`}>
               <svg className="w-16 h-16 text-[#5BA4E5] opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
               </svg>
@@ -691,7 +690,7 @@ function FullScreenCarouselModal({
         </div>
 
         {/* Right: Details */}
-        <div className="w-full md:w-1/3 p-6 flex flex-col justify-between overflow-y-auto">
+        <div className="w-full md:w-2/5 p-5 flex flex-col justify-between overflow-y-auto">
           <div>
             <div className="mb-4">
               <p className="text-3xl font-bold text-[#2C3E50]">{formatPrice(home.price)}</p>

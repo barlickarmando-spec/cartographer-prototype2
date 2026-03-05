@@ -1,0 +1,377 @@
+'use client';
+
+import { useState, useMemo, useCallback } from 'react';
+import { createRatingColorScale } from '@/lib/color-scale';
+import statePathsData from '@/lib/us-state-paths.json';
+import cityAreasData from '@/lib/us-city-areas.json';
+import HeatMapTooltip from './HeatMapTooltip';
+import type { LocationCalculation } from '@/hooks/useAffordabilityCalculations';
+import { formatCurrency } from '@/lib/utils';
+
+const GRAY = '#E5E7EB';
+const WIDTH = 960;
+const HEIGHT = 600;
+
+const statePaths = statePathsData as { name: string; d: string }[];
+const cityAreas = cityAreasData as unknown as Record<
+  string,
+  { center: [number, number]; d: string }
+>;
+
+interface USHeatMapProps {
+  stateData: Map<string, LocationCalculation>;
+  cityData: Map<string, LocationCalculation>;
+  mode: 'value' | 'sqft';
+  isLoading: boolean;
+  progress: number;
+  onLocationClick: (locationName: string) => void;
+}
+
+interface TooltipState {
+  name: string;
+  data: LocationCalculation;
+  position: { x: number; y: number };
+}
+
+export default function USHeatMap({
+  stateData,
+  cityData,
+  mode,
+  isLoading,
+  progress,
+  onLocationClick,
+}: USHeatMapProps) {
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+
+  const ratingScale = useMemo(() => createRatingColorScale(), []);
+
+  const getFillColor = useCallback(
+    (calc: LocationCalculation | undefined): string => {
+      if (!calc) return GRAY;
+      return ratingScale(calc.numericScore);
+    },
+    [ratingScale]
+  );
+
+  const handleMouseEnter = useCallback(
+    (name: string, data: LocationCalculation, e: React.MouseEvent) => {
+      setTooltip({ name, data, position: { x: e.clientX, y: e.clientY } });
+    },
+    []
+  );
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    setTooltip((prev) =>
+      prev ? { ...prev, position: { x: e.clientX, y: e.clientY } } : null
+    );
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setTooltip(null);
+  }, []);
+
+  const cityShapes = useMemo(() => {
+    const shapes: {
+      name: string;
+      d: string;
+      calc: LocationCalculation;
+    }[] = [];
+    cityData.forEach((calc, cityName) => {
+      const area = cityAreas[cityName];
+      if (area) {
+        shapes.push({ name: cityName, d: area.d, calc });
+      }
+    });
+    return shapes;
+  }, [cityData]);
+
+  const insights = useMemo(() => {
+    const allLocations: LocationCalculation[] = [];
+    stateData.forEach((calc) => allLocations.push(calc));
+    cityData.forEach((calc) => allLocations.push(calc));
+
+    if (allLocations.length === 0) return null;
+
+    const viable = allLocations.filter((l) => l.isViable);
+    const sorted = [...viable].sort((a, b) => b.numericScore - a.numericScore);
+
+    const bestLocations = sorted.slice(0, 5);
+    const worstViable = [...viable]
+      .sort((a, b) => a.numericScore - b.numericScore)
+      .slice(0, 5);
+    const unviableCount = allLocations.filter((l) => !l.isViable).length;
+    const avgScore =
+      viable.length > 0
+        ? viable.reduce((s, l) => s + l.numericScore, 0) / viable.length
+        : 0;
+    const avgHomeValue =
+      viable.length > 0
+        ? viable.reduce((s, l) => s + l.maxHomeValue, 0) / viable.length
+        : 0;
+    const highestValue =
+      viable.length > 0
+        ? viable.reduce((best, l) =>
+            l.maxHomeValue > best.maxHomeValue ? l : best
+          )
+        : null;
+    const largestHome =
+      viable.length > 0
+        ? viable.reduce((best, l) => (l.sqft > best.sqft ? l : best))
+        : null;
+
+    return {
+      bestLocations,
+      worstViable,
+      unviableCount,
+      totalLocations: allLocations.length,
+      viableCount: viable.length,
+      avgScore,
+      avgHomeValue,
+      highestValue,
+      largestHome,
+    };
+  }, [stateData, cityData]);
+
+  // Build 5 legend swatches
+  const legendSteps = [10, 7.5, 5, 2.5, 0];
+  const legendLabels = ['Excellent', 'Good', 'Fair', 'Poor', 'Not viable'];
+
+  return (
+    <div className="relative">
+      {isLoading && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-white/90 backdrop-blur-sm rounded-full px-4 py-2 shadow-md flex items-center gap-3">
+          <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[#4CAF50] rounded-full transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <span className="text-xs text-gray-600 font-medium">
+            Computing {progress}%
+          </span>
+        </div>
+      )}
+
+      <div className="flex items-start gap-3">
+        {/* Map */}
+        <div className="flex-1 min-w-0">
+          <svg
+            viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+            className="w-full h-auto"
+            style={{ maxHeight: '70vh' }}
+          >
+            {statePaths.map((state, i) => {
+              const calc = stateData.get(state.name);
+              const fill = getFillColor(calc);
+              return (
+                <path
+                  key={i}
+                  d={state.d}
+                  fill={fill}
+                  stroke="#FFFFFF"
+                  strokeWidth={0.5}
+                  cursor="pointer"
+                  onClick={() => onLocationClick(state.name)}
+                  onMouseEnter={(e) => {
+                    if (calc) handleMouseEnter(state.name, calc, e);
+                  }}
+                  onMouseMove={handleMouseMove}
+                  onMouseLeave={handleMouseLeave}
+                  className="transition-opacity hover:opacity-80"
+                />
+              );
+            })}
+
+            {cityShapes.map(({ name, d, calc }) => {
+              const fill = getFillColor(calc);
+              return (
+                <path
+                  key={name}
+                  d={d}
+                  fill={fill}
+                  stroke="rgba(0,0,0,0.25)"
+                  strokeWidth={0.6}
+                  fillOpacity={0.9}
+                  cursor="pointer"
+                  onClick={() => onLocationClick(name)}
+                  onMouseEnter={(e) => handleMouseEnter(name, calc, e)}
+                  onMouseMove={handleMouseMove}
+                  onMouseLeave={handleMouseLeave}
+                  className="transition-opacity hover:opacity-75"
+                />
+              );
+            })}
+          </svg>
+        </div>
+
+        {/* Compact legend */}
+        <div className="w-28 flex-shrink-0 pt-6">
+          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Rating
+          </p>
+          <div className="space-y-1">
+            {legendSteps.map((score, i) => (
+              <div key={score} className="flex items-center gap-1.5">
+                <div
+                  className="w-3.5 h-3.5 rounded-[3px]"
+                  style={{
+                    backgroundColor:
+                      score === 0 ? GRAY : ratingScale(score),
+                  }}
+                />
+                <span className="text-[11px] text-gray-600 leading-none">
+                  {legendLabels[i]}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 pt-2 border-t border-gray-100">
+            <div className="flex items-center gap-1.5">
+              <svg width="14" height="14" viewBox="0 0 14 14">
+                <path
+                  d="M7,1 Q11,2 12,7 Q11,12 7,13 Q3,12 2,7 Q3,2 7,1Z"
+                  fill="none"
+                  stroke="#999"
+                  strokeWidth="1"
+                  strokeDasharray="2,1"
+                />
+              </svg>
+              <span className="text-[11px] text-gray-500 leading-none">
+                Metro area
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Insights */}
+      {insights && !isLoading && (
+        <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/* Most Affordable */}
+          <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2.5">
+              Most Affordable
+            </h4>
+            <ul className="space-y-1.5">
+              {insights.bestLocations.map((loc, i) => (
+                <li
+                  key={loc.name}
+                  className="flex items-center gap-2 text-xs cursor-pointer hover:bg-gray-50 rounded px-1.5 py-1 -mx-1.5"
+                  onClick={() => onLocationClick(loc.name)}
+                >
+                  <span className="text-gray-400 text-[10px] w-3">{i + 1}</span>
+                  <span className="text-gray-800 font-medium truncate flex-1">
+                    {loc.name}
+                  </span>
+                  <span
+                    className="font-semibold text-[11px] px-1.5 py-0.5 rounded"
+                    style={{
+                      backgroundColor: ratingScale(loc.numericScore) + '22',
+                      color: ratingScale(loc.numericScore),
+                    }}
+                  >
+                    {loc.numericScore.toFixed(1)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Least Affordable */}
+          <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2.5">
+              Least Affordable
+            </h4>
+            <ul className="space-y-1.5">
+              {insights.worstViable.map((loc, i) => (
+                <li
+                  key={loc.name}
+                  className="flex items-center gap-2 text-xs cursor-pointer hover:bg-gray-50 rounded px-1.5 py-1 -mx-1.5"
+                  onClick={() => onLocationClick(loc.name)}
+                >
+                  <span className="text-gray-400 text-[10px] w-3">{i + 1}</span>
+                  <span className="text-gray-800 font-medium truncate flex-1">
+                    {loc.name}
+                  </span>
+                  <span
+                    className="font-semibold text-[11px] px-1.5 py-0.5 rounded"
+                    style={{
+                      backgroundColor: ratingScale(loc.numericScore) + '22',
+                      color: ratingScale(loc.numericScore),
+                    }}
+                  >
+                    {loc.numericScore.toFixed(1)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Key Stats */}
+          <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2.5">
+              Overview
+            </h4>
+            <div className="space-y-2.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Viable</span>
+                <span className="font-semibold text-gray-800">
+                  {insights.viableCount}/{insights.totalLocations}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Not viable</span>
+                <span className="font-semibold text-gray-800">
+                  {insights.unviableCount}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Avg. rating</span>
+                <span className="font-semibold text-gray-800">
+                  {insights.avgScore.toFixed(1)}/10
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Avg. home value</span>
+                <span className="font-semibold text-gray-800">
+                  {formatCurrency(insights.avgHomeValue)}
+                </span>
+              </div>
+              {insights.highestValue && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Top value</span>
+                  <span
+                    className="font-semibold text-gray-800 cursor-pointer hover:text-blue-600"
+                    onClick={() => onLocationClick(insights.highestValue!.name)}
+                  >
+                    {formatCurrency(insights.highestValue.maxHomeValue)}
+                  </span>
+                </div>
+              )}
+              {insights.largestHome && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Largest home</span>
+                  <span
+                    className="font-semibold text-gray-800 cursor-pointer hover:text-blue-600"
+                    onClick={() => onLocationClick(insights.largestHome!.name)}
+                  >
+                    {insights.largestHome.sqft.toLocaleString()} sqft
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tooltip && (
+        <HeatMapTooltip
+          locationName={tooltip.name}
+          data={tooltip.data}
+          mode={mode}
+          position={tooltip.position}
+        />
+      )}
+    </div>
+  );
+}

@@ -31,6 +31,8 @@ interface SizeResult {
 }
 
 interface TimeResult {
+  quality: QualityFilter;
+  qualityLabel: string;
   homeValue: number;
   homeSizeSqft: number;
   location: string;
@@ -96,9 +98,15 @@ export default function HomeSizeCalculatorPage() {
 
   // Location
   const [selectedLocation, setSelectedLocation] = useState<string>('');
+  const [defaultLocation, setDefaultLocation] = useState<string>('');
   const [locationDropdownOpen, setLocationDropdownOpen] = useState(false);
   const [locationSearch, setLocationSearch] = useState('');
   const locationDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Quality dropdown
+  const [qualityDropdownOpen, setQualityDropdownOpen] = useState(false);
+  const [qualitySearch, setQualitySearch] = useState('');
+  const qualityDropdownRef = useRef<HTMLDivElement>(null);
 
   // Search by Time inputs
   const [timeValue, setTimeValue] = useState('');
@@ -113,10 +121,11 @@ export default function HomeSizeCalculatorPage() {
 
   // Results
   const [calculated, setCalculated] = useState(false);
-  const [timeResults, setTimeResults] = useState<TimeResult | null>(null);
+  const [timeResults, setTimeResults] = useState<TimeResult[]>([]);
   const [sizeResults, setSizeResults] = useState<SizeResult[]>([]);
   const [recommendations, setRecommendations] = useState<RecommendedLocation[]>([]);
   const [calcLoading, setCalcLoading] = useState(false);
+  const [pendingRecalc, setPendingRecalc] = useState(false);
 
   // ===== LOAD DATA =====
   useEffect(() => {
@@ -134,23 +143,34 @@ export default function HomeSizeCalculatorPage() {
     const saved = getSavedLocations();
     setSavedLocations(saved);
 
-    // Default location
-    if (saved.length > 0) {
-      setSelectedLocation(saved[0]);
+    // Default location: use last-viewed from profile, or first saved, or onboarding location
+    let defaultLoc = '';
+    const lastViewed = typeof window !== 'undefined' ? localStorage.getItem('lastViewedLocation') : null;
+    if (lastViewed && (saved.includes(lastViewed) || answers.currentLocation === lastViewed || answers.exactLocation === lastViewed)) {
+      defaultLoc = lastViewed;
+    } else if (saved.length > 0) {
+      defaultLoc = saved[0];
     } else if (answers.currentLocation) {
-      setSelectedLocation(answers.currentLocation);
+      defaultLoc = answers.currentLocation;
     } else if (answers.exactLocation) {
-      setSelectedLocation(answers.exactLocation);
+      defaultLoc = answers.exactLocation;
+    }
+    if (defaultLoc) {
+      setSelectedLocation(defaultLoc);
+      setDefaultLocation(defaultLoc);
     }
 
     setLoading(false);
   }, [router]);
 
-  // Close dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (locationDropdownRef.current && !locationDropdownRef.current.contains(e.target as Node)) {
         setLocationDropdownOpen(false);
+      }
+      if (qualityDropdownRef.current && !qualityDropdownRef.current.contains(e.target as Node)) {
+        setQualityDropdownOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -163,7 +183,12 @@ export default function HomeSizeCalculatorPage() {
   const filteredLocationOptions = locationSearch.trim()
     ? allLocationOptions.filter(opt =>
         opt.label.toLowerCase().includes(locationSearch.toLowerCase())
-      ).slice(0, 20)
+      ).sort((a, b) => {
+        // Saved locations first
+        const aIsSaved = savedLocations.includes(a.label) ? 0 : 1;
+        const bIsSaved = savedLocations.includes(b.label) ? 0 : 1;
+        return aIsSaved - bIsSaved;
+      }).slice(0, 20)
     : [];
 
   const statesWithCities: Record<string, string[]> = {};
@@ -205,18 +230,18 @@ export default function HomeSizeCalculatorPage() {
 
           const proj = result.houseProjections;
           // Find the closest projection or interpolate
-          let homeValue = 0;
+          let baseHomeValue = 0;
           if (years <= 3 && proj.threeYears?.canAfford) {
-            homeValue = proj.threeYears.maxSustainableHousePrice * (years / 3);
+            baseHomeValue = proj.threeYears.maxSustainableHousePrice * (years / 3);
           } else if (years <= 5 && proj.fiveYears?.canAfford) {
-            homeValue = proj.fiveYears.maxSustainableHousePrice * (years / 5);
+            baseHomeValue = proj.fiveYears.maxSustainableHousePrice * (years / 5);
           } else if (years <= 10 && proj.tenYears?.canAfford) {
-            homeValue = proj.tenYears.maxSustainableHousePrice * (years / 10);
+            baseHomeValue = proj.tenYears.maxSustainableHousePrice * (years / 10);
           } else if (years <= 15 && proj.fifteenYears?.canAfford) {
-            homeValue = proj.fifteenYears.maxSustainableHousePrice * (years / 15);
+            baseHomeValue = proj.fifteenYears.maxSustainableHousePrice * (years / 15);
           } else if (proj.maxAffordable?.canAfford) {
             const maxYears = proj.maxAffordable.year;
-            homeValue = proj.maxAffordable.maxSustainableHousePrice * Math.min(1, years / maxYears);
+            baseHomeValue = proj.maxAffordable.maxSustainableHousePrice * Math.min(1, years / maxYears);
           }
 
           // More accurate: recalculate using simulation year
@@ -224,26 +249,34 @@ export default function HomeSizeCalculatorPage() {
           const targetYear = Math.min(Math.ceil(years), simulation.length);
           const snapshot = simulation[targetYear - 1] || simulation[simulation.length - 1];
           if (snapshot) {
-            const pricePerSqft = getPricePerSqft(selectedLocation);
             const savings = snapshot.savingsNoMortgage;
-            // Rough estimate: home price = savings / 0.15 (down payment ~15%)
             const roughHomeValue = savings / 0.15;
-            if (roughHomeValue > homeValue) homeValue = roughHomeValue;
+            if (roughHomeValue > baseHomeValue) baseHomeValue = roughHomeValue;
           }
 
           // Use the actual projection if available
           if (proj.maxAffordable?.canAfford && years >= proj.maxAffordable.year) {
-            homeValue = proj.maxAffordable.maxSustainableHousePrice;
+            baseHomeValue = proj.maxAffordable.maxSustainableHousePrice;
           }
 
-          const homeSizeSqft = estimateHomeSizeSqft(homeValue, selectedLocation);
-
-          setTimeResults({
-            homeValue,
-            homeSizeSqft,
-            location: selectedLocation,
-            years: Math.round(years * 10) / 10,
+          // Generate per-quality results
+          const qualities: QualityFilter[] = qualityFilters.length > 0 ? qualityFilters : ['nice', 'average', 'any'];
+          const timeResultsList: TimeResult[] = qualities.map(quality => {
+            const multiplier = getQualityMultiplier(quality);
+            // In a nicer area, the same money buys less sqft (higher price/sqft)
+            // homeValue stays the same, but sqft changes based on quality
+            const adjustedSqft = estimateHomeSizeSqft(baseHomeValue / multiplier, selectedLocation);
+            return {
+              quality,
+              qualityLabel: getQualityLabel(quality),
+              homeValue: baseHomeValue,
+              homeSizeSqft: adjustedSqft,
+              location: selectedLocation,
+              years: Math.round(years * 10) / 10,
+            };
           });
+
+          setTimeResults(timeResultsList);
           setSizeResults([]);
         } else {
           // Search by size: how long to get a house of X sqft
@@ -296,7 +329,7 @@ export default function HomeSizeCalculatorPage() {
           }
 
           setSizeResults(results);
-          setTimeResults(null);
+          setTimeResults([]);
         }
 
         // Generate recommendations: "If You Want A Larger House"
@@ -309,6 +342,14 @@ export default function HomeSizeCalculatorPage() {
       setCalcLoading(false);
     }, 50);
   }, [profile, selectedLocation, searchMode, timeValue, timeUnit, sizeValue, qualityFilters, homePreference]);
+
+  // Auto-recalculate when location changes from recommendation click
+  useEffect(() => {
+    if (pendingRecalc) {
+      setPendingRecalc(false);
+      handleCalculate();
+    }
+  }, [pendingRecalc, handleCalculate]);
 
   // Generate location recommendations
   const generateRecommendations = useCallback((currentResult: CalculationResult) => {
@@ -384,7 +425,7 @@ export default function HomeSizeCalculatorPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6">
       {/* Page Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Home Size Calculator</h1>
@@ -394,7 +435,7 @@ export default function HomeSizeCalculatorPage() {
       {/* ===== SEARCH BAR SECTION ===== */}
       <div className="bg-[#E8F5E9] rounded-2xl p-6 border border-[#C8E6C9] shadow-sm">
         {/* Search mode toggle */}
-        <div className="flex bg-white rounded-xl p-1 mb-5 max-w-md mx-auto shadow-sm">
+        <div className="flex bg-white rounded-xl p-1 mb-5 max-w-lg mx-auto shadow-sm">
           <button
             onClick={() => { setSearchMode('time'); setCalculated(false); }}
             className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all ${
@@ -479,8 +520,11 @@ export default function HomeSizeCalculatorPage() {
               onClick={() => setLocationDropdownOpen(!locationDropdownOpen)}
               className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm text-left bg-white flex items-center justify-between hover:border-[#4CAF50] transition-colors"
             >
-              <span className={selectedLocation ? 'text-gray-900' : 'text-gray-400'}>
+              <span className={`flex items-center gap-2 ${selectedLocation ? 'text-gray-900' : 'text-gray-400'}`}>
                 {selectedLocation || 'Select a location...'}
+                {selectedLocation && selectedLocation === defaultLocation && (
+                  <span className="text-[10px] font-semibold text-[#4CAF50] bg-[#E8F5E9] border border-[#C8E6C9] px-1.5 py-0.5 rounded-full">Default</span>
+                )}
               </span>
               <svg className={`w-4 h-4 text-gray-400 transition-transform ${locationDropdownOpen ? 'rotate-180' : ''}`}
                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -507,9 +551,12 @@ export default function HomeSizeCalculatorPage() {
                   <div className="p-1">
                     {filteredLocationOptions.map(opt => (
                       <button key={opt.id} onClick={() => { setSelectedLocation(opt.label); setLocationDropdownOpen(false); setLocationSearch(''); }}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-[#E8F5E9] rounded-lg transition-colors">
-                        {opt.label}
-                        <span className="ml-1 text-xs text-gray-400">({opt.type})</span>
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-[#E8F5E9] rounded-lg transition-colors flex items-center gap-2">
+                        <span>{opt.label}</span>
+                        {savedLocations.includes(opt.label) && (
+                          <span className="text-[10px] font-semibold text-[#4CAF50] bg-[#E8F5E9] border border-[#C8E6C9] px-1.5 py-0.5 rounded-full">Saved</span>
+                        )}
+                        <span className="ml-auto text-xs text-gray-400">({opt.type})</span>
                       </button>
                     ))}
                   </div>
@@ -533,10 +580,13 @@ export default function HomeSizeCalculatorPage() {
                         <div className="p-1">
                           {savedLocations.map(loc => (
                             <button key={loc} onClick={() => { setSelectedLocation(loc); setLocationDropdownOpen(false); }}
-                              className={`w-full text-left px-3 py-2 text-sm hover:bg-[#E8F5E9] rounded-lg transition-colors ${
+                              className={`w-full text-left px-3 py-2 text-sm hover:bg-[#E8F5E9] rounded-lg transition-colors flex items-center gap-2 ${
                                 selectedLocation === loc ? 'bg-[#E8F5E9] font-semibold' : ''
                               }`}>
-                              {loc}
+                              <span>{loc}</span>
+                              {loc === defaultLocation && (
+                                <span className="text-[10px] font-semibold text-[#4CAF50] bg-[#E8F5E9] border border-[#C8E6C9] px-1.5 py-0.5 rounded-full">Default</span>
+                              )}
                             </button>
                           ))}
                         </div>
@@ -567,36 +617,103 @@ export default function HomeSizeCalculatorPage() {
         </div>
 
         {/* Filters row */}
-        <div className="flex flex-wrap gap-4 mb-4">
-          {/* Quality Filter */}
-          {searchMode === 'size' && (
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Quality</label>
-              <div className="flex gap-1.5">
-                {(['nice', 'average', 'any'] as QualityFilter[]).map(q => (
-                  <button key={q} onClick={() => toggleQuality(q)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-                      qualityFilters.includes(q)
-                        ? `${getQualityColor(q).bg} ${getQualityColor(q).text} ${getQualityColor(q).border}`
-                        : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
-                    }`}>
-                    {q === 'nice' ? 'Nice Area' : q === 'average' ? 'Average' : 'Any Area'}
-                  </button>
-                ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          {/* Quality Filter - Searchable Multi-select Dropdown */}
+          <div ref={qualityDropdownRef}>
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Quality</label>
+
+            {/* Selected tags */}
+            {qualityFilters.length > 0 && qualityFilters.length < 3 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {qualityFilters.map(q => {
+                  const label = q === 'nice' ? 'Nice Area' : q === 'average' ? 'Average Area' : 'Any Area';
+                  return (
+                    <span key={q} className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#EFF6FF] text-gray-800 rounded-full text-xs border border-[#5BA4E5]">
+                      {label}
+                      <button onClick={() => toggleQuality(q)} className="text-[#5BA4E5] hover:text-[#4A93D4] font-bold ml-0.5">×</button>
+                    </span>
+                  );
+                })}
+                <button onClick={() => setQualityFilters(['nice', 'average', 'any'])} className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1">
+                  Select all
+                </button>
               </div>
+            )}
+
+            {/* Search input */}
+            <div className="relative">
+              <input
+                type="text"
+                value={qualitySearch}
+                onChange={e => setQualitySearch(e.target.value)}
+                onFocus={() => setQualityDropdownOpen(true)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm bg-white focus:border-[#4CAF50] focus:ring-2 focus:ring-[#4CAF50] focus:ring-opacity-20 outline-none transition-all"
+                placeholder="Search quality..."
+              />
+              <button
+                onMouseDown={e => { e.preventDefault(); setQualityDropdownOpen(!qualityDropdownOpen); }}
+                className="absolute right-3 top-3.5 text-gray-400"
+              >
+                {qualityDropdownOpen ? '\u25B2' : '\u25BC'}
+              </button>
             </div>
-          )}
+
+            {/* Dropdown list */}
+            {qualityDropdownOpen && (
+              <div className="mt-1 border border-gray-200 rounded-xl bg-white shadow-lg overflow-hidden">
+                {/* Show All option */}
+                {(!qualitySearch.trim() || 'show all'.includes(qualitySearch.toLowerCase())) && (
+                  <label className={`flex items-center px-4 py-2.5 cursor-pointer transition-all text-sm hover:bg-gray-50 border-b border-gray-100 ${
+                    qualityFilters.length === 3 ? 'bg-[#EFF6FF]' : ''
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={qualityFilters.length === 3}
+                      onChange={() => setQualityFilters(qualityFilters.length === 3 ? [] : ['nice', 'average', 'any'])}
+                      className="w-3.5 h-3.5 text-[#5BA4E5] border-gray-300 rounded focus:ring-[#5BA4E5] mr-3"
+                    />
+                    Show All
+                  </label>
+                )}
+                {([
+                  { key: 'nice' as QualityFilter, label: 'Nice Area' },
+                  { key: 'average' as QualityFilter, label: 'Average Area' },
+                  { key: 'any' as QualityFilter, label: 'Any Area' },
+                ]).filter(opt =>
+                  !qualitySearch.trim() || opt.label.toLowerCase().includes(qualitySearch.toLowerCase())
+                ).map(opt => {
+                  const isSelected = qualityFilters.includes(opt.key);
+                  return (
+                    <label
+                      key={opt.key}
+                      className={`flex items-center px-4 py-2.5 cursor-pointer transition-all text-sm hover:bg-gray-50 ${
+                        isSelected ? 'bg-[#EFF6FF]' : ''
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleQuality(opt.key)}
+                        className="w-3.5 h-3.5 text-[#5BA4E5] border-gray-300 rounded focus:ring-[#5BA4E5] mr-3"
+                      />
+                      {opt.label}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Home Preference */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Home Preference</label>
-            <div className="flex gap-1.5">
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Home Preference</label>
+            <div className="flex gap-2">
               {(['house', 'apartment', 'any'] as HomePreference[]).map(p => (
                 <button key={p} onClick={() => setHomePreference(p)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                  className={`flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all border ${
                     homePreference === p
-                      ? 'bg-[#E8F5E9] text-[#2E7D32] border-[#A5D6A7]'
-                      : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                      ? 'bg-[#E8F5E9] text-[#2E7D32] border-[#A5D6A7] shadow-sm'
+                      : 'bg-white text-gray-600 border-gray-300 hover:border-[#4CAF50] hover:text-gray-900'
                   }`}>
                   {p === 'house' ? 'House' : p === 'apartment' ? 'Apartment' : 'Any'}
                 </button>
@@ -623,21 +740,51 @@ export default function HomeSizeCalculatorPage() {
       {/* ===== RESULTS SECTION ===== */}
       {calculated && (
         <div className="space-y-6">
-          {/* Search by Time result */}
-          {searchMode === 'time' && timeResults && (
-            <div className="space-y-4">
-              <ResultCard
-                title={`Saving for ${timeResults.years} year${timeResults.years !== 1 ? 's' : ''} in ${timeResults.location}`}
-                homeValue={timeResults.homeValue}
-                homeSizeSqft={timeResults.homeSizeSqft}
-                location={timeResults.location}
-                accentColor="#5BA4E5"
-              />
-              <SimpleHomeCarousel
-                location={timeResults.location}
-                targetPrice={timeResults.homeValue}
-                priceRange={50000}
-              />
+          {/* Search by Time results */}
+          {searchMode === 'time' && timeResults.length > 0 && (
+            <div className="space-y-6">
+              {timeResults.map((tr) => {
+                const colors = getQualityColor(tr.quality);
+                return (
+                  <div key={tr.quality} className="space-y-4">
+                    <div className={`${colors.bg} border ${colors.border} rounded-2xl overflow-hidden`}>
+                      <div className="px-6 py-4 border-b border-gray-100/50">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`text-xs font-bold uppercase tracking-wider ${colors.text}`}>
+                            {tr.qualityLabel}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600">
+                          Saving for {tr.years} year{tr.years !== 1 ? 's' : ''} in {tr.location}
+                        </p>
+                      </div>
+                      <div className="px-6 py-5 bg-white/60">
+                        <div className="grid grid-cols-3 gap-4">
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Saving Time</p>
+                            <p className="text-2xl font-bold text-gray-900">
+                              {tr.years} yr{tr.years !== 1 ? 's' : ''}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Home Value</p>
+                            <p className="text-2xl font-bold text-gray-900">{formatCurrency(tr.homeValue)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Home Size</p>
+                            <p className="text-2xl font-bold text-gray-900">{formatSqft(tr.homeSizeSqft)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <SimpleHomeCarousel
+                      location={tr.location}
+                      targetPrice={tr.homeValue}
+                      priceRange={50000}
+                    />
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -693,16 +840,14 @@ export default function HomeSizeCalculatorPage() {
           {/* ===== IF YOU WANT A LARGER HOUSE ===== */}
           {recommendations.length > 0 && (
             <div className="mt-8">
-              <div className="mb-4">
+              <div className="mb-5">
                 <h2 className="text-xl font-bold text-gray-900">If You Want A Larger House</h2>
-                <p className="text-sm text-gray-600">
-                  {isCity(selectedLocation)
-                    ? 'Compare with other cities where you could get more home for your money'
-                    : 'Compare with other locations where you could get more home for your money'}
+                <p className="text-sm text-gray-500 mt-1">
+                  Based on your profile and filters, here are locations where you could get a bigger home for your money
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="flex flex-col gap-4">
                 {recommendations.map((rec) => {
                   const stateName = getStateNameFromLocation(rec.location);
                   const flagPath = stateName ? getStateFlagPath(stateName) : null;
@@ -713,50 +858,56 @@ export default function HomeSizeCalculatorPage() {
                       onClick={() => {
                         setSelectedLocation(rec.location);
                         setCalculated(false);
-                        // Auto-recalculate
-                        setTimeout(() => {
-                          handleCalculate();
-                        }, 100);
+                        setPendingRecalc(true);
                       }}
-                      className="text-left bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-lg transition-all duration-300 group cursor-pointer"
+                      className="text-left bg-white rounded-xl border border-gray-200 hover:shadow-md transition-all duration-200 group cursor-pointer"
+                      style={{ borderLeftWidth: '4px', borderLeftColor: '#5BA4E5' }}
                     >
-                      <div className="p-5">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1 min-w-0">
-                            <h3 className="text-base font-bold text-gray-900 truncate group-hover:text-[#5BA4E5] transition-colors">
-                              {rec.location}
-                            </h3>
-                            {/* Value comparison */}
-                            <div className="flex flex-col gap-0.5 mt-1">
-                              <span className={`text-xs font-semibold ${rec.valueDiff > 0 ? 'text-green-600' : rec.valueDiff < 0 ? 'text-red-500' : 'text-gray-500'}`}>
-                                {rec.valueDiff > 0 ? '+' : ''}{formatCurrency(rec.valueDiff)} value
-                              </span>
-                              <span className={`text-xs font-semibold ${rec.sizeDiff > 0 ? 'text-green-600' : rec.sizeDiff < 0 ? 'text-red-500' : 'text-gray-500'}`}>
-                                {rec.sizeDiff > 0 ? '+' : ''}{rec.sizeDiff.toLocaleString()} sqft
-                              </span>
-                            </div>
-                          </div>
+                      <div className="px-5 py-4 flex items-center justify-between gap-4">
+                        {/* Left side: flag + location info */}
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
                           {flagPath && (
                             /* eslint-disable-next-line @next/next/no-img-element */
                             <img
                               src={flagPath}
                               alt={`${stateName} flag`}
-                              className="shrink-0 w-12 h-8 object-cover rounded border border-gray-200"
+                              className="shrink-0 w-10 h-7 object-cover rounded border border-gray-200 mt-0.5"
                               onError={(e) => { e.currentTarget.style.display = 'none'; }}
                             />
                           )}
+                          <div className="min-w-0">
+                            <h3 className="text-base font-bold text-gray-900 truncate group-hover:text-[#5BA4E5] transition-colors">
+                              {rec.location}
+                            </h3>
+                            {/* Comparison metrics */}
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 mt-1">
+                              <span className={`text-xs font-semibold flex items-center gap-1 ${rec.valueDiff >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  {rec.valueDiff >= 0
+                                    ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                    : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+                                  }
+                                </svg>
+                                {rec.valueDiff >= 0 ? '+' : ''}{formatCurrency(rec.valueDiff)} home value
+                              </span>
+                              <span className={`text-xs font-semibold flex items-center gap-1 ${rec.sizeDiff >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  {rec.sizeDiff >= 0
+                                    ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                    : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+                                  }
+                                </svg>
+                                {rec.sizeDiff >= 0 ? '+' : ''}{rec.sizeDiff.toLocaleString()} sqft
+                              </span>
+                            </div>
+                          </div>
                         </div>
 
-                        {/* Home size on right */}
-                        <div className="flex items-end justify-between mt-3 pt-3 border-t border-gray-100">
-                          <div>
-                            <p className="text-xs text-gray-500">Home Value</p>
-                            <p className="text-lg font-bold text-gray-900">{formatCurrency(rec.homeValue)}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-xs text-gray-500">Projected Size</p>
-                            <p className="text-lg font-bold text-[#8B5CF6]">{formatSqft(rec.homeSizeSqft)}</p>
-                          </div>
+                        {/* Right side: projected home size + value caption */}
+                        <div className="text-right shrink-0">
+                          <p className="text-xs text-gray-500">Projected Size</p>
+                          <p className="text-2xl font-bold text-gray-900">{formatSqft(rec.homeSizeSqft)}</p>
+                          <p className="text-xs text-gray-400">{formatCurrency(rec.homeValue)}</p>
                         </div>
                       </div>
                     </button>

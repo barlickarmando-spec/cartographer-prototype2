@@ -117,11 +117,14 @@ export default function ProfilePage() {
     );
   }, [loadResults]);
 
-  // Reset homes tabs when location changes
+  // Reset homes tabs when location changes & persist last-viewed location
   useEffect(() => {
     setShowMaxHomes(false);
     setShowFastestHomes(false);
     setShowCustomHomes(false);
+    if (selectedResult?.location) {
+      try { localStorage.setItem('lastViewedLocation', selectedResult.location); } catch { /* no-op */ }
+    }
   }, [selectedResult]);
 
   // Close location dropdown on outside click

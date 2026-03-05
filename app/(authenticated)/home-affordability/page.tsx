@@ -1,149 +1,143 @@
 'use client';
 
+import { useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAffordabilityCalculations } from '@/hooks/useAffordabilityCalculations';
+import ProjectionCards from '@/components/affordability/ProjectionCards';
+import USHeatMap from '@/components/affordability/USHeatMap';
+import { getSavedLocations, setSavedLocations } from '@/lib/storage';
+
+type MapMode = 'value' | 'sqft';
+
 export default function HomeAffordabilityPage() {
+  const router = useRouter();
+  const [mapMode, setMapMode] = useState<MapMode>('value');
+  const { stateData, cityData, currentResult, isLoading, progress, error } = useAffordabilityCalculations();
+
+  const handleLocationClick = useCallback(
+    (locationName: string) => {
+      // Add to saved locations if not already there
+      const saved = getSavedLocations();
+      if (!saved.includes(locationName)) {
+        setSavedLocations([...saved, locationName]);
+      }
+
+      // Store as the active location for profile page
+      try {
+        localStorage.setItem('active-profile-location', locationName);
+      } catch { /* ignore */ }
+
+      router.push('/profile');
+    },
+    [router]
+  );
+
+  if (error) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Home Affordability</h1>
+          <p className="text-gray-600">Complete onboarding to see your affordability analysis.</p>
+        </div>
+        <div className="bg-yellow-50 rounded-xl p-6 border border-yellow-200">
+          <p className="text-yellow-800">
+            Please complete the{' '}
+            <button
+              onClick={() => router.push('/onboarding')}
+              className="underline font-semibold hover:text-yellow-900"
+            >
+              onboarding process
+            </button>{' '}
+            to generate your affordability map.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Page Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Home Affordability Calculator</h1>
-        <p className="text-gray-600">See how much house you can afford based on your income and financial situation</p>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Home Affordability</h1>
+        <p className="text-gray-600">
+          See your projected home value across the United States — both raw purchasing power and relative to local markets
+        </p>
       </div>
 
-      {/* Affordability Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-[#5BA4E5] rounded-xl p-6 text-white shadow-md">
-          <p className="text-sm font-medium mb-2">Maximum Home Price</p>
-          <p className="text-4xl font-bold">$XXX,XXX</p>
-          <p className="text-sm opacity-90 mt-2">Based on current income</p>
-        </div>
-        
-        <div className="bg-[#4DB6AC] rounded-xl p-6 text-white shadow-md">
-          <p className="text-sm font-medium mb-2">Monthly Payment</p>
-          <p className="text-4xl font-bold">$X,XXX</p>
-          <p className="text-sm opacity-90 mt-2">Including taxes & insurance</p>
-        </div>
-        
-        <div className="bg-[#E76F51] rounded-xl p-6 text-white shadow-md">
-          <p className="text-sm font-medium mb-2">Down Payment Needed</p>
-          <p className="text-4xl font-bold">$XX,XXX</p>
-          <p className="text-sm opacity-90 mt-2">20% recommended</p>
-        </div>
-      </div>
+      {/* Core Projection Summary Cards */}
+      <ProjectionCards result={currentResult} isLoading={isLoading && progress < 10} />
 
-      {/* Calculator Inputs */}
-      <div className="bg-white rounded-xl p-8 border border-gray-200">
-        <h2 className="text-xl font-semibold text-gray-900 mb-6">Calculate Your Affordability</h2>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Annual Income
-            </label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">$</span>
-              <input
-                type="number"
-                placeholder="75,000"
-                className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5BA4E5] focus:border-transparent"
-              />
+      {/* Heat Map Section */}
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+        {/* Map mode toggle */}
+        <div className="p-6 pb-0">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">National Affordability Map</h2>
+            <div className="flex bg-gray-100 rounded-full p-1">
+              <button
+                onClick={() => setMapMode('value')}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  mapMode === 'value'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Home Value
+              </button>
+              <button
+                onClick={() => setMapMode('sqft')}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  mapMode === 'sqft'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Purchasing Power (sqft)
+              </button>
             </div>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Monthly Debt Payments
-            </label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">$</span>
-              <input
-                type="number"
-                placeholder="500"
-                className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5BA4E5] focus:border-transparent"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Down Payment
-            </label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">$</span>
-              <input
-                type="number"
-                placeholder="50,000"
-                className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5BA4E5] focus:border-transparent"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Interest Rate (%)
-            </label>
-            <input
-              type="number"
-              step="0.1"
-              placeholder="6.5"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5BA4E5] focus:border-transparent"
-            />
-          </div>
+          <p className="text-sm text-gray-500 mb-2">
+            {mapMode === 'value'
+              ? 'Colors show your maximum sustainable home price in each state. Click any state or city to view your full profile there.'
+              : 'Colors show how much home (square footage) you can afford in each state. Click any state or city to view your full profile there.'}
+          </p>
         </div>
 
-        <button className="mt-6 px-8 py-3 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-colors font-semibold">
-          Calculate Affordability
-        </button>
-      </div>
-
-      {/* Results Breakdown */}
-      <div className="bg-white rounded-xl p-8 border border-gray-200">
-        <h2 className="text-xl font-semibold text-gray-900 mb-6">Detailed Breakdown</h2>
-        
-        <div className="space-y-4">
-          <div className="flex items-center justify-between py-3 border-b border-gray-200">
-            <span className="text-gray-700">Principal & Interest</span>
-            <span className="font-semibold text-gray-900">$X,XXX/month</span>
-          </div>
-          <div className="flex items-center justify-between py-3 border-b border-gray-200">
-            <span className="text-gray-700">Property Taxes</span>
-            <span className="font-semibold text-gray-900">$XXX/month</span>
-          </div>
-          <div className="flex items-center justify-between py-3 border-b border-gray-200">
-            <span className="text-gray-700">Home Insurance</span>
-            <span className="font-semibold text-gray-900">$XXX/month</span>
-          </div>
-          <div className="flex items-center justify-between py-3 border-b border-gray-200">
-            <span className="text-gray-700">HOA Fees</span>
-            <span className="font-semibold text-gray-900">$XXX/month</span>
-          </div>
-          <div className="flex items-center justify-between py-3 pt-6">
-            <span className="text-lg font-semibold text-gray-900">Total Monthly Payment</span>
-            <span className="text-2xl font-bold text-[#5BA4E5]">$X,XXX</span>
-          </div>
+        {/* Map */}
+        <div className="px-6 pb-6">
+          <USHeatMap
+            stateData={stateData}
+            cityData={cityData}
+            mode={mapMode}
+            isLoading={isLoading}
+            progress={progress}
+            onLocationClick={handleLocationClick}
+          />
         </div>
       </div>
 
       {/* Tips Section */}
       <div className="bg-blue-50 rounded-xl p-6 border border-blue-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">Tips for Maximizing Affordability</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-3">Understanding the Maps</h3>
         <ul className="space-y-2">
           <li className="flex items-start gap-2 text-sm text-gray-700">
             <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
             </svg>
-            <span>Improve your credit score to qualify for better interest rates</span>
+            <span><strong>Home Value map</strong> shows the maximum home price you could sustain in each location based on your income, savings trajectory, and debt</span>
           </li>
           <li className="flex items-start gap-2 text-sm text-gray-700">
             <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
             </svg>
-            <span>Save for a larger down payment to reduce monthly costs</span>
+            <span><strong>Purchasing Power map</strong> converts that dollar value into actual square footage using local price-per-sqft data — revealing where your money buys the most space</span>
           </li>
           <li className="flex items-start gap-2 text-sm text-gray-700">
             <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
             </svg>
-            <span>Pay off existing debts to improve your debt-to-income ratio</span>
+            <span>Gray states indicate homeownership isn&apos;t currently viable there. Consider adjusting your strategy to unlock more options</span>
           </li>
         </ul>
       </div>
