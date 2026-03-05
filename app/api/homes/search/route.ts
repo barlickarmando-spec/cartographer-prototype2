@@ -44,9 +44,13 @@ function parseLocation(location: string): { city: string; stateCode: string } {
   return { city: trimmed, stateCode: '' };
 }
 
+// Hardcoded API config — env vars don't reliably load on all setups
+const API_KEY = process.env.RAPIDAPI_KEY || '3b86e8a737mshcc69ac4077e9c00p18b472jsnc475ce3e84b9';
+const API_HOST = process.env.RAPIDAPI_HOST || 'realtor-search.p.rapidapi.com';
+
 const HEADERS = {
-  'X-RapidAPI-Key': process.env.RAPIDAPI_KEY || '',
-  'X-RapidAPI-Host': process.env.RAPIDAPI_HOST || 'realtor-search.p.rapidapi.com',
+  'X-RapidAPI-Key': API_KEY,
+  'X-RapidAPI-Host': API_HOST,
 };
 
 /**
@@ -60,7 +64,7 @@ async function fetchFromRealtorAPI(
   minPrice: number,
   maxPrice: number,
 ): Promise<{ properties: any[]; source: string } | null> {
-  const host = process.env.RAPIDAPI_HOST || 'realtor-search.p.rapidapi.com';
+  const host = API_HOST;
   const baseUrl = `https://${host}`;
 
   // Build location query string
@@ -332,9 +336,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const rapidApiKey = process.env.RAPIDAPI_KEY;
-
-    if (!rapidApiKey) {
+    if (!API_KEY) {
       return NextResponse.json({
         success: true,
         homes: [],
@@ -400,7 +402,7 @@ export async function GET(request: NextRequest) {
   if (testLocation) {
     // Test mode: try to fetch and return raw API response shape
     const { city, stateCode } = parseLocation(testLocation);
-    const host = process.env.RAPIDAPI_HOST || 'realtor-search.p.rapidapi.com';
+    const host = API_HOST;
 
     const locationQuery = city && stateCode ? `${city}, ${stateCode}` : city || stateCode;
 
@@ -437,7 +439,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       host,
-      apiKeyConfigured: !!process.env.RAPIDAPI_KEY,
+      apiKeyConfigured: !!API_KEY,
       locationParsed: { city, stateCode },
       endpointTests: results,
     });
@@ -446,7 +448,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     status: 'ready',
     message: 'Real estate search API - add ?test=Idaho to test endpoints',
-    apiKeyConfigured: !!process.env.RAPIDAPI_KEY,
-    apiHost: process.env.RAPIDAPI_HOST || '(not set)',
+    apiKeyConfigured: !!API_KEY,
+    apiHost: API_HOST,
   });
 }
