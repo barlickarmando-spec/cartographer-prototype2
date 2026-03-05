@@ -268,9 +268,10 @@ function normalizeProperty(prop: any): {
   }
 
   // Upgrade Realtor.com photo URLs to larger size
-  // URLs like: https://ap.rdcpix.com/abc123s.jpg → abc123l.jpg (s=small, l=large)
+  // rdcpix.com size suffixes: s=small, e=medium, l=large, od=original
+  // e.g. https://ap.rdcpix.com/abc123e-f456s.jpg → ...od.jpg
   if (photoUrl && photoUrl.includes('rdcpix.com')) {
-    photoUrl = photoUrl.replace(/([a-f0-9]+)s\.(jpg|jpeg|png|webp)/i, '$1l.$2');
+    photoUrl = photoUrl.replace(/(\w)[sel]\.(jpg|jpeg|png|webp)/i, '$1od.$2');
   }
 
   // Listing URL — build from permalink or property_id
