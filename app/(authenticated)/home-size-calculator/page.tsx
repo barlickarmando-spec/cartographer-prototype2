@@ -725,16 +725,14 @@ export default function HomeSizeCalculatorPage() {
           {/* ===== IF YOU WANT A LARGER HOUSE ===== */}
           {recommendations.length > 0 && (
             <div className="mt-8">
-              <div className="mb-4">
+              <div className="mb-5">
                 <h2 className="text-xl font-bold text-gray-900">If You Want A Larger House</h2>
-                <p className="text-sm text-gray-600">
-                  {isCity(selectedLocation)
-                    ? 'Compare with other cities where you could get more home for your money'
-                    : 'Compare with other locations where you could get more home for your money'}
+                <p className="text-sm text-gray-500 mt-1">
+                  Based on your profile and filters, here are locations where you could get a bigger home for your money
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="flex flex-col gap-4">
                 {recommendations.map((rec) => {
                   const stateName = getStateNameFromLocation(rec.location);
                   const flagPath = stateName ? getStateFlagPath(stateName) : null;
@@ -747,45 +745,54 @@ export default function HomeSizeCalculatorPage() {
                         setCalculated(false);
                         setPendingRecalc(true);
                       }}
-                      className="text-left bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-lg transition-all duration-300 group cursor-pointer"
+                      className="text-left bg-white rounded-xl border border-gray-200 hover:shadow-md transition-all duration-200 group cursor-pointer"
+                      style={{ borderLeftWidth: '4px', borderLeftColor: '#5BA4E5' }}
                     >
-                      <div className="p-5">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1 min-w-0">
-                            <h3 className="text-base font-bold text-gray-900 truncate group-hover:text-[#5BA4E5] transition-colors">
-                              {rec.location}
-                            </h3>
-                            {/* Value comparison */}
-                            <div className="flex flex-col gap-0.5 mt-1">
-                              <span className={`text-xs font-semibold ${rec.valueDiff > 0 ? 'text-green-600' : rec.valueDiff < 0 ? 'text-red-500' : 'text-gray-500'}`}>
-                                {rec.valueDiff > 0 ? '+' : ''}{formatCurrency(rec.valueDiff)} value
-                              </span>
-                              <span className={`text-xs font-semibold ${rec.sizeDiff > 0 ? 'text-green-600' : rec.sizeDiff < 0 ? 'text-red-500' : 'text-gray-500'}`}>
-                                {rec.sizeDiff > 0 ? '+' : ''}{rec.sizeDiff.toLocaleString()} sqft
-                              </span>
-                            </div>
-                          </div>
+                      <div className="px-5 py-4 flex items-center justify-between gap-4">
+                        {/* Left side: flag + location info */}
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
                           {flagPath && (
                             /* eslint-disable-next-line @next/next/no-img-element */
                             <img
                               src={flagPath}
                               alt={`${stateName} flag`}
-                              className="shrink-0 w-12 h-8 object-cover rounded border border-gray-200"
+                              className="shrink-0 w-10 h-7 object-cover rounded border border-gray-200 mt-0.5"
                               onError={(e) => { e.currentTarget.style.display = 'none'; }}
                             />
                           )}
+                          <div className="min-w-0">
+                            <h3 className="text-base font-bold text-gray-900 truncate group-hover:text-[#5BA4E5] transition-colors">
+                              {rec.location}
+                            </h3>
+                            {/* Comparison metrics */}
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 mt-1">
+                              <span className={`text-xs font-semibold flex items-center gap-1 ${rec.valueDiff >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  {rec.valueDiff >= 0
+                                    ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                    : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+                                  }
+                                </svg>
+                                {rec.valueDiff >= 0 ? '+' : ''}{formatCurrency(rec.valueDiff)} home value
+                              </span>
+                              <span className={`text-xs font-semibold flex items-center gap-1 ${rec.sizeDiff >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  {rec.sizeDiff >= 0
+                                    ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                    : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+                                  }
+                                </svg>
+                                {rec.sizeDiff >= 0 ? '+' : ''}{rec.sizeDiff.toLocaleString()} sqft
+                              </span>
+                            </div>
+                          </div>
                         </div>
 
-                        {/* Home size on right */}
-                        <div className="flex items-end justify-between mt-3 pt-3 border-t border-gray-100">
-                          <div>
-                            <p className="text-xs text-gray-500">Home Value</p>
-                            <p className="text-lg font-bold text-gray-900">{formatCurrency(rec.homeValue)}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-xs text-gray-500">Projected Size</p>
-                            <p className="text-lg font-bold text-[#8B5CF6]">{formatSqft(rec.homeSizeSqft)}</p>
-                          </div>
+                        {/* Right side: projected home size + value caption */}
+                        <div className="text-right shrink-0">
+                          <p className="text-xs text-gray-500">Projected Size</p>
+                          <p className="text-2xl font-bold text-gray-900">{formatSqft(rec.homeSizeSqft)}</p>
+                          <p className="text-xs text-gray-400">{formatCurrency(rec.homeValue)}</p>
                         </div>
                       </div>
                     </button>
