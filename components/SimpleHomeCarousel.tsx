@@ -76,7 +76,7 @@ function buildRealtorSearchUrl(location: string, minPrice: number, maxPrice: num
   return url;
 }
 
-const MAX_HOMES = 24;
+const MAX_HOMES = 42;
 const HOMES_PER_PAGE = 2;
 
 const CARD_GRADIENTS = [
@@ -101,6 +101,7 @@ export default function SimpleHomeCarousel({
 }: SimpleHomeCarouselProps) {
   const [homes, setHomes] = useState<Home[]>([]);
   const [source, setSource] = useState('');
+  const [totalAvailable, setTotalAvailable] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
@@ -134,21 +135,18 @@ export default function SimpleHomeCarousel({
 
         if (!cancelled) {
           if (data.success && data.homes && data.homes.length > 0) {
-            // Only use homes that have actual photos
-            const realHomes = data.homes.filter(
+            // Prefer homes with photos, but keep all real listings
+            const withPhotos = data.homes.filter(
               (h: Home) => h.photoUrl && h.photoUrl.startsWith('http')
             );
-            if (realHomes.length > 0) {
-              setHomes(realHomes.slice(0, MAX_HOMES));
-              setSource(data.source || '');
-            } else {
-              // No homes with real photos - show browse interface instead
-              setHomes([]);
-              setSource(data.source || 'Sample listings');
-            }
+            const allHomes = withPhotos.length > 0 ? withPhotos : data.homes;
+            setHomes(allHomes.slice(0, MAX_HOMES));
+            setSource(data.source || '');
+            setTotalAvailable(data.totalAvailable || allHomes.length);
           } else {
             setHomes([]);
             setSource('');
+            setTotalAvailable(0);
           }
         }
       } catch {
@@ -224,6 +222,9 @@ export default function SimpleHomeCarousel({
           <h3 className="text-base font-semibold text-[#2C3E50] mb-0.5">{location} Homes ~ {priceLabel}</h3>
           <p className="text-xs text-[#6B7280]">
             {formatPrice(minPrice)} - {formatPrice(maxPrice)} | {displayHomes.length} listing{displayHomes.length !== 1 ? 's' : ''}
+            {totalAvailable > displayHomes.length && (
+              <span className="ml-1 text-[#5BA4E5]">({totalAvailable.toLocaleString()}+ on Realtor.com)</span>
+            )}
             {source && <span className="ml-1 text-[#9CA3AF]">via {source}</span>}
           </p>
         </div>
@@ -274,6 +275,19 @@ export default function SimpleHomeCarousel({
           </div>
         </div>
       )}
+
+      {/* Browse on Realtor.com link */}
+      <a
+        href={buildRealtorSearchUrl(location, minPrice, maxPrice)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-center gap-2 w-full py-3 text-sm font-medium text-[#5BA4E5] hover:text-[#4A93D4] hover:bg-[#EFF6FF] rounded-lg transition-colors"
+      >
+        Browse all listings on Realtor.com
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
+      </a>
 
       {/* Full-screen modal */}
       {modalHome && (

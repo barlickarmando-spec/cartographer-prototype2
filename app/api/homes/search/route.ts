@@ -138,52 +138,122 @@ async function autoCompleteLocation(query: string): Promise<string | null> {
   return null;
 }
 
-// ── Step 2: Search for-sale listings ────────────────────────────────
-async function searchForSale(
-  locationId: string,
-  minPrice: number,
-  maxPrice: number,
-): Promise<any[] | null> {
-  // Include price filters so the API returns relevant listings
-  const params = new URLSearchParams({
-    location: locationId,
-    sort_by: 'RelevantListings',
-    search_within_x_miles: '50',
-    price_min: String(minPrice),
-    price_max: String(maxPrice),
-  });
+// How many pages of results to fetch from the search API
+const MAX_PAGES = 5;
+const MAX_LISTINGS = 42;
 
-  const url = `${BASE_URL}/property/search-sale?${params.toString()}`;
-  console.log(`[homes/search] Search for sale: ${url}`);
-
-  const res = await fetch(url, {
-    headers: HEADERS,
-    signal: AbortSignal.timeout(10000),
-  });
-
-  if (!res.ok) {
-    console.log(`[homes/search] Search failed: ${res.status}`);
-    return null;
-  }
-
-  const json = await res.json();
+// Extract listings array from various API response shapes
+function extractListings(json: any): any[] {
   let listings = json.data || json.properties || json.results || json.listings || json.homes || [];
 
   if (!Array.isArray(listings) && json.data && typeof json.data === 'object') {
+    // Check nested arrays (e.g. data.home_search.results)
+    if (json.data.home_search?.results && Array.isArray(json.data.home_search.results)) {
+      return json.data.home_search.results;
+    }
     for (const key of Object.keys(json.data)) {
       if (Array.isArray(json.data[key]) && json.data[key].length > 0) {
-        listings = json.data[key];
-        break;
+        return json.data[key];
       }
     }
   }
 
-  if (Array.isArray(listings) && listings.length > 0) {
-    console.log(`[homes/search] Found ${listings.length} listings`);
-    return listings;
+  return Array.isArray(listings) ? listings : [];
+}
+
+// ── Step 2: Search for-sale listings with pagination ────────────────
+// Fetches multiple pages to get the full scope of available listings.
+async function searchForSale(
+  locationId: string,
+  minPrice: number,
+  maxPrice: number,
+): Promise<{ listings: any[]; totalAvailable: number } | null> {
+
+  // Build base params — try with price filters first
+  const baseParamSets = [
+    {
+      location: locationId,
+      sort_by: 'RelevantListings',
+      search_within_x_miles: '50',
+      price_min: String(minPrice),
+      price_max: String(maxPrice),
+    },
+    {
+      location: locationId,
+      sort_by: 'RelevantListings',
+      search_within_x_miles: '50',
+    },
+  ];
+
+  for (const baseParams of baseParamSets) {
+    try {
+      // Fetch page 1 first to learn the total count
+      const page1Params = new URLSearchParams({ ...baseParams, page: '1' });
+      const url1 = `${BASE_URL}/property/search-sale?${page1Params.toString()}`;
+      console.log(`[homes/search] Search page 1: ${url1}`);
+
+      const res1 = await fetch(url1, {
+        headers: HEADERS,
+        signal: AbortSignal.timeout(12000),
+      });
+
+      if (!res1.ok) {
+        console.log(`[homes/search] Search page 1 failed: ${res1.status}`);
+        continue;
+      }
+
+      const json1 = await res1.json();
+      const page1Listings = extractListings(json1);
+      const totalResultCount = json1.totalResultCount || json1.total || json1.meta?.total || 0;
+      const perPage = page1Listings.length;
+
+      console.log(`[homes/search] Page 1: ${perPage} listings, totalResultCount: ${totalResultCount}`);
+
+      if (perPage === 0) continue;
+
+      const allListings = [...page1Listings];
+
+      // If there are more pages and we haven't hit our target, fetch them in parallel
+      if (totalResultCount > perPage && allListings.length < MAX_LISTINGS) {
+        const totalPages = Math.min(MAX_PAGES, Math.ceil(totalResultCount / Math.max(perPage, 1)));
+        const pagePromises: Promise<any[]>[] = [];
+
+        for (let p = 2; p <= totalPages; p++) {
+          if (allListings.length + (p - 2) * perPage >= MAX_LISTINGS) break;
+          const pageParams = new URLSearchParams({ ...baseParams, page: String(p) });
+          const pageUrl = `${BASE_URL}/property/search-sale?${pageParams.toString()}`;
+          console.log(`[homes/search] Queueing page ${p}: ${pageUrl}`);
+
+          pagePromises.push(
+            fetch(pageUrl, { headers: HEADERS, signal: AbortSignal.timeout(12000) })
+              .then(async (res) => {
+                if (!res.ok) return [];
+                const json = await res.json();
+                return extractListings(json);
+              })
+              .catch((e) => {
+                console.log(`[homes/search] Page ${p} error:`, e instanceof Error ? e.message : e);
+                return [];
+              })
+          );
+        }
+
+        const additionalPages = await Promise.all(pagePromises);
+        for (const pageResults of additionalPages) {
+          allListings.push(...pageResults);
+          console.log(`[homes/search] Additional page: +${pageResults.length} listings`);
+        }
+      }
+
+      console.log(`[homes/search] Total fetched: ${allListings.length} listings (${totalResultCount} available on realtor.com)`);
+      return { listings: allListings, totalAvailable: totalResultCount || allListings.length };
+
+    } catch (e) {
+      console.log(`[homes/search] Search attempt error:`, e instanceof Error ? e.message : e);
+    }
   }
 
-  console.log(`[homes/search] No listings found`);
+  console.log(`[homes/search] No listings found after all attempts`);
   return null;
 }
 
@@ -364,19 +434,30 @@ export async function POST(request: NextRequest) {
     const { city, stateCode } = parseLocation(location);
     const searchQuery = buildSearchQuery(city, stateCode);
     debug.searchQuery = searchQuery;
+    debug.parsedCity = city;
+    debug.parsedStateCode = stateCode;
 
     // Step 1: Auto-complete to get location ID
     const locationId = await autoCompleteLocation(searchQuery);
     debug.locationId = locationId;
-    if (!locationId) {
-      return NextResponse.json({ success: true, homes: [], count: 0, source: 'location_not_found', debug });
+
+    // Step 2: Search for-sale listings with pagination
+    let listings: any[] = [];
+    let totalAvailable = 0;
+
+    if (locationId) {
+      const result = await searchForSale(locationId, minPrice, maxPrice);
+      if (result) {
+        listings = result.listings;
+        totalAvailable = result.totalAvailable;
+      }
+      debug.primaryApiCount = listings.length;
+      debug.totalAvailable = totalAvailable;
     }
 
-    // Step 2: Search for-sale listings
-    const listings = await searchForSale(locationId, minPrice, maxPrice);
-    debug.rawListingCount = listings?.length || 0;
-    if (!listings || listings.length === 0) {
-      return NextResponse.json({ success: true, homes: [], count: 0, source: 'no_results', debug });
+    debug.rawListingCount = listings.length;
+    if (listings.length === 0) {
+      return NextResponse.json({ success: true, homes: [], count: 0, totalAvailable: 0, source: 'no_results', debug });
     }
 
     // Step 3: Normalize all listings
@@ -386,16 +467,31 @@ export async function POST(request: NextRequest) {
     debug.samplePhotoUrl = homes.find(h => h.photoUrl)?.photoUrl || 'none';
     debug.pricesFound = homes.slice(0, 5).map(h => h.price);
 
-    // Step 4: Strictly filter to price range — never show homes outside budget
-    homes = homes.filter(h => h.price >= minPrice && h.price <= maxPrice);
-    debug.inPriceRange = homes.length;
-    homes = homes.slice(0, 24);
+    // Step 4: Sort — prefer homes with photos, then by closeness to target price
+    // No aggressive price filtering since the API already filtered by price range
+    const targetPrice = (minPrice + maxPrice) / 2;
 
-    // Step 5: Fetch high-res photos via get-photos endpoint for all listings with property IDs
-    const withIds = homes.filter(h => h._propertyId).slice(0, 24);
-    if (withIds.length > 0) {
-      debug.fetchingPhotosFor = withIds.length;
-      const photoPromises = withIds.map(async (home) => {
+    homes.sort((a, b) => {
+      // Prefer homes with photos
+      const aHasPhoto = a.photoUrl ? 0 : 1;
+      const bHasPhoto = b.photoUrl ? 0 : 1;
+      if (aHasPhoto !== bHasPhoto) return aHasPhoto - bHasPhoto;
+
+      // Then by price closeness to target
+      const aDist = a.price === 0 ? Infinity : Math.abs(a.price - targetPrice);
+      const bDist = b.price === 0 ? Infinity : Math.abs(b.price - targetPrice);
+      return aDist - bDist;
+    });
+
+    debug.inPriceRange = homes.filter(h => h.price >= minPrice && h.price <= maxPrice).length;
+    debug.totalAfterSort = homes.length;
+    homes = homes.slice(0, MAX_LISTINGS);
+
+    // Step 5: Fetch high-res photos for listings missing them (limit to avoid excess API calls)
+    const needPhotos = homes.filter(h => h._propertyId && !h.photoUrl).slice(0, 12);
+    if (needPhotos.length > 0) {
+      debug.fetchingPhotosFor = needPhotos.length;
+      const photoPromises = needPhotos.map(async (home) => {
         const url = await getPhotos(home._propertyId!, home._listingId || '');
         if (url) home.photoUrl = upgradePhotoUrl(url);
       });
@@ -412,6 +508,7 @@ export async function POST(request: NextRequest) {
       success: true,
       homes: cleaned,
       count: cleaned.length,
+      totalAvailable,
       source: 'Realtor.com',
       debug,
     });
