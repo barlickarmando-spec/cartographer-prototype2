@@ -94,9 +94,18 @@ function upgradePhotoUrl(url: string): string {
   if (!url) return url;
   let upgraded = url;
   if (/rdcpix\.com/i.test(upgraded)) {
+    // rdcpix URLs have size codes in two places:
+    //   https://ap.rdcpix.com/<hash><size>-m<id><size>.jpg
+    // Size codes: s=small(140px), t=tiny, m=medium(280px), l=large(640px), od=original
+    // Strip any explicit dimension params first
     upgraded = upgraded.replace(/-w\d+_h\d+(_x2)?/g, '');
-    upgraded = upgraded.replace(/([0-9a-f])[smt](-f)/i, '$1l$2');
-    upgraded = upgraded.replace(/([0-9a-f])[smt](\.jpg)/i, '$1l$2');
+    // Replace ALL single-letter size codes (s/t/m) with 'od' (original) throughout the URL path
+    // Pattern: size letter right before a dash+letter or before .jpg
+    upgraded = upgraded.replace(/([0-9a-f])[stm](-[a-z])/gi, '$1od$2');
+    upgraded = upgraded.replace(/([0-9a-f])[stm](\.jpg)/gi, '$1od$2');
+    // Also upgrade 'l' (large=640px) to 'od' (original) for max resolution
+    upgraded = upgraded.replace(/([0-9a-f])l(-[a-z])/gi, '$1od$2');
+    upgraded = upgraded.replace(/([0-9a-f])l(\.jpg)/gi, '$1od$2');
   } else {
     upgraded = upgraded.replace(/-w\d+_h\d+(_x2)?/g, '-w1024_h768');
     upgraded = upgraded.replace(/\/([^/]+)s\.jpg$/i, '/$1l.jpg');
@@ -586,6 +595,15 @@ export async function POST(request: NextRequest) {
     let homes = listings.map(normalizeProperty);
     debug.normalizedCount = homes.length;
     debug.withPhotos = homes.filter(h => h.photoUrl).length;
+
+    // Strict price filter — only keep homes within the requested range
+    const beforeFilter = homes.length;
+    homes = homes.filter(h => {
+      if (h.price === 0) return true; // keep listings with unknown price
+      return h.price >= minPrice && h.price <= maxPrice;
+    });
+    debug.filteredOut = beforeFilter - homes.length;
+    debug.afterPriceFilter = homes.length;
 
     // Sort — prefer homes with photos, then by closeness to target price
     const targetPrice = (minPrice + maxPrice) / 2;
