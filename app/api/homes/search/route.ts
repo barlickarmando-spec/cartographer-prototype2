@@ -406,10 +406,16 @@ export async function GET(request: NextRequest) {
 
     const locationQuery = city && stateCode ? `${city}, ${stateCode}` : city || stateCode;
 
+    // Try all likely URL patterns for "Search for sale" endpoint
     const endpoints = [
-      `https://${host}/properties?location=${encodeURIComponent(locationQuery)}&minPrice=200000&maxPrice=500000&limit=3`,
-      `https://${host}/search?location=${encodeURIComponent(locationQuery)}&price_min=200000&price_max=500000&limit=3`,
-      `https://${host}/forsale?location=${encodeURIComponent(locationQuery)}&price_min=200000&price_max=500000&limit=3`,
+      `https://${host}/searchForSale?location=${encodeURIComponent(locationQuery)}&minPrice=200000&maxPrice=500000&limit=3`,
+      `https://${host}/search-for-sale?location=${encodeURIComponent(locationQuery)}&minPrice=200000&maxPrice=500000&limit=3`,
+      `https://${host}/searchforsale?location=${encodeURIComponent(locationQuery)}&minPrice=200000&maxPrice=500000&limit=3`,
+      `https://${host}/search_for_sale?location=${encodeURIComponent(locationQuery)}&minPrice=200000&maxPrice=500000&limit=3`,
+      `https://${host}/forSale?location=${encodeURIComponent(locationQuery)}&minPrice=200000&maxPrice=500000&limit=3`,
+      `https://${host}/for-sale?location=${encodeURIComponent(locationQuery)}&minPrice=200000&maxPrice=500000&limit=3`,
+      `https://${host}/autoComplete?input=${encodeURIComponent(locationQuery)}`,
+      `https://${host}/auto-complete?input=${encodeURIComponent(locationQuery)}`,
     ];
 
     const results: any[] = [];
