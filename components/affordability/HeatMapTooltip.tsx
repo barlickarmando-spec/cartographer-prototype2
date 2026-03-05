@@ -1,6 +1,7 @@
 'use client';
 
 import { formatCurrency } from '@/lib/utils';
+import { createRatingColorScale } from '@/lib/color-scale';
 import type { LocationCalculation } from '@/hooks/useAffordabilityCalculations';
 
 interface HeatMapTooltipProps {
@@ -10,17 +11,29 @@ interface HeatMapTooltipProps {
   position: { x: number; y: number };
 }
 
+const ratingScale = createRatingColorScale();
+
 export default function HeatMapTooltip({ locationName, data, mode, position }: HeatMapTooltipProps) {
+  const ratingColor = ratingScale(data.numericScore);
+
   return (
     <div
-      className="fixed z-50 pointer-events-none bg-white rounded-lg shadow-xl border border-gray-200 px-4 py-3 min-w-[200px]"
+      className="fixed z-50 pointer-events-none bg-white rounded-lg shadow-xl border border-gray-200 px-4 py-3 min-w-[220px]"
       style={{
         left: position.x + 12,
         top: position.y - 10,
         transform: position.x > window.innerWidth - 250 ? 'translateX(-110%)' : undefined,
       }}
     >
-      <p className="font-semibold text-gray-900 text-sm mb-1.5">{locationName}</p>
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="font-semibold text-gray-900 text-sm">{locationName}</p>
+        <span
+          className="text-xs font-bold px-1.5 py-0.5 rounded"
+          style={{ backgroundColor: ratingColor, color: data.numericScore > 6 ? '#fff' : '#1a1a1a' }}
+        >
+          {data.numericScore.toFixed(1)}/10
+        </span>
+      </div>
       {mode === 'value' ? (
         <div className="space-y-1 text-xs text-gray-600">
           <div className="flex justify-between gap-4">
