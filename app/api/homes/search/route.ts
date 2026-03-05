@@ -1,8 +1,23 @@
 // app/api/homes/search/route.ts
+//
+// Uses the realtor-search.p.rapidapi.com API with a 2-step flow:
+// 1. /auto-complete  → resolve location name to a zip/city ID
+// 2. /property/search-sale → fetch for-sale listings using that ID
+// 3. /property/get-photos  → fetch photos for each listing (if needed)
 
 import { NextRequest, NextResponse } from 'next/server';
 
-// All US state abbreviations for location parsing
+// ── Config ──────────────────────────────────────────────────────────
+const API_KEY = process.env.RAPIDAPI_KEY || '3b86e8a737mshcc69ac4077e9c00p18b472jsnc475ce3e84b9';
+const API_HOST = process.env.RAPIDAPI_HOST || 'realtor-search.p.rapidapi.com';
+const BASE_URL = `https://${API_HOST}`;
+
+const HEADERS: Record<string, string> = {
+  'X-RapidAPI-Key': API_KEY,
+  'X-RapidAPI-Host': API_HOST,
+};
+
+// ── State name → code lookup ────────────────────────────────────────
 const STATE_ABBREVIATIONS: Record<string, string> = {
   'alabama': 'AL', 'alaska': 'AK', 'arizona': 'AZ', 'arkansas': 'AR',
   'california': 'CA', 'colorado': 'CO', 'connecticut': 'CT', 'delaware': 'DE',
@@ -19,201 +34,183 @@ const STATE_ABBREVIATIONS: Record<string, string> = {
   'wisconsin': 'WI', 'wyoming': 'WY',
 };
 
+// Reverse lookup: code → full name
+const STATE_NAMES: Record<string, string> = {};
+for (const [name, code] of Object.entries(STATE_ABBREVIATIONS)) {
+  STATE_NAMES[code] = name.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+}
+
+// ── Location parsing ────────────────────────────────────────────────
 function parseLocation(location: string): { city: string; stateCode: string } {
   const trimmed = location.trim();
   const lower = trimmed.toLowerCase();
 
-  if (STATE_ABBREVIATIONS[lower]) {
-    return { city: '', stateCode: STATE_ABBREVIATIONS[lower] };
-  }
-  if (/^[A-Z]{2}$/i.test(trimmed)) {
-    return { city: '', stateCode: trimmed.toUpperCase() };
-  }
+  if (STATE_ABBREVIATIONS[lower]) return { city: '', stateCode: STATE_ABBREVIATIONS[lower] };
+  if (/^[A-Z]{2}$/i.test(trimmed)) return { city: '', stateCode: trimmed.toUpperCase() };
   if (trimmed.includes(',')) {
     const parts = trimmed.split(',').map(p => p.trim());
     const cityPart = parts[0];
     const statePart = parts[1] || '';
     let stateCode = '';
-    if (/^[A-Z]{2}$/i.test(statePart)) {
-      stateCode = statePart.toUpperCase();
-    } else if (STATE_ABBREVIATIONS[statePart.toLowerCase()]) {
-      stateCode = STATE_ABBREVIATIONS[statePart.toLowerCase()];
-    }
+    if (/^[A-Z]{2}$/i.test(statePart)) stateCode = statePart.toUpperCase();
+    else if (STATE_ABBREVIATIONS[statePart.toLowerCase()]) stateCode = STATE_ABBREVIATIONS[statePart.toLowerCase()];
     return { city: cityPart, stateCode };
   }
   return { city: trimmed, stateCode: '' };
 }
 
-// Hardcoded API config — env vars don't reliably load on all setups
-const API_KEY = process.env.RAPIDAPI_KEY || '3b86e8a737mshcc69ac4077e9c00p18b472jsnc475ce3e84b9';
-const API_HOST = process.env.RAPIDAPI_HOST || 'realtor-search.p.rapidapi.com';
+// Build a human-readable search query for the auto-complete API
+function buildSearchQuery(city: string, stateCode: string): string {
+  if (city && stateCode) return `${city}, ${stateCode}`;
+  if (city) return city;
+  // For state-only, use the full state name (auto-complete works better with it)
+  if (stateCode && STATE_NAMES[stateCode]) return STATE_NAMES[stateCode];
+  return stateCode;
+}
 
-const HEADERS = {
-  'X-RapidAPI-Key': API_KEY,
-  'X-RapidAPI-Host': API_HOST,
-};
+// ── Step 1: Auto-complete location → get a usable location identifier ──
+async function autoCompleteLocation(query: string): Promise<string | null> {
+  const url = `${BASE_URL}/auto-complete?input=${encodeURIComponent(query)}`;
+  console.log(`[homes/search] Auto-complete: ${url}`);
 
-/**
- * Try multiple endpoint patterns for the realtor-search API.
- * Different RapidAPI Realtor wrappers use different URL structures.
- * We try them in order and use the first one that returns data.
- */
-async function fetchFromRealtorAPI(
-  city: string,
-  stateCode: string,
-  minPrice: number,
-  maxPrice: number,
-): Promise<{ properties: any[]; source: string } | null> {
-  const host = API_HOST;
-  const baseUrl = `https://${host}`;
+  const res = await fetch(url, {
+    headers: HEADERS,
+    signal: AbortSignal.timeout(8000),
+  });
 
-  // Build location query string
-  const locationQuery = city && stateCode
-    ? `${city}, ${stateCode}`
-    : city || stateCode;
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
-
-  // List of endpoint patterns to try (different realtor-search APIs use different paths)
-  const endpoints = [
-    // Pattern 1: GET /properties with query params
-    {
-      url: `${baseUrl}/properties?location=${encodeURIComponent(locationQuery)}&minPrice=${minPrice}&maxPrice=${maxPrice}&limit=12&status=for_sale`,
-      method: 'GET' as const,
-      body: undefined,
-    },
-    // Pattern 2: GET /search with location
-    {
-      url: `${baseUrl}/search?location=${encodeURIComponent(locationQuery)}&price_min=${minPrice}&price_max=${maxPrice}&limit=12`,
-      method: 'GET' as const,
-      body: undefined,
-    },
-    // Pattern 3: POST /properties/list (like the old realtor.p.rapidapi.com)
-    {
-      url: `${baseUrl}/properties/list`,
-      method: 'POST' as const,
-      body: JSON.stringify({
-        limit: 12,
-        offset: 0,
-        status: ['for_sale'],
-        sort: { direction: 'desc', field: 'list_date' },
-        list_price: { min: minPrice, max: maxPrice },
-        ...(city ? { city } : {}),
-        ...(stateCode ? { state_code: stateCode } : {}),
-      }),
-    },
-    // Pattern 4: POST /properties/v3/list
-    {
-      url: `${baseUrl}/properties/v3/list`,
-      method: 'POST' as const,
-      body: JSON.stringify({
-        limit: 12,
-        offset: 0,
-        status: ['for_sale'],
-        sort: { direction: 'desc', field: 'list_date' },
-        list_price: { min: minPrice, max: maxPrice },
-        ...(city ? { city } : {}),
-        ...(stateCode ? { state_code: stateCode } : {}),
-      }),
-    },
-    // Pattern 5: GET /forsale with different param names
-    {
-      url: `${baseUrl}/forsale?location=${encodeURIComponent(locationQuery)}&price_min=${minPrice}&price_max=${maxPrice}&limit=12&sort=newest`,
-      method: 'GET' as const,
-      body: undefined,
-    },
-  ];
-
-  try {
-    for (const endpoint of endpoints) {
-      try {
-        const headers: Record<string, string> = {
-          ...HEADERS,
-        };
-        if (endpoint.method === 'POST') {
-          headers['Content-Type'] = 'application/json';
-        }
-
-        console.log(`[homes/search] Trying: ${endpoint.method} ${endpoint.url}`);
-
-        const response = await fetch(endpoint.url, {
-          method: endpoint.method,
-          headers,
-          body: endpoint.body,
-          signal: controller.signal,
-        });
-
-        console.log(`[homes/search] Response: ${response.status} from ${endpoint.url}`);
-
-        if (!response.ok) {
-          // Try next endpoint
-          continue;
-        }
-
-        const data = await response.json();
-
-        // Try to extract properties from various response shapes
-        const properties = extractProperties(data);
-
-        if (properties.length > 0) {
-          console.log(`[homes/search] Found ${properties.length} properties from ${endpoint.url}`);
-          return { properties, source: 'Realtor.com' };
-        }
-
-        // Log the response shape to help debug
-        console.log(`[homes/search] Response shape from ${endpoint.url}:`, JSON.stringify(Object.keys(data)).slice(0, 200));
-      } catch (endpointErr) {
-        // If aborted, don't try more endpoints
-        if (controller.signal.aborted) throw endpointErr;
-        console.log(`[homes/search] Endpoint failed: ${endpoint.url}`, endpointErr instanceof Error ? endpointErr.message : '');
-        continue;
-      }
-    }
-  } finally {
-    clearTimeout(timeout);
+  if (!res.ok) {
+    console.log(`[homes/search] Auto-complete failed: ${res.status}`);
+    return null;
   }
 
+  const json = await res.json();
+  const results = json.data || json.results || json;
+
+  if (!Array.isArray(results) || results.length === 0) {
+    console.log('[homes/search] Auto-complete returned no results');
+    return null;
+  }
+
+  // For city queries, prefer a city-type result; for state, prefer state-type
+  // The location param for search-sale appears to accept zip codes
+  // Look for: postal_code, slug_id, city name, or geo_id
+  for (const r of results) {
+    // If there's a zip code in the result, use it (most reliable for search)
+    if (r.postal_code) return r.postal_code;
+  }
+
+  // Try slug_id (e.g., "Boise_ID" or "Idaho")
+  const first = results[0];
+  if (first.slug_id) return first.slug_id;
+
+  // Try city name
+  if (first.city) {
+    const st = first.state_code || '';
+    return st ? `${first.city}, ${st}` : first.city;
+  }
+
+  // Try geo_id
+  if (first.geo_id) return first.geo_id;
+
+  // Last resort: use the _id field
+  if (first._id) return first._id;
+
+  console.log('[homes/search] Auto-complete: no usable ID in result:', JSON.stringify(first).slice(0, 200));
   return null;
 }
 
-/**
- * Extract property listings from various possible API response shapes.
- */
-function extractProperties(data: any): any[] {
-  if (!data) return [];
+// ── Step 2: Search for-sale listings ────────────────────────────────
+async function searchForSale(
+  locationId: string,
+  minPrice: number,
+  maxPrice: number,
+): Promise<any[] | null> {
+  // The search-sale endpoint example used a zip code for location
+  // We'll pass whatever identifier we got from auto-complete
+  const params = new URLSearchParams({
+    location: locationId,
+    sort_by: 'RelevantListings',
+  });
 
-  // Common response paths used by different Realtor APIs
-  const paths = [
-    data.data?.home_search?.results,
-    data.data?.results,
-    data.results,
-    data.properties,
-    data.listings,
-    data.data?.properties,
-    data.data?.listings,
-    data.homes,
-    data.data?.homes,
-    data.data,
-  ];
+  const url = `${BASE_URL}/property/search-sale?${params.toString()}`;
+  console.log(`[homes/search] Search for sale: ${url}`);
 
-  for (const candidate of paths) {
-    if (Array.isArray(candidate) && candidate.length > 0) {
-      return candidate;
+  const res = await fetch(url, {
+    headers: HEADERS,
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!res.ok) {
+    console.log(`[homes/search] Search failed: ${res.status}`);
+    const text = await res.text().catch(() => '');
+    console.log(`[homes/search] Response body: ${text.slice(0, 300)}`);
+    return null;
+  }
+
+  const json = await res.json();
+  console.log(`[homes/search] Search response keys: ${JSON.stringify(Object.keys(json))}`);
+
+  // Extract the listings array from whichever response shape we get
+  const listings = json.data || json.properties || json.results || json.listings || json.homes || [];
+
+  if (Array.isArray(listings) && listings.length > 0) {
+    console.log(`[homes/search] Found ${listings.length} listings`);
+    console.log(`[homes/search] First listing keys: ${JSON.stringify(Object.keys(listings[0]))}`);
+    return listings;
+  }
+
+  // Maybe the data is nested one level deeper
+  if (json.data && typeof json.data === 'object' && !Array.isArray(json.data)) {
+    for (const key of Object.keys(json.data)) {
+      if (Array.isArray(json.data[key]) && json.data[key].length > 0) {
+        console.log(`[homes/search] Found ${json.data[key].length} listings in data.${key}`);
+        return json.data[key];
+      }
     }
   }
 
-  // If data itself is an array
-  if (Array.isArray(data) && data.length > 0) {
-    return data;
-  }
-
-  return [];
+  console.log(`[homes/search] No listings found. Response preview: ${JSON.stringify(json).slice(0, 500)}`);
+  return null;
 }
 
-/**
- * Normalize a single property from various API formats into our Home interface.
- */
+// ── Step 3: Get photos for a property ───────────────────────────────
+async function getPhotos(propertyId: string, listingId: string): Promise<string> {
+  // The property_id param is base64-encoded JSON
+  const idPayload = JSON.stringify({ property_id: propertyId, listing_id: listingId });
+  const encoded = Buffer.from(idPayload).toString('base64');
+
+  const url = `${BASE_URL}/property/get-photos?property_id=${encodeURIComponent(encoded)}`;
+
+  try {
+    const res = await fetch(url, {
+      headers: HEADERS,
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!res.ok) return '';
+
+    const json = await res.json();
+    const photos = json.data || json.photos || json.images || [];
+
+    if (Array.isArray(photos) && photos.length > 0) {
+      const first = photos[0];
+      if (typeof first === 'string') return first;
+      return first?.href || first?.url || first?.src || first?.photo || '';
+    }
+
+    // Maybe photos are nested
+    if (json.data?.photos && Array.isArray(json.data.photos) && json.data.photos.length > 0) {
+      const first = json.data.photos[0];
+      return first?.href || first?.url || first?.src || '';
+    }
+  } catch {
+    // Silently fail — photo is optional
+  }
+
+  return '';
+}
+
+// ── Normalize a listing into our Home interface ─────────────────────
 function normalizeProperty(prop: any): {
   id: string;
   address: string;
@@ -228,83 +225,54 @@ function normalizeProperty(prop: any): {
   photoUrl: string;
   listingUrl: string;
   status: string;
+  _propertyId?: string;
+  _listingId?: string;
 } {
-  // Handle nested location/address structures (realtor.p.rapidapi.com format)
   const loc = prop.location || {};
   const addr = loc.address || prop.address || {};
   const desc = prop.description || {};
 
-  // Extract address string
   let address = '';
-  if (typeof addr === 'string') {
-    address = addr;
-  } else {
-    address = addr.line || addr.street_name || addr.street || addr.full || prop.street_address || prop.address_line || '';
-  }
+  if (typeof addr === 'string') address = addr;
+  else address = addr.line || addr.street_name || addr.street || addr.full || prop.street_address || prop.address_line || '';
 
-  // Extract city
   const city = addr.city || prop.city || loc.city || '';
-
-  // Extract state
   const state = addr.state_code || addr.state || prop.state_code || prop.state || loc.state_code || '';
-
-  // Extract zipcode
   const zipcode = addr.postal_code || addr.zip || prop.zip || prop.zipcode || prop.postal_code || loc.postal_code || '';
-
-  // Extract price
   const price = prop.list_price || prop.price || prop.listPrice || desc.price || 0;
-
-  // Extract bedrooms/bathrooms
   const bedrooms = desc.beds || desc.bedrooms || prop.beds || prop.bedrooms || 0;
   const bathrooms = desc.baths || desc.bathrooms || prop.baths || prop.bathrooms || 0;
-
-  // Extract sqft
   const sqft = desc.sqft || prop.sqft || prop.square_feet || prop.lot_sqft || desc.lot_sqft || 0;
-
-  // Extract home type
   const homeType = desc.type || prop.type || prop.property_type || prop.homeType || 'Single Family';
 
-  // Extract photo URL — try multiple paths
+  // Photo URL — try all common paths
   let photoUrl = '';
-  if (prop.primary_photo?.href) {
-    photoUrl = prop.primary_photo.href;
-  } else if (prop.photo?.href) {
-    photoUrl = prop.photo.href;
-  } else if (typeof prop.thumbnail === 'string' && prop.thumbnail.startsWith('http')) {
-    photoUrl = prop.thumbnail;
-  } else if (typeof prop.image === 'string' && prop.image.startsWith('http')) {
-    photoUrl = prop.image;
-  } else if (typeof prop.photo_url === 'string' && prop.photo_url.startsWith('http')) {
-    photoUrl = prop.photo_url;
-  } else if (typeof prop.imageUrl === 'string' && prop.imageUrl.startsWith('http')) {
-    photoUrl = prop.imageUrl;
-  } else if (Array.isArray(prop.photos) && prop.photos.length > 0) {
-    const first = prop.photos[0];
-    photoUrl = (typeof first === 'string' ? first : first?.href || first?.url || '') || '';
-  } else if (Array.isArray(prop.images) && prop.images.length > 0) {
-    const first = prop.images[0];
-    photoUrl = (typeof first === 'string' ? first : first?.href || first?.url || '') || '';
+  if (prop.primary_photo?.href) photoUrl = prop.primary_photo.href;
+  else if (prop.photo?.href) photoUrl = prop.photo.href;
+  else if (typeof prop.thumbnail === 'string' && prop.thumbnail.startsWith('http')) photoUrl = prop.thumbnail;
+  else if (typeof prop.image === 'string' && prop.image.startsWith('http')) photoUrl = prop.image;
+  else if (typeof prop.photo_url === 'string' && prop.photo_url.startsWith('http')) photoUrl = prop.photo_url;
+  else if (typeof prop.imageUrl === 'string' && prop.imageUrl.startsWith('http')) photoUrl = prop.imageUrl;
+  else if (Array.isArray(prop.photos) && prop.photos.length > 0) {
+    const f = prop.photos[0];
+    photoUrl = typeof f === 'string' ? f : (f?.href || f?.url || '');
   }
 
-  // Build listing URL
+  // Listing URL — build from permalink or property_id
   let listingUrl = '';
   if (prop.permalink) {
-    listingUrl = prop.permalink.startsWith('http')
-      ? prop.permalink
-      : `https://www.realtor.com/realestateandhomes-detail/${prop.permalink}`;
+    listingUrl = prop.permalink.startsWith('http') ? prop.permalink : `https://www.realtor.com/realestateandhomes-detail/${prop.permalink}`;
+  } else if (prop.href) {
+    listingUrl = prop.href.startsWith('http') ? prop.href : `https://www.realtor.com${prop.href}`;
   } else if (prop.url && typeof prop.url === 'string') {
     listingUrl = prop.url.startsWith('http') ? prop.url : `https://www.realtor.com${prop.url}`;
   } else if (prop.detail_url) {
     listingUrl = prop.detail_url.startsWith('http') ? prop.detail_url : `https://www.realtor.com${prop.detail_url}`;
   } else if (prop.property_id) {
     listingUrl = `https://www.realtor.com/realestateandhomes-detail/${prop.property_id}`;
-  } else if (prop.listing_id) {
-    listingUrl = `https://www.realtor.com/realestateandhomes-detail/${prop.listing_id}`;
   } else {
-    // Fallback: build a search URL for the specific city
     const citySlug = (city || '').replace(/\s+/g, '-');
-    const stateSlug = state || '';
-    listingUrl = `https://www.realtor.com/realestateandhomes-search/${citySlug}_${stateSlug}`;
+    listingUrl = `https://www.realtor.com/realestateandhomes-search/${citySlug}_${state}`;
   }
 
   return {
@@ -321,9 +289,12 @@ function normalizeProperty(prop: any): {
     photoUrl,
     listingUrl,
     status: prop.status || 'for_sale',
+    _propertyId: prop.property_id || '',
+    _listingId: prop.listing_id || '',
   };
 }
 
+// ── POST handler (used by the carousel component) ───────────────────
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -337,123 +308,144 @@ export async function POST(request: NextRequest) {
     }
 
     if (!API_KEY) {
-      return NextResponse.json({
-        success: true,
-        homes: [],
-        count: 0,
-        source: 'no_api_key',
-      });
+      return NextResponse.json({ success: true, homes: [], count: 0, source: 'no_api_key' });
     }
 
     const { city, stateCode } = parseLocation(location);
+    const searchQuery = buildSearchQuery(city, stateCode);
 
-    try {
-      const result = await fetchFromRealtorAPI(city, stateCode, minPrice, maxPrice);
-
-      if (!result || result.properties.length === 0) {
-        console.log('[homes/search] No properties found from any endpoint');
-        return NextResponse.json({
-          success: true,
-          homes: [],
-          count: 0,
-          source: 'no_results',
-        });
-      }
-
-      const homes = result.properties.slice(0, 12).map(normalizeProperty);
-
-      // Log first home shape for debugging
-      if (homes.length > 0) {
-        console.log('[homes/search] First normalized home:', JSON.stringify(homes[0]).slice(0, 300));
-      }
-
-      return NextResponse.json({
-        success: true,
-        homes,
-        count: homes.length,
-        source: result.source,
-      });
-    } catch (fetchErr) {
-      console.error('[homes/search] All endpoints failed:', fetchErr instanceof Error ? fetchErr.message : fetchErr);
-      return NextResponse.json({
-        success: true,
-        homes: [],
-        count: 0,
-        source: 'api_error',
-      });
+    // Step 1: Auto-complete to get location ID
+    const locationId = await autoCompleteLocation(searchQuery);
+    if (!locationId) {
+      console.log('[homes/search] Could not resolve location, returning empty');
+      return NextResponse.json({ success: true, homes: [], count: 0, source: 'location_not_found' });
     }
+
+    console.log(`[homes/search] Resolved location "${searchQuery}" → "${locationId}"`);
+
+    // Step 2: Search for-sale listings
+    const listings = await searchForSale(locationId, minPrice, maxPrice);
+    if (!listings || listings.length === 0) {
+      return NextResponse.json({ success: true, homes: [], count: 0, source: 'no_results' });
+    }
+
+    // Step 3: Normalize listings
+    let homes = listings.slice(0, 12).map(normalizeProperty);
+
+    // Step 4: Filter by price range
+    const priceFiltered = homes.filter(h => h.price >= minPrice && h.price <= maxPrice);
+    if (priceFiltered.length > 0) {
+      homes = priceFiltered;
+    }
+
+    // Step 5: For homes without photos, try get-photos endpoint (limit to 8 to avoid rate limits)
+    const needPhotos = homes.filter(h => !h.photoUrl && h._propertyId).slice(0, 8);
+    if (needPhotos.length > 0) {
+      console.log(`[homes/search] Fetching photos for ${needPhotos.length} listings...`);
+      const photoPromises = needPhotos.map(async (home) => {
+        const url = await getPhotos(home._propertyId!, home._listingId || '');
+        if (url) home.photoUrl = url;
+      });
+      await Promise.allSettled(photoPromises);
+    }
+
+    // Remove internal fields
+    const cleaned = homes.map(({ _propertyId, _listingId, ...rest }) => rest);
+
+    if (cleaned.length > 0) {
+      console.log(`[homes/search] Returning ${cleaned.length} homes. First:`, JSON.stringify(cleaned[0]).slice(0, 300));
+    }
+
+    return NextResponse.json({
+      success: true,
+      homes: cleaned,
+      count: cleaned.length,
+      source: 'Realtor.com',
+    });
   } catch (error) {
-    console.error('[homes/search] Request error:', error);
+    console.error('[homes/search] Error:', error);
     return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to search homes',
-        homes: [],
-      },
+      { success: false, error: error instanceof Error ? error.message : 'Failed to search', homes: [] },
       { status: 500 }
     );
   }
 }
 
-// Debug endpoint - shows API config and lets you test manually
+// ── GET debug endpoint ──────────────────────────────────────────────
 export async function GET(request: NextRequest) {
   const testLocation = request.nextUrl.searchParams.get('test');
 
   if (testLocation) {
-    // Test mode: try to fetch and return raw API response shape
     const { city, stateCode } = parseLocation(testLocation);
-    const host = API_HOST;
+    const searchQuery = buildSearchQuery(city, stateCode);
 
-    const locationQuery = city && stateCode ? `${city}, ${stateCode}` : city || stateCode;
+    const steps: any[] = [];
 
-    // Try all likely URL patterns for "Search for sale" endpoint
-    const endpoints = [
-      `https://${host}/searchForSale?location=${encodeURIComponent(locationQuery)}&minPrice=200000&maxPrice=500000&limit=3`,
-      `https://${host}/search-for-sale?location=${encodeURIComponent(locationQuery)}&minPrice=200000&maxPrice=500000&limit=3`,
-      `https://${host}/searchforsale?location=${encodeURIComponent(locationQuery)}&minPrice=200000&maxPrice=500000&limit=3`,
-      `https://${host}/search_for_sale?location=${encodeURIComponent(locationQuery)}&minPrice=200000&maxPrice=500000&limit=3`,
-      `https://${host}/forSale?location=${encodeURIComponent(locationQuery)}&minPrice=200000&maxPrice=500000&limit=3`,
-      `https://${host}/for-sale?location=${encodeURIComponent(locationQuery)}&minPrice=200000&maxPrice=500000&limit=3`,
-      `https://${host}/autoComplete?input=${encodeURIComponent(locationQuery)}`,
-      `https://${host}/auto-complete?input=${encodeURIComponent(locationQuery)}`,
-    ];
+    // Step 1: Auto-complete
+    let locationId: string | null = null;
+    try {
+      const acUrl = `${BASE_URL}/auto-complete?input=${encodeURIComponent(searchQuery)}`;
+      const acRes = await fetch(acUrl, { headers: HEADERS, signal: AbortSignal.timeout(8000) });
+      const acJson = await acRes.json();
+      const acData = acJson.data || acJson.results || acJson;
+      const firstResult = Array.isArray(acData) && acData.length > 0 ? acData[0] : null;
 
-    const results: any[] = [];
+      // Extract location ID same way as autoCompleteLocation
+      if (firstResult?.postal_code) locationId = firstResult.postal_code;
+      else if (firstResult?.slug_id) locationId = firstResult.slug_id;
+      else if (firstResult?.city) locationId = firstResult.state_code ? `${firstResult.city}, ${firstResult.state_code}` : firstResult.city;
+      else if (firstResult?.geo_id) locationId = firstResult.geo_id;
+      else if (firstResult?._id) locationId = firstResult._id;
 
-    for (const url of endpoints) {
+      steps.push({
+        step: 'auto-complete',
+        url: acUrl,
+        status: acRes.status,
+        resultCount: Array.isArray(acData) ? acData.length : 0,
+        resolvedLocationId: locationId,
+        firstResult: firstResult ? JSON.stringify(firstResult).slice(0, 400) : null,
+      });
+    } catch (e) {
+      steps.push({ step: 'auto-complete', error: e instanceof Error ? e.message : String(e) });
+    }
+
+    // Step 2: Search for sale (only if we got a location ID)
+    if (locationId) {
       try {
-        const res = await fetch(url, {
-          headers: HEADERS,
-          signal: AbortSignal.timeout(8000),
-        });
-        const text = await res.text();
-        let parsed;
-        try { parsed = JSON.parse(text); } catch { parsed = text.slice(0, 500); }
-        results.push({
-          url,
-          status: res.status,
-          keys: parsed && typeof parsed === 'object' ? Object.keys(parsed) : null,
-          preview: JSON.stringify(parsed).slice(0, 500),
+        const searchUrl = `${BASE_URL}/property/search-sale?location=${encodeURIComponent(locationId)}&sort_by=RelevantListings`;
+        const searchRes = await fetch(searchUrl, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
+        const searchJson = await searchRes.json();
+
+        const listings = searchJson.data || searchJson.properties || searchJson.results || [];
+        const firstListing = Array.isArray(listings) && listings.length > 0 ? listings[0] : null;
+
+        steps.push({
+          step: 'search-sale',
+          url: searchUrl,
+          status: searchRes.status,
+          responseKeys: Object.keys(searchJson),
+          listingCount: Array.isArray(listings) ? listings.length : 0,
+          firstListingKeys: firstListing ? Object.keys(firstListing) : null,
+          firstListingPreview: firstListing ? JSON.stringify(firstListing).slice(0, 500) : null,
         });
       } catch (e) {
-        results.push({
-          url,
-          error: e instanceof Error ? e.message : String(e),
-        });
+        steps.push({ step: 'search-sale', error: e instanceof Error ? e.message : String(e) });
       }
     }
 
     return NextResponse.json({
-      host,
+      host: API_HOST,
       apiKeyConfigured: !!API_KEY,
+      locationInput: testLocation,
+      searchQuery,
       locationParsed: { city, stateCode },
-      endpointTests: results,
+      steps,
     });
   }
 
   return NextResponse.json({
     status: 'ready',
-    message: 'Real estate search API - add ?test=Idaho to test endpoints',
+    message: 'Real estate search API — add ?test=Boise to test the 2-step flow',
     apiKeyConfigured: !!API_KEY,
     apiHost: API_HOST,
   });
