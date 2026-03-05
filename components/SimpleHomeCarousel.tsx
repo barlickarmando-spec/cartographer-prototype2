@@ -426,7 +426,7 @@ function CompactHomeCard({ home, index, onClick }: { home: Home; index: number; 
   return (
     <button onClick={onClick}
       className="text-left bg-white rounded-xl border border-[#E5E7EB] overflow-hidden hover:shadow-lg transition-all duration-200 group cursor-pointer w-full">
-      <div className={`relative h-28 bg-gradient-to-br ${gradient} overflow-hidden`}>
+      <div className={`relative h-40 bg-gradient-to-br ${gradient} overflow-hidden`}>
         {home.photoUrl && !imgError ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img src={home.photoUrl} alt={`Home at ${home.address}`}
@@ -440,24 +440,24 @@ function CompactHomeCard({ home, index, onClick }: { home: Home; index: number; 
             <span className="text-[10px] text-[#5BA4E5] opacity-60">{home.city}, {home.state}</span>
           </div>
         )}
-        <div className="absolute top-2 left-2 bg-[#5BA4E5] text-white px-2 py-0.5 rounded-full text-xs font-bold shadow">
+        <div className="absolute top-2 left-2 bg-[#5BA4E5] text-white px-1.5 py-0.5 rounded-full text-[10px] font-bold shadow">
           {formatPrice(home.price)}
         </div>
         {home.homeType && (
-          <div className="absolute top-2 right-2 bg-white/90 text-[#2C3E50] px-1.5 py-0.5 rounded text-[9px] font-medium shadow">
+          <div className="absolute top-2 right-2 bg-white/90 text-[#2C3E50] px-1.5 py-0.5 rounded text-[8px] font-medium shadow">
             {home.homeType}
           </div>
         )}
       </div>
-      <div className="p-2.5">
-        <div className="flex items-center gap-2 text-[10px] text-[#6B7280] mb-1">
+      <div className="p-2">
+        <div className="flex items-center gap-1.5 text-[9px] text-[#6B7280] mb-0.5">
           <span className="font-medium">{home.bedrooms} bd</span>
           <span>|</span>
           <span className="font-medium">{home.bathrooms} ba</span>
           {home.sqft > 0 && (<><span>|</span><span className="font-medium">{home.sqft.toLocaleString()} sqft</span></>)}
         </div>
-        <p className="text-xs font-medium text-[#2C3E50] truncate">{home.address}</p>
-        <p className="text-[10px] text-[#9CA3AF] truncate">{home.city}, {home.state} {home.zipcode}</p>
+        <p className="text-[11px] font-medium text-[#2C3E50] truncate">{home.address}</p>
+        <p className="text-[9px] text-[#9CA3AF] truncate">{home.city}, {home.state} {home.zipcode}</p>
       </div>
     </button>
   );

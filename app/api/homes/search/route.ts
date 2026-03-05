@@ -91,13 +91,25 @@ async function autoCompleteLocation(query: string): Promise<string | null> {
     return null;
   }
 
-  // The search-sale API wants "City, ST" format (confirmed via localtionSuggestion)
-  // Priority: City+State > zip code > slug_id > geo_id
+  // The search-sale API wants "City, ST" format (confirmed via testing)
   const first = results[0];
 
-  // Best: "City, ST" format
+  // Best: "City, ST" format from first result
   if (first.city && first.state_code) {
     return `${first.city}, ${first.state_code}`;
+  }
+
+  // For state-only queries (e.g., "Idaho"), the first result is a state.
+  // Look for the first city-type result in the list to use instead.
+  if (first.area_type === 'state' || (first.state_code && !first.city)) {
+    const stateCode = first.state_code;
+    const cityResult = results.find((r: any) => r.area_type === 'city' && r.state_code === stateCode && r.city);
+    if (cityResult) {
+      console.log(`[homes/search] State query: using city "${cityResult.city}, ${cityResult.state_code}"`);
+      return `${cityResult.city}, ${cityResult.state_code}`;
+    }
+    // No city in results — try the state's capital or largest city
+    // Fall through to other methods
   }
 
   // Zip code
@@ -105,8 +117,6 @@ async function autoCompleteLocation(query: string): Promise<string | null> {
     if (r.postal_code) return r.postal_code;
   }
 
-  // State name (for state-only queries)
-  if (first.state && !first.city) return first.state;
   if (first.slug_id) return first.slug_id;
   if (first.geo_id) return first.geo_id;
   if (first._id) return first._id;
@@ -255,6 +265,12 @@ function normalizeProperty(prop: any): {
   else if (Array.isArray(prop.photos) && prop.photos.length > 0) {
     const f = prop.photos[0];
     photoUrl = typeof f === 'string' ? f : (f?.href || f?.url || '');
+  }
+
+  // Upgrade Realtor.com photo URLs to larger size
+  // URLs like: https://ap.rdcpix.com/abc123s.jpg → abc123l.jpg (s=small, l=large)
+  if (photoUrl && photoUrl.includes('rdcpix.com')) {
+    photoUrl = photoUrl.replace(/([a-f0-9]+)s\.(jpg|jpeg|png|webp)/i, '$1l.$2');
   }
 
   // Listing URL — build from permalink or property_id
