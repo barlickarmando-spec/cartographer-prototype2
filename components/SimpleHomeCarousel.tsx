@@ -3,6 +3,12 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
+interface GoogleImage {
+  url: string;
+  title: string;
+  contextLink: string;
+}
+
 interface SimpleHomeCarouselProps {
   location: string;
   targetPrice: number;
@@ -100,6 +106,7 @@ export default function SimpleHomeCarousel({
   priceRange = 50000,
 }: SimpleHomeCarouselProps) {
   const [homes, setHomes] = useState<Home[]>([]);
+  const [googleImages, setGoogleImages] = useState<GoogleImage[]>([]);
   const [source, setSource] = useState('');
   const [totalAvailable, setTotalAvailable] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -119,9 +126,22 @@ export default function SimpleHomeCarousel({
   useEffect(() => {
     let cancelled = false;
 
+    async function fetchGoogleImages(): Promise<GoogleImage[]> {
+      try {
+        const params = new URLSearchParams({ location, price: String(targetPrice) });
+        const res = await fetch(`/api/home-images?${params}`);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.success && data.images ? data.images : [];
+      } catch {
+        return [];
+      }
+    }
+
     async function fetchHomes() {
       setLoading(true);
       setError(false);
+      setGoogleImages([]);
 
       try {
         const res = await fetch('/api/homes/search', {
@@ -144,15 +164,21 @@ export default function SimpleHomeCarousel({
             setSource(data.source || '');
             setTotalAvailable(data.totalAvailable || allHomes.length);
           } else {
+            // No real listings — try Google Image Search as fallback
             setHomes([]);
             setSource('');
             setTotalAvailable(0);
+            const images = await fetchGoogleImages();
+            if (!cancelled) setGoogleImages(images);
           }
         }
       } catch {
         if (!cancelled) {
           setError(true);
           setHomes([]);
+          // API error — try Google Image Search as fallback
+          const images = await fetchGoogleImages();
+          if (!cancelled) setGoogleImages(images);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -205,8 +231,19 @@ export default function SimpleHomeCarousel({
     );
   }
 
-  // No real listings available — show the browse-on-Realtor.com interface
+  // No real listings available — try Google Image fallback, then browse-on-Realtor.com
   if (!hasRealListings) {
+    if (googleImages.length > 0) {
+      return (
+        <GoogleImageFallback
+          location={location}
+          targetPrice={targetPrice}
+          minPrice={minPrice}
+          maxPrice={maxPrice}
+          images={googleImages}
+        />
+      );
+    }
     return <BrowseRealtorInterface location={location} minPrice={minPrice} maxPrice={maxPrice} targetPrice={targetPrice} />;
   }
 
@@ -299,6 +336,100 @@ export default function SimpleHomeCarousel({
           onSetIndex={(idx) => { setModalIndex(idx); setModalHome(displayHomes[idx]); }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * When real listings are unavailable, show Google Image Search results
+ * as a visual preview of homes in the area, with a link to Realtor.com.
+ */
+function GoogleImageFallback({
+  location,
+  targetPrice,
+  minPrice,
+  maxPrice,
+  images,
+}: {
+  location: string;
+  targetPrice: number;
+  minPrice: number;
+  maxPrice: number;
+  images: GoogleImage[];
+}) {
+  const priceLabel = formatPrice(targetPrice);
+  const [failedUrls, setFailedUrls] = useState<Set<string>>(new Set());
+
+  const visibleImages = images.filter((img) => !failedUrls.has(img.url));
+
+  if (visibleImages.length === 0) {
+    return <BrowseRealtorInterface location={location} minPrice={minPrice} maxPrice={maxPrice} targetPrice={targetPrice} />;
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <h3 className="text-base font-semibold text-[#2C3E50] mb-0.5">{location} Homes ~ {priceLabel}</h3>
+        <p className="text-xs text-[#6B7280]">
+          Sample images of homes in this area
+          <span className="ml-1 text-[#9CA3AF]">via Google Images</span>
+        </p>
+      </div>
+
+      <div className={`grid gap-3 ${visibleImages.length === 1 ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
+        {visibleImages.map((img, idx) => {
+          const gradient = CARD_GRADIENTS[idx % CARD_GRADIENTS.length];
+          return (
+            <a
+              key={img.url}
+              href={img.contextLink || '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group bg-white rounded-xl border border-[#E5E7EB] overflow-hidden hover:shadow-lg hover:border-[#5BA4E5] transition-all duration-200"
+            >
+              <div className={`relative h-[40vh] sm:h-[50vh] bg-gradient-to-br ${gradient} overflow-hidden`}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={img.url}
+                  alt={img.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  loading="lazy"
+                  onError={() => setFailedUrls((prev) => new Set(prev).add(img.url))}
+                />
+              </div>
+              <div className="p-2">
+                <p className="text-[11px] font-medium text-[#2C3E50] truncate">{img.title}</p>
+                <p className="text-[9px] text-[#9CA3AF] truncate">{location}</p>
+              </div>
+            </a>
+          );
+        })}
+      </div>
+
+      {/* Browse on Realtor.com CTA */}
+      <div className="bg-gradient-to-r from-[#EFF6FF] to-[#DBEAFE] border border-[#BFDBFE] rounded-xl p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex-shrink-0 bg-[#5BA4E5] text-white p-2.5 rounded-full shadow">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-[#2C3E50]">See real listings in {location}</p>
+            <p className="text-xs text-[#6B7280]">
+              {formatPriceFull(minPrice)} – {formatPriceFull(maxPrice)} on Realtor.com
+            </p>
+          </div>
+          <a
+            href={buildRealtorSearchUrl(location, minPrice, maxPrice)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-shrink-0 px-4 py-2 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-colors font-semibold text-sm shadow"
+          >
+            Browse
+          </a>
+        </div>
+      </div>
     </div>
   );
 }
