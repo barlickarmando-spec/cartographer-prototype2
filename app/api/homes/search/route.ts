@@ -226,13 +226,24 @@ async function getPhotos(propertyId: string, listingId: string): Promise<string>
 function upgradePhotoUrl(url: string): string {
   if (!url) return url;
 
-  // RDC/rdcpix URLs use patterns like "-w480_h360.jpg" or "-w{n}_h{n}_x2.jpg"
-  // Replace with large resolution
-  let upgraded = url.replace(/-w\d+_h\d+(_x2)?/g, '-w1024_h768');
+  let upgraded = url;
 
-  // Some URLs use "s.jpg" (small), "m.jpg" (medium), "l.jpg" (large), "od.jpg" (original)
-  // Try to upgrade to large
-  upgraded = upgraded.replace(/\/([^/]+)s\.jpg$/i, '/$1l.jpg');
+  // rdcpix URLs use letter suffixes for size: s=small, m=medium, l=large, od=original
+  // Example working large URL: http://nh.rdcpix.com/<hash>l-f<id>l.jpg
+  if (/rdcpix\.com/i.test(upgraded)) {
+    // Pattern: <hash><size>-f<id><size>.jpg → replace size letters with 'l' (large)
+    // Handle dimension-based URLs first: strip -w{n}_h{n} entirely
+    upgraded = upgraded.replace(/-w\d+_h\d+(_x2)?/g, '');
+    // Upgrade size suffix before -f to 'l': e.g. ...3s-f... → ...3l-f...
+    upgraded = upgraded.replace(/([0-9a-f])[smt](-f)/i, '$1l$2');
+    // Upgrade trailing size suffix: e.g. ...932s.jpg → ...932l.jpg
+    upgraded = upgraded.replace(/([0-9a-f])[smt](\.jpg)/i, '$1l$2');
+  } else {
+    // Non-rdcpix URLs: try dimension upgrade
+    upgraded = upgraded.replace(/-w\d+_h\d+(_x2)?/g, '-w1024_h768');
+    // s.jpg → l.jpg for other CDNs
+    upgraded = upgraded.replace(/\/([^/]+)s\.jpg$/i, '/$1l.jpg');
+  }
 
   // If URL has a "thumbs" path segment, try removing it for full-size
   upgraded = upgraded.replace(/\/thumbs\//, '/');
