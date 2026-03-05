@@ -421,16 +421,18 @@ export async function GET(request: NextRequest) {
         const searchRes = await fetch(searchUrl, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
         const searchJson = await searchRes.json();
 
+        const listings = Array.isArray(searchJson.data) ? searchJson.data : [];
+        const firstListing = listings[0] || null;
+
         steps.push({
           step: `search-sale (${fmt.label}: ${fmt.value})`,
           url: searchUrl,
           status: searchRes.status,
           message: searchJson.message,
           totalResultCount: searchJson.totalResultCount,
-          dataType: typeof searchJson.data,
-          dataIsArray: Array.isArray(searchJson.data),
-          dataPreview: JSON.stringify(searchJson.data).slice(0, 500),
-          suggestion: searchJson.localtionSuggestion ? JSON.stringify(searchJson.localtionSuggestion).slice(0, 300) : null,
+          listingCount: listings.length,
+          firstListingKeys: firstListing ? Object.keys(firstListing) : null,
+          firstListingFull: firstListing ? JSON.stringify(firstListing).slice(0, 2000) : null,
         });
 
         // If we got results, stop trying
