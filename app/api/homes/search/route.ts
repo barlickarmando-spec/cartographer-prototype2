@@ -334,40 +334,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const debug: Record<string, any> = {};
+
     if (!API_KEY) {
       return NextResponse.json({ success: true, homes: [], count: 0, source: 'no_api_key' });
     }
 
     const { city, stateCode } = parseLocation(location);
     const searchQuery = buildSearchQuery(city, stateCode);
+    debug.searchQuery = searchQuery;
 
     // Step 1: Auto-complete to get location ID
     const locationId = await autoCompleteLocation(searchQuery);
+    debug.locationId = locationId;
     if (!locationId) {
-      console.log('[homes/search] Could not resolve location, returning empty');
-      return NextResponse.json({ success: true, homes: [], count: 0, source: 'location_not_found' });
+      return NextResponse.json({ success: true, homes: [], count: 0, source: 'location_not_found', debug });
     }
-
-    console.log(`[homes/search] Resolved location "${searchQuery}" → "${locationId}"`);
 
     // Step 2: Search for-sale listings
     const listings = await searchForSale(locationId, minPrice, maxPrice);
+    debug.rawListingCount = listings?.length || 0;
     if (!listings || listings.length === 0) {
-      return NextResponse.json({ success: true, homes: [], count: 0, source: 'no_results' });
+      return NextResponse.json({ success: true, homes: [], count: 0, source: 'no_results', debug });
     }
 
     // Step 3: Normalize all listings
     let homes = listings.map(normalizeProperty);
+    debug.normalizedCount = homes.length;
+    debug.withPhotos = homes.filter(h => h.photoUrl).length;
+    debug.samplePhotoUrl = homes.find(h => h.photoUrl)?.photoUrl || 'none';
+    debug.pricesFound = homes.slice(0, 5).map(h => h.price);
 
     // Step 4: Prefer homes in price range, but keep all if too few match
     const priceFiltered = homes.filter(h => h.price >= minPrice && h.price <= maxPrice);
+    debug.inPriceRange = priceFiltered.length;
     homes = priceFiltered.length >= 2 ? priceFiltered : homes;
     homes = homes.slice(0, 12);
 
     // Step 5: For homes without photos, try get-photos endpoint (limit to 8 to avoid rate limits)
     const needPhotos = homes.filter(h => !h.photoUrl && h._propertyId).slice(0, 8);
     if (needPhotos.length > 0) {
-      console.log(`[homes/search] Fetching photos for ${needPhotos.length} listings...`);
+      debug.fetchingPhotosFor = needPhotos.length;
       const photoPromises = needPhotos.map(async (home) => {
         const url = await getPhotos(home._propertyId!, home._listingId || '');
         if (url) home.photoUrl = url;
@@ -377,16 +384,15 @@ export async function POST(request: NextRequest) {
 
     // Remove internal fields
     const cleaned = homes.map(({ _propertyId, _listingId, ...rest }) => rest);
-
-    if (cleaned.length > 0) {
-      console.log(`[homes/search] Returning ${cleaned.length} homes. First:`, JSON.stringify(cleaned[0]).slice(0, 300));
-    }
+    debug.finalCount = cleaned.length;
+    debug.finalWithPhotos = cleaned.filter(h => h.photoUrl).length;
 
     return NextResponse.json({
       success: true,
       homes: cleaned,
       count: cleaned.length,
       source: 'Realtor.com',
+      debug,
     });
   } catch (error) {
     console.error('[homes/search] Error:', error);
