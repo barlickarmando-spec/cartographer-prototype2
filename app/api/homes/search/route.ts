@@ -409,55 +409,40 @@ export async function GET(request: NextRequest) {
       steps.push({ step: 'auto-complete', error: e instanceof Error ? e.message : String(e) });
     }
 
-    // Step 2: Search for sale (only if we got a location ID)
-    if (locationId) {
+    // Step 2: Try search-sale with multiple location ID formats
+    // The API example used a zip code (12746), so slug_id might not work
+    const acFirst = steps[0]?.firstResult ? JSON.parse(steps[0].firstResult) : null;
+    const locationFormats: { label: string; value: string }[] = [];
+
+    if (locationId) locationFormats.push({ label: 'slug_id', value: locationId });
+    if (acFirst?.geo_id) locationFormats.push({ label: 'geo_id', value: acFirst.geo_id });
+    if (acFirst?.city && acFirst?.state_code) locationFormats.push({ label: 'city_state', value: `${acFirst.city}, ${acFirst.state_code}` });
+    if (acFirst?.city) locationFormats.push({ label: 'city_only', value: acFirst.city });
+    // Try a known Boise zip code as a sanity check
+    locationFormats.push({ label: 'zip_83702', value: '83702' });
+
+    for (const fmt of locationFormats) {
       try {
-        const searchUrl = `${BASE_URL}/property/search-sale?location=${encodeURIComponent(locationId)}&sort_by=RelevantListings`;
+        const searchUrl = `${BASE_URL}/property/search-sale?location=${encodeURIComponent(fmt.value)}&sort_by=RelevantListings`;
         const searchRes = await fetch(searchUrl, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
         const searchJson = await searchRes.json();
 
-        // Dump the raw shape of each top-level key
-        const dataShape: Record<string, string> = {};
-        for (const key of Object.keys(searchJson)) {
-          const val = searchJson[key];
-          if (Array.isArray(val)) dataShape[key] = `array(${val.length})`;
-          else if (val && typeof val === 'object') dataShape[key] = `object(${Object.keys(val).join(',')})`;
-          else dataShape[key] = `${typeof val}: ${JSON.stringify(val).slice(0, 100)}`;
-        }
-
-        // Try to find listings in nested data
-        let listings: any[] = [];
-        const data = searchJson.data;
-        if (Array.isArray(data)) {
-          listings = data;
-        } else if (data && typeof data === 'object') {
-          // Check all keys inside data for arrays
-          for (const key of Object.keys(data)) {
-            if (Array.isArray(data[key]) && data[key].length > 0) {
-              listings = data[key];
-              break;
-            }
-          }
-        }
-        if (listings.length === 0 && Array.isArray(searchJson.properties)) listings = searchJson.properties;
-        if (listings.length === 0 && Array.isArray(searchJson.results)) listings = searchJson.results;
-
-        const firstListing = listings.length > 0 ? listings[0] : null;
-
         steps.push({
-          step: 'search-sale',
+          step: `search-sale (${fmt.label}: ${fmt.value})`,
           url: searchUrl,
           status: searchRes.status,
-          responseKeys: Object.keys(searchJson),
-          dataShape,
+          message: searchJson.message,
           totalResultCount: searchJson.totalResultCount,
-          listingCount: listings.length,
-          firstListingKeys: firstListing ? Object.keys(firstListing) : null,
-          firstListingPreview: firstListing ? JSON.stringify(firstListing).slice(0, 800) : null,
-          rawDataPreview: JSON.stringify(searchJson.data).slice(0, 800),
+          dataType: typeof searchJson.data,
+          dataIsArray: Array.isArray(searchJson.data),
+          dataPreview: JSON.stringify(searchJson.data).slice(0, 500),
+          suggestion: searchJson.localtionSuggestion ? JSON.stringify(searchJson.localtionSuggestion).slice(0, 300) : null,
         });
+
+        // If we got results, stop trying
+        if (searchJson.totalResultCount > 0) break;
       } catch (e) {
-        steps.push({ step: 'search-sale', error: e instanceof Error ? e.message : String(e) });
+        steps.push({ step: `search-sale (${fmt.label})`, error: e instanceof Error ? e.message : String(e) });
       }
     }
 
