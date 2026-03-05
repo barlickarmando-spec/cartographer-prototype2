@@ -103,6 +103,11 @@ export default function HomeSizeCalculatorPage() {
   const [locationSearch, setLocationSearch] = useState('');
   const locationDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Quality dropdown
+  const [qualityDropdownOpen, setQualityDropdownOpen] = useState(false);
+  const [qualitySearch, setQualitySearch] = useState('');
+  const qualityDropdownRef = useRef<HTMLDivElement>(null);
+
   // Search by Time inputs
   const [timeValue, setTimeValue] = useState('');
   const [timeUnit, setTimeUnit] = useState<'years' | 'months'>('years');
@@ -158,11 +163,14 @@ export default function HomeSizeCalculatorPage() {
     setLoading(false);
   }, [router]);
 
-  // Close dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (locationDropdownRef.current && !locationDropdownRef.current.contains(e.target as Node)) {
         setLocationDropdownOpen(false);
+      }
+      if (qualityDropdownRef.current && !qualityDropdownRef.current.contains(e.target as Node)) {
+        setQualityDropdownOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -417,7 +425,7 @@ export default function HomeSizeCalculatorPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6">
       {/* Page Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Home Size Calculator</h1>
@@ -427,7 +435,7 @@ export default function HomeSizeCalculatorPage() {
       {/* ===== SEARCH BAR SECTION ===== */}
       <div className="bg-[#E8F5E9] rounded-2xl p-6 border border-[#C8E6C9] shadow-sm">
         {/* Search mode toggle */}
-        <div className="flex bg-white rounded-xl p-1 mb-5 max-w-md mx-auto shadow-sm">
+        <div className="flex bg-white rounded-xl p-1 mb-5 max-w-lg mx-auto shadow-sm">
           <button
             onClick={() => { setSearchMode('time'); setCalculated(false); }}
             className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all ${
@@ -609,43 +617,99 @@ export default function HomeSizeCalculatorPage() {
         </div>
 
         {/* Filters row */}
-        <div className="flex flex-wrap gap-4 mb-4">
-          {/* Quality Filter */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Quality</label>
-            <div className="flex gap-1.5">
-              {(['nice', 'average', 'any'] as QualityFilter[]).map(q => (
-                <button key={q} onClick={() => toggleQuality(q)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-                    qualityFilters.includes(q)
-                      ? `${getQualityColor(q).bg} ${getQualityColor(q).text} ${getQualityColor(q).border}`
-                      : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
-                  }`}>
-                  {q === 'nice' ? 'Nice Area' : q === 'average' ? 'Average Area' : 'Any Area'}
-                </button>
-              ))}
-              <button
-                onClick={() => setQualityFilters(['nice', 'average', 'any'])}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-                  qualityFilters.length === 3
-                    ? 'bg-[#E8F5E9] text-[#2E7D32] border-[#A5D6A7]'
-                    : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
-                }`}>
-                Show All
-              </button>
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          {/* Quality Filter - Searchable Dropdown */}
+          <div ref={qualityDropdownRef} className="relative">
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Quality</label>
+            <button
+              onClick={() => { setQualityDropdownOpen(!qualityDropdownOpen); setQualitySearch(''); }}
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm text-left bg-white flex items-center justify-between hover:border-[#4CAF50] transition-colors"
+            >
+              <span className="text-gray-900 truncate">
+                {qualityFilters.length === 3
+                  ? 'Show All'
+                  : qualityFilters.map(q => q === 'nice' ? 'Nice Area' : q === 'average' ? 'Average Area' : 'Any Area').join(', ')}
+              </span>
+              <svg className={`w-4 h-4 text-gray-400 transition-transform shrink-0 ml-2 ${qualityDropdownOpen ? 'rotate-180' : ''}`}
+                fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {qualityDropdownOpen && (
+              <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
+                <div className="p-2 border-b border-gray-100">
+                  <input
+                    type="text"
+                    value={qualitySearch}
+                    onChange={e => setQualitySearch(e.target.value)}
+                    placeholder="Search quality..."
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#4CAF50] focus:border-transparent"
+                    autoFocus
+                  />
+                </div>
+                <div className="p-1">
+                  {/* Show All option */}
+                  {(!qualitySearch.trim() || 'show all'.includes(qualitySearch.toLowerCase())) && (
+                    <button
+                      onClick={() => { setQualityFilters(['nice', 'average', 'any']); setQualityDropdownOpen(false); }}
+                      className={`w-full text-left px-3 py-2.5 text-sm rounded-lg transition-colors flex items-center justify-between ${
+                        qualityFilters.length === 3 ? 'bg-[#E8F5E9] font-semibold text-[#2E7D32]' : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      <span>Show All</span>
+                      {qualityFilters.length === 3 && (
+                        <svg className="w-4 h-4 text-[#4CAF50]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  )}
+                  <div className="border-t border-gray-100 my-1" />
+                  {([
+                    { key: 'nice' as QualityFilter, label: 'Nice Area', desc: 'Conservative — higher price per sqft' },
+                    { key: 'average' as QualityFilter, label: 'Average Area', desc: 'Middle ground estimate' },
+                    { key: 'any' as QualityFilter, label: 'Any Area', desc: 'Aggressive — biggest home regardless' },
+                  ]).filter(opt =>
+                    !qualitySearch.trim() || opt.label.toLowerCase().includes(qualitySearch.toLowerCase()) || opt.desc.toLowerCase().includes(qualitySearch.toLowerCase())
+                  ).map(opt => {
+                    const colors = getQualityColor(opt.key);
+                    const isSelected = qualityFilters.includes(opt.key);
+                    return (
+                      <button
+                        key={opt.key}
+                        onClick={() => toggleQuality(opt.key)}
+                        className={`w-full text-left px-3 py-2.5 text-sm rounded-lg transition-colors flex items-center justify-between ${
+                          isSelected ? `${colors.bg} font-semibold` : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <div>
+                          <span className={isSelected ? colors.text : 'text-gray-900'}>{opt.label}</span>
+                          <p className="text-xs text-gray-400 mt-0.5">{opt.desc}</p>
+                        </div>
+                        {isSelected && (
+                          <svg className={`w-4 h-4 shrink-0 ml-2 ${colors.text}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Home Preference */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Home Preference</label>
-            <div className="flex gap-1.5">
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Home Preference</label>
+            <div className="flex gap-2">
               {(['house', 'apartment', 'any'] as HomePreference[]).map(p => (
                 <button key={p} onClick={() => setHomePreference(p)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                  className={`flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all border ${
                     homePreference === p
-                      ? 'bg-[#E8F5E9] text-[#2E7D32] border-[#A5D6A7]'
-                      : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                      ? 'bg-[#E8F5E9] text-[#2E7D32] border-[#A5D6A7] shadow-sm'
+                      : 'bg-white text-gray-600 border-gray-300 hover:border-[#4CAF50] hover:text-gray-900'
                   }`}>
                   {p === 'house' ? 'House' : p === 'apartment' ? 'Apartment' : 'Any'}
                 </button>
