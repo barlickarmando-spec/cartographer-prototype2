@@ -147,11 +147,8 @@ async function searchForSale(
   const params = new URLSearchParams({
     location: locationId,
     sort_by: 'RelevantListings',
-    search_within_x_miles: '20',
+    search_within_x_miles: '0',
   });
-  // Add price filters so the API returns results in range
-  if (minPrice > 0) params.set('price_min', String(minPrice));
-  if (maxPrice > 0) params.set('price_max', String(maxPrice));
 
   const url = `${BASE_URL}/property/search-sale?${params.toString()}`;
   console.log(`[homes/search] Search for sale: ${url}`);
@@ -359,14 +356,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, homes: [], count: 0, source: 'no_results' });
     }
 
-    // Step 3: Normalize listings — take more since API now filters by price
-    let homes = listings.slice(0, 20).map(normalizeProperty);
+    // Step 3: Normalize all listings
+    let homes = listings.map(normalizeProperty);
 
-    // Step 4: Filter by price range (secondary filter in case API returned extras)
+    // Step 4: Prefer homes in price range, but keep all if too few match
     const priceFiltered = homes.filter(h => h.price >= minPrice && h.price <= maxPrice);
-    if (priceFiltered.length >= 4) {
-      homes = priceFiltered;
-    }
+    homes = priceFiltered.length >= 2 ? priceFiltered : homes;
+    homes = homes.slice(0, 12);
 
     // Step 5: For homes without photos, try get-photos endpoint (limit to 8 to avoid rate limits)
     const needPhotos = homes.filter(h => !h.photoUrl && h._propertyId).slice(0, 8);
@@ -454,7 +450,7 @@ export async function GET(request: NextRequest) {
 
     for (const fmt of locationFormats) {
       try {
-        const searchUrl = `${BASE_URL}/property/search-sale?location=${encodeURIComponent(fmt.value)}&sort_by=RelevantListings&search_within_x_miles=20`;
+        const searchUrl = `${BASE_URL}/property/search-sale?location=${encodeURIComponent(fmt.value)}&sort_by=RelevantListings&search_within_x_miles=0`;
         const searchRes = await fetch(searchUrl, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
         const searchJson = await searchRes.json();
 
