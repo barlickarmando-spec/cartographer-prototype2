@@ -76,7 +76,7 @@ function buildRealtorSearchUrl(location: string, minPrice: number, maxPrice: num
   return url;
 }
 
-const MAX_HOMES = 24;
+const MAX_HOMES = 42;
 const HOMES_PER_PAGE = 2;
 
 const CARD_GRADIENTS = [
@@ -101,6 +101,7 @@ export default function SimpleHomeCarousel({
 }: SimpleHomeCarouselProps) {
   const [homes, setHomes] = useState<Home[]>([]);
   const [source, setSource] = useState('');
+  const [totalAvailable, setTotalAvailable] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
@@ -141,9 +142,11 @@ export default function SimpleHomeCarousel({
             const allHomes = withPhotos.length > 0 ? withPhotos : data.homes;
             setHomes(allHomes.slice(0, MAX_HOMES));
             setSource(data.source || '');
+            setTotalAvailable(data.totalAvailable || allHomes.length);
           } else {
             setHomes([]);
             setSource('');
+            setTotalAvailable(0);
           }
         }
       } catch {
@@ -219,6 +222,9 @@ export default function SimpleHomeCarousel({
           <h3 className="text-base font-semibold text-[#2C3E50] mb-0.5">{location} Homes ~ {priceLabel}</h3>
           <p className="text-xs text-[#6B7280]">
             {formatPrice(minPrice)} - {formatPrice(maxPrice)} | {displayHomes.length} listing{displayHomes.length !== 1 ? 's' : ''}
+            {totalAvailable > displayHomes.length && (
+              <span className="ml-1 text-[#5BA4E5]">({totalAvailable.toLocaleString()}+ on Realtor.com)</span>
+            )}
             {source && <span className="ml-1 text-[#9CA3AF]">via {source}</span>}
           </p>
         </div>

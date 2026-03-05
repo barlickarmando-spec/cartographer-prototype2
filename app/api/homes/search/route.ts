@@ -138,61 +138,116 @@ async function autoCompleteLocation(query: string): Promise<string | null> {
   return null;
 }
 
-// ── Step 2: Search for-sale listings ────────────────────────────────
+// How many pages of results to fetch from the search API
+const MAX_PAGES = 5;
+const MAX_LISTINGS = 42;
+
+// Extract listings array from various API response shapes
+function extractListings(json: any): any[] {
+  let listings = json.data || json.properties || json.results || json.listings || json.homes || [];
+
+  if (!Array.isArray(listings) && json.data && typeof json.data === 'object') {
+    // Check nested arrays (e.g. data.home_search.results)
+    if (json.data.home_search?.results && Array.isArray(json.data.home_search.results)) {
+      return json.data.home_search.results;
+    }
+    for (const key of Object.keys(json.data)) {
+      if (Array.isArray(json.data[key]) && json.data[key].length > 0) {
+        return json.data[key];
+      }
+    }
+  }
+
+  return Array.isArray(listings) ? listings : [];
+}
+
+// ── Step 2: Search for-sale listings with pagination ────────────────
+// Fetches multiple pages to get the full scope of available listings.
 async function searchForSale(
   locationId: string,
   minPrice: number,
   maxPrice: number,
-): Promise<any[] | null> {
-  // Try with price filters first, then fall back without them
-  const paramSets = [
-    // Attempt 1: with price filters
-    new URLSearchParams({
+): Promise<{ listings: any[]; totalAvailable: number } | null> {
+
+  // Build base params — try with price filters first
+  const baseParamSets = [
+    {
       location: locationId,
       sort_by: 'RelevantListings',
       search_within_x_miles: '50',
       price_min: String(minPrice),
       price_max: String(maxPrice),
-    }),
-    // Attempt 2: without price filters (API may not support them)
-    new URLSearchParams({
+    },
+    {
       location: locationId,
       sort_by: 'RelevantListings',
       search_within_x_miles: '50',
-    }),
+    },
   ];
 
-  for (const params of paramSets) {
-    const url = `${BASE_URL}/property/search-sale?${params.toString()}`;
-    console.log(`[homes/search] Search for sale: ${url}`);
-
+  for (const baseParams of baseParamSets) {
     try {
-      const res = await fetch(url, {
+      // Fetch page 1 first to learn the total count
+      const page1Params = new URLSearchParams({ ...baseParams, page: '1' });
+      const url1 = `${BASE_URL}/property/search-sale?${page1Params.toString()}`;
+      console.log(`[homes/search] Search page 1: ${url1}`);
+
+      const res1 = await fetch(url1, {
         headers: HEADERS,
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(12000),
       });
 
-      if (!res.ok) {
-        console.log(`[homes/search] Search failed: ${res.status}`);
+      if (!res1.ok) {
+        console.log(`[homes/search] Search page 1 failed: ${res1.status}`);
         continue;
       }
 
-      const json = await res.json();
-      let listings = json.data || json.properties || json.results || json.listings || json.homes || [];
+      const json1 = await res1.json();
+      const page1Listings = extractListings(json1);
+      const totalResultCount = json1.totalResultCount || json1.total || json1.meta?.total || 0;
+      const perPage = page1Listings.length;
 
-      if (!Array.isArray(listings) && json.data && typeof json.data === 'object') {
-        for (const key of Object.keys(json.data)) {
-          if (Array.isArray(json.data[key]) && json.data[key].length > 0) {
-            listings = json.data[key];
-            break;
-          }
+      console.log(`[homes/search] Page 1: ${perPage} listings, totalResultCount: ${totalResultCount}`);
+
+      if (perPage === 0) continue;
+
+      const allListings = [...page1Listings];
+
+      // If there are more pages and we haven't hit our target, fetch them in parallel
+      if (totalResultCount > perPage && allListings.length < MAX_LISTINGS) {
+        const totalPages = Math.min(MAX_PAGES, Math.ceil(totalResultCount / Math.max(perPage, 1)));
+        const pagePromises: Promise<any[]>[] = [];
+
+        for (let p = 2; p <= totalPages; p++) {
+          if (allListings.length + (p - 2) * perPage >= MAX_LISTINGS) break;
+          const pageParams = new URLSearchParams({ ...baseParams, page: String(p) });
+          const pageUrl = `${BASE_URL}/property/search-sale?${pageParams.toString()}`;
+          console.log(`[homes/search] Queueing page ${p}: ${pageUrl}`);
+
+          pagePromises.push(
+            fetch(pageUrl, { headers: HEADERS, signal: AbortSignal.timeout(12000) })
+              .then(async (res) => {
+                if (!res.ok) return [];
+                const json = await res.json();
+                return extractListings(json);
+              })
+              .catch((e) => {
+                console.log(`[homes/search] Page ${p} error:`, e instanceof Error ? e.message : e);
+                return [];
+              })
+          );
+        }
+
+        const additionalPages = await Promise.all(pagePromises);
+        for (const pageResults of additionalPages) {
+          allListings.push(...pageResults);
+          console.log(`[homes/search] Additional page: +${pageResults.length} listings`);
         }
       }
 
-      if (Array.isArray(listings) && listings.length > 0) {
-        console.log(`[homes/search] Found ${listings.length} listings`);
-        return listings;
-      }
+      console.log(`[homes/search] Total fetched: ${allListings.length} listings (${totalResultCount} available on realtor.com)`);
+      return { listings: allListings, totalAvailable: totalResultCount || allListings.length };
+
     } catch (e) {
       console.log(`[homes/search] Search attempt error:`, e instanceof Error ? e.message : e);
     }
@@ -266,68 +321,6 @@ function upgradePhotoUrl(url: string): string {
   upgraded = upgraded.replace(/\/thumbs\//, '/');
 
   return upgraded;
-}
-
-// ── Fallback: US Real Estate API (us-real-estate.p.rapidapi.com) ────
-// This API supports structured city/state_code/price params and works
-// for locations where the realtor-search auto-complete flow fails.
-async function searchUSRealEstateAPI(
-  city: string,
-  stateCode: string,
-  minPrice: number,
-  maxPrice: number,
-): Promise<any[] | null> {
-  if (!stateCode) return null; // This API requires state_code
-
-  const FALLBACK_HOST = 'us-real-estate.p.rapidapi.com';
-  const url = new URL(`https://${FALLBACK_HOST}/v2/for-sale`);
-
-  if (city) url.searchParams.append('city', city);
-  url.searchParams.append('state_code', stateCode);
-  url.searchParams.append('price_min', String(minPrice));
-  url.searchParams.append('price_max', String(maxPrice));
-  url.searchParams.append('limit', '42');
-  url.searchParams.append('offset', '0');
-
-  console.log(`[homes/search] Fallback API: ${url.toString()}`);
-
-  try {
-    const res = await fetch(url.toString(), {
-      headers: {
-        'X-RapidAPI-Key': API_KEY,
-        'X-RapidAPI-Host': FALLBACK_HOST,
-      },
-      signal: AbortSignal.timeout(12000),
-    });
-
-    if (!res.ok) {
-      console.log(`[homes/search] Fallback API failed: ${res.status}`);
-      return null;
-    }
-
-    const json = await res.json();
-
-    // This API returns data in data.home_search.results or data.results
-    let properties: any[] = [];
-    if (json.data?.home_search?.results) {
-      properties = json.data.home_search.results;
-    } else if (json.data?.results) {
-      properties = json.data.results;
-    } else if (Array.isArray(json.data)) {
-      properties = json.data;
-    } else if (Array.isArray(json.results)) {
-      properties = json.results;
-    }
-
-    if (properties.length > 0) {
-      console.log(`[homes/search] Fallback API found ${properties.length} properties`);
-      return properties;
-    }
-  } catch (e) {
-    console.log(`[homes/search] Fallback API error:`, e instanceof Error ? e.message : e);
-  }
-
-  return null;
 }
 
 // ── Normalize a listing into our Home interface ─────────────────────
@@ -448,29 +441,23 @@ export async function POST(request: NextRequest) {
     const locationId = await autoCompleteLocation(searchQuery);
     debug.locationId = locationId;
 
-    // Step 2: Search for-sale listings (primary API)
-    let listings: any[] | null = null;
-    let apiSource = 'realtor-search';
+    // Step 2: Search for-sale listings with pagination
+    let listings: any[] = [];
+    let totalAvailable = 0;
 
     if (locationId) {
-      listings = await searchForSale(locationId, minPrice, maxPrice);
-      debug.primaryApiCount = listings?.length || 0;
+      const result = await searchForSale(locationId, minPrice, maxPrice);
+      if (result) {
+        listings = result.listings;
+        totalAvailable = result.totalAvailable;
+      }
+      debug.primaryApiCount = listings.length;
+      debug.totalAvailable = totalAvailable;
     }
 
-    // Step 2b: Fallback to US Real Estate API if primary returned nothing
-    if (!listings || listings.length === 0) {
-      debug.tryingFallbackApi = true;
-      // For state-only queries, use the state capital for better results
-      const fallbackCity = city || (stateCode ? (STATE_CAPITALS[stateCode] || '') : '');
-      const fallbackState = stateCode || '';
-      listings = await searchUSRealEstateAPI(fallbackCity, fallbackState, minPrice, maxPrice);
-      debug.fallbackApiCount = listings?.length || 0;
-      if (listings && listings.length > 0) apiSource = 'us-real-estate';
-    }
-
-    debug.rawListingCount = listings?.length || 0;
-    if (!listings || listings.length === 0) {
-      return NextResponse.json({ success: true, homes: [], count: 0, source: 'no_results', debug });
+    debug.rawListingCount = listings.length;
+    if (listings.length === 0) {
+      return NextResponse.json({ success: true, homes: [], count: 0, totalAvailable: 0, source: 'no_results', debug });
     }
 
     // Step 3: Normalize all listings
@@ -480,35 +467,31 @@ export async function POST(request: NextRequest) {
     debug.samplePhotoUrl = homes.find(h => h.photoUrl)?.photoUrl || 'none';
     debug.pricesFound = homes.slice(0, 5).map(h => h.price);
 
-    // Step 4: Prefer homes in price range, but keep unpriced and near-range homes
-    // Sort: in-range first, then by closeness to target price
+    // Step 4: Sort — prefer homes with photos, then by closeness to target price
+    // No aggressive price filtering since the API already filtered by price range
     const targetPrice = (minPrice + maxPrice) / 2;
-    const priceSpan = maxPrice - minPrice;
-    const wideMin = minPrice - priceSpan * 0.5;
-    const wideMax = maxPrice + priceSpan * 0.5;
 
-    // Keep homes that are in wider range OR have no price listed
-    homes = homes.filter(h => h.price === 0 || (h.price >= wideMin && h.price <= wideMax));
-
-    // Sort: exact range first, then by distance from target
     homes.sort((a, b) => {
-      const aInRange = a.price >= minPrice && a.price <= maxPrice ? 0 : 1;
-      const bInRange = b.price >= minPrice && b.price <= maxPrice ? 0 : 1;
-      if (aInRange !== bInRange) return aInRange - bInRange;
+      // Prefer homes with photos
+      const aHasPhoto = a.photoUrl ? 0 : 1;
+      const bHasPhoto = b.photoUrl ? 0 : 1;
+      if (aHasPhoto !== bHasPhoto) return aHasPhoto - bHasPhoto;
+
+      // Then by price closeness to target
       const aDist = a.price === 0 ? Infinity : Math.abs(a.price - targetPrice);
       const bDist = b.price === 0 ? Infinity : Math.abs(b.price - targetPrice);
       return aDist - bDist;
     });
 
     debug.inPriceRange = homes.filter(h => h.price >= minPrice && h.price <= maxPrice).length;
-    debug.totalAfterFilter = homes.length;
-    homes = homes.slice(0, 24);
+    debug.totalAfterSort = homes.length;
+    homes = homes.slice(0, MAX_LISTINGS);
 
-    // Step 5: Fetch high-res photos via get-photos endpoint for all listings with property IDs
-    const withIds = homes.filter(h => h._propertyId).slice(0, 24);
-    if (withIds.length > 0) {
-      debug.fetchingPhotosFor = withIds.length;
-      const photoPromises = withIds.map(async (home) => {
+    // Step 5: Fetch high-res photos for listings missing them (limit to avoid excess API calls)
+    const needPhotos = homes.filter(h => h._propertyId && !h.photoUrl).slice(0, 12);
+    if (needPhotos.length > 0) {
+      debug.fetchingPhotosFor = needPhotos.length;
+      const photoPromises = needPhotos.map(async (home) => {
         const url = await getPhotos(home._propertyId!, home._listingId || '');
         if (url) home.photoUrl = upgradePhotoUrl(url);
       });
@@ -525,6 +508,7 @@ export async function POST(request: NextRequest) {
       success: true,
       homes: cleaned,
       count: cleaned.length,
+      totalAvailable,
       source: 'Realtor.com',
       debug,
     });
