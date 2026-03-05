@@ -189,9 +189,9 @@ export default function USHeatMap({
                   key={name}
                   d={d}
                   fill={fill}
-                  stroke="rgba(0,0,0,0.25)"
-                  strokeWidth={0.6}
-                  fillOpacity={0.9}
+                  stroke="#444"
+                  strokeWidth={1.2}
+                  fillOpacity={0.92}
                   cursor="pointer"
                   onClick={() => onLocationClick(name)}
                   onMouseEnter={(e) => handleMouseEnter(name, calc, e)}
@@ -204,39 +204,43 @@ export default function USHeatMap({
           </svg>
         </div>
 
-        {/* Compact legend */}
-        <div className="w-28 flex-shrink-0 pt-6">
-          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
-            Rating
+        {/* Legend */}
+        <div className="w-40 flex-shrink-0 pt-4">
+          <p className="text-xs font-semibold text-gray-700 mb-3">
+            Affordability Rating
           </p>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             {legendSteps.map((score, i) => (
-              <div key={score} className="flex items-center gap-1.5">
+              <div key={score} className="flex items-center gap-2">
                 <div
-                  className="w-3.5 h-3.5 rounded-[3px]"
+                  className="w-5 h-5 rounded"
                   style={{
                     backgroundColor:
                       score === 0 ? GRAY : ratingScale(score),
                   }}
                 />
-                <span className="text-[11px] text-gray-600 leading-none">
-                  {legendLabels[i]}
-                </span>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xs font-medium text-gray-700">
+                    {legendLabels[i]}
+                  </span>
+                  <span className="text-[10px] text-gray-400">
+                    {score === 0 ? '0' : score.toString()}/10
+                  </span>
+                </div>
               </div>
             ))}
           </div>
-          <div className="mt-3 pt-2 border-t border-gray-100">
-            <div className="flex items-center gap-1.5">
-              <svg width="14" height="14" viewBox="0 0 14 14">
+          <div className="mt-4 pt-3 border-t border-gray-100">
+            <div className="flex items-center gap-2">
+              <svg width="20" height="20" viewBox="0 0 20 20">
                 <path
-                  d="M7,1 Q11,2 12,7 Q11,12 7,13 Q3,12 2,7 Q3,2 7,1Z"
+                  d="M10,2 Q15,3 17,10 Q15,17 10,18 Q5,17 3,10 Q5,3 10,2Z"
                   fill="none"
-                  stroke="#999"
-                  strokeWidth="1"
-                  strokeDasharray="2,1"
+                  stroke="#444"
+                  strokeWidth="1.2"
                 />
               </svg>
-              <span className="text-[11px] text-gray-500 leading-none">
+              <span className="text-xs text-gray-600">
                 Metro area
               </span>
             </div>

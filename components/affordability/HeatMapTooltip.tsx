@@ -62,6 +62,12 @@ export default function HeatMapTooltip({ locationName, data, mode, position }: H
             <span className="font-semibold text-gray-900">${data.pricePerSqft}/sqft</span>
           </div>
           <div className="flex justify-between gap-4">
+            <span>Time to Own</span>
+            <span className="font-semibold text-gray-900">
+              {data.yearsToOwn > 0 ? `${data.yearsToOwn} years` : 'N/A'}
+            </span>
+          </div>
+          <div className="flex justify-between gap-4">
             <span>Max Home Value</span>
             <span className="font-semibold text-gray-900">{formatCurrency(data.maxHomeValue)}</span>
           </div>

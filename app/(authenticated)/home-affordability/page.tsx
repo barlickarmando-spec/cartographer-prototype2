@@ -11,7 +11,7 @@ type MapMode = 'value' | 'sqft';
 
 export default function HomeAffordabilityPage() {
   const router = useRouter();
-  const [mapMode, setMapMode] = useState<MapMode>('value');
+  const [mapMode, setMapMode] = useState<MapMode>('sqft');
   const { stateData, cityData, currentResult, isLoading, progress, error } = useAffordabilityCalculations();
 
   const handleLocationClick = useCallback(
@@ -76,6 +76,16 @@ export default function HomeAffordabilityPage() {
             <h2 className="text-xl font-semibold text-gray-900">National Affordability Map</h2>
             <div className="flex bg-gray-100 rounded-full p-1">
               <button
+                onClick={() => setMapMode('sqft')}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  mapMode === 'sqft'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Home Size (sqft)
+              </button>
+              <button
                 onClick={() => setMapMode('value')}
                 className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
                   mapMode === 'value'
@@ -85,22 +95,12 @@ export default function HomeAffordabilityPage() {
               >
                 Home Value
               </button>
-              <button
-                onClick={() => setMapMode('sqft')}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  mapMode === 'sqft'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Purchasing Power (sqft)
-              </button>
             </div>
           </div>
           <p className="text-sm text-gray-500 mb-2">
-            {mapMode === 'value'
-              ? 'Colors show your maximum sustainable home price in each state. Click any state or city to view your full profile there.'
-              : 'Colors show how much home (square footage) you can afford in each state. Click any state or city to view your full profile there.'}
+            {mapMode === 'sqft'
+              ? 'See how much home you can afford in each location — square footage, price per sqft, and estimated time to ownership. Click any area to view details.'
+              : 'Colors show your maximum sustainable home price in each state. Click any state or city to view your full profile there.'}
           </p>
         </div>
 
@@ -125,13 +125,13 @@ export default function HomeAffordabilityPage() {
             <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
             </svg>
-            <span><strong>Home Value map</strong> shows the maximum home price you could sustain in each location based on your income, savings trajectory, and debt</span>
+            <span><strong>Home Size map</strong> converts your purchasing power into actual square footage using local price-per-sqft data, plus estimated time to ownership — revealing where your money buys the most space</span>
           </li>
           <li className="flex items-start gap-2 text-sm text-gray-700">
             <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
             </svg>
-            <span><strong>Purchasing Power map</strong> converts that dollar value into actual square footage using local price-per-sqft data — revealing where your money buys the most space</span>
+            <span><strong>Home Value map</strong> shows the maximum home price you could sustain in each location based on your income, savings trajectory, and debt</span>
           </li>
           <li className="flex items-start gap-2 text-sm text-gray-700">
             <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
