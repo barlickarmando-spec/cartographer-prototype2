@@ -641,8 +641,8 @@ function FullScreenCarouselModal({
   const gradient = CARD_GRADIENTS[currentIndex % CARD_GRADIENTS.length];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative bg-white shadow-2xl w-screen h-screen overflow-hidden flex flex-col md:flex-row"
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="relative bg-white shadow-2xl w-full max-w-4xl max-h-[90vh] rounded-2xl overflow-hidden flex flex-col md:flex-row"
         onClick={(e) => e.stopPropagation()}>
         {/* Close */}
         <button onClick={onClose}
@@ -653,7 +653,7 @@ function FullScreenCarouselModal({
         </button>
 
         {/* Left: Image */}
-        <div className={`relative w-full md:w-2/3 h-[50vh] md:h-full bg-[#1a1a2e]`}>
+        <div className={`relative w-full md:w-3/5 h-[40vh] md:h-auto md:min-h-[500px] bg-[#1a1a2e]`}>
           {home.photoUrl && !imgError ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img src={home.photoUrl} alt={`Home at ${home.address}`} className="w-full h-full object-cover"
@@ -690,7 +690,7 @@ function FullScreenCarouselModal({
         </div>
 
         {/* Right: Details */}
-        <div className="w-full md:w-1/3 p-6 flex flex-col justify-between overflow-y-auto">
+        <div className="w-full md:w-2/5 p-5 flex flex-col justify-between overflow-y-auto">
           <div>
             <div className="mb-4">
               <p className="text-3xl font-bold text-[#2C3E50]">{formatPrice(home.price)}</p>

@@ -92,10 +92,10 @@ function buildSearchQuery(city: string, stateCode: string): string {
 
 function upgradePhotoUrl(url: string): string {
   if (!url) return url;
-  // Only bump the numeric width/height values — keep URL structure intact
-  // -w300_h200.jpg → -w1280_h960.jpg   -w300_rd_q80.jpg → -w1280_rd_q80.jpg
-  let upgraded = url.replace(/(-w)\d+/, '$11280');
-  upgraded = upgraded.replace(/(_h)\d+/, '$1960');
+  // Request 600px wide — rdcpix reliably serves this size and it matches
+  // our card aspect-ratio display without stretching beyond source resolution.
+  let upgraded = url.replace(/(-w)\d+/, '$1600');
+  upgraded = upgraded.replace(/(_h)\d+/, '$1450');
   upgraded = upgraded.replace(/\/thumbs\//, '/');
   return upgraded;
 }
@@ -150,7 +150,11 @@ function normalizeProperty(prop: any): {
   if (!photoUrl && typeof prop.photo_url === 'string' && prop.photo_url.startsWith('http')) photoUrl = prop.photo_url;
   if (!photoUrl && typeof prop.imageUrl === 'string' && prop.imageUrl.startsWith('http')) photoUrl = prop.imageUrl;
 
+  const rawPhotoUrl = photoUrl;
   photoUrl = upgradePhotoUrl(photoUrl);
+  if (rawPhotoUrl && rawPhotoUrl !== photoUrl) {
+    console.log(`[photos] ${rawPhotoUrl} → ${photoUrl}`);
+  }
 
   let listingUrl = '';
   if (prop.permalink) {
@@ -646,6 +650,8 @@ export async function POST(request: NextRequest) {
     const cleaned = homes.map(({ _propertyId, _listingId, ...rest }) => rest);
     debug.finalCount = cleaned.length;
     debug.finalWithPhotos = cleaned.filter(h => h.photoUrl).length;
+    // Log sample photo URLs for debugging
+    debug.samplePhotoUrls = cleaned.slice(0, 3).map(h => h.photoUrl).filter(Boolean);
 
     return NextResponse.json({
       success: true,
@@ -704,7 +710,8 @@ export async function GET(request: NextRequest) {
           step: 'fallback-properties-list',
           totalAvailable: result?.totalAvailable,
           listingCount: result?.listings?.length || 0,
-          samplePhoto: firstListing?.primary_photo?.href || 'none',
+          samplePhotoRaw: firstListing?.primary_photo?.href || 'none',
+          samplePhotoUpgraded: firstListing?.primary_photo?.href ? upgradePhotoUrl(firstListing.primary_photo.href) : 'none',
         });
       }
     } catch (e) {
