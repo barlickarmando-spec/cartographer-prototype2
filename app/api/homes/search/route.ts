@@ -144,10 +144,11 @@ async function searchForSale(
   minPrice: number,
   maxPrice: number,
 ): Promise<any[] | null> {
+  // Single call with wide radius to maximize results
   const params = new URLSearchParams({
     location: locationId,
     sort_by: 'RelevantListings',
-    search_within_x_miles: '0',
+    search_within_x_miles: '50',
   });
 
   const url = `${BASE_URL}/property/search-sale?${params.toString()}`;
@@ -160,34 +161,27 @@ async function searchForSale(
 
   if (!res.ok) {
     console.log(`[homes/search] Search failed: ${res.status}`);
-    const text = await res.text().catch(() => '');
-    console.log(`[homes/search] Response body: ${text.slice(0, 300)}`);
     return null;
   }
 
   const json = await res.json();
-  console.log(`[homes/search] Search response keys: ${JSON.stringify(Object.keys(json))}`);
+  let listings = json.data || json.properties || json.results || json.listings || json.homes || [];
 
-  // Extract the listings array from whichever response shape we get
-  const listings = json.data || json.properties || json.results || json.listings || json.homes || [];
-
-  if (Array.isArray(listings) && listings.length > 0) {
-    console.log(`[homes/search] Found ${listings.length} listings`);
-    console.log(`[homes/search] First listing keys: ${JSON.stringify(Object.keys(listings[0]))}`);
-    return listings;
-  }
-
-  // Maybe the data is nested one level deeper
-  if (json.data && typeof json.data === 'object' && !Array.isArray(json.data)) {
+  if (!Array.isArray(listings) && json.data && typeof json.data === 'object') {
     for (const key of Object.keys(json.data)) {
       if (Array.isArray(json.data[key]) && json.data[key].length > 0) {
-        console.log(`[homes/search] Found ${json.data[key].length} listings in data.${key}`);
-        return json.data[key];
+        listings = json.data[key];
+        break;
       }
     }
   }
 
-  console.log(`[homes/search] No listings found. Response preview: ${JSON.stringify(json).slice(0, 500)}`);
+  if (Array.isArray(listings) && listings.length > 0) {
+    console.log(`[homes/search] Found ${listings.length} listings`);
+    return listings;
+  }
+
+  console.log(`[homes/search] No listings found`);
   return null;
 }
 
@@ -228,6 +222,24 @@ async function getPhotos(propertyId: string, listingId: string): Promise<string>
   return '';
 }
 
+// ── Upgrade photo URL to higher resolution ──────────────────────────
+function upgradePhotoUrl(url: string): string {
+  if (!url) return url;
+
+  // RDC/rdcpix URLs use patterns like "-w480_h360.jpg" or "-w{n}_h{n}_x2.jpg"
+  // Replace with large resolution
+  let upgraded = url.replace(/-w\d+_h\d+(_x2)?/g, '-w1024_h768');
+
+  // Some URLs use "s.jpg" (small), "m.jpg" (medium), "l.jpg" (large), "od.jpg" (original)
+  // Try to upgrade to large
+  upgraded = upgraded.replace(/\/([^/]+)s\.jpg$/i, '/$1l.jpg');
+
+  // If URL has a "thumbs" path segment, try removing it for full-size
+  upgraded = upgraded.replace(/\/thumbs\//, '/');
+
+  return upgraded;
+}
+
 // ── Normalize a listing into our Home interface ─────────────────────
 function normalizeProperty(prop: any): {
   id: string;
@@ -265,25 +277,21 @@ function normalizeProperty(prop: any): {
   // Convert snake_case to Title Case (e.g., "single_family" → "Single Family")
   const homeType = rawType.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
 
-  // Photo URL — try all common paths
+  // Photo URL — prefer photos array (often has larger images) over primary_photo thumbnail
   let photoUrl = '';
-  if (prop.primary_photo?.href) photoUrl = prop.primary_photo.href;
-  else if (prop.photo?.href) photoUrl = prop.photo.href;
-  else if (typeof prop.thumbnail === 'string' && prop.thumbnail.startsWith('http')) photoUrl = prop.thumbnail;
-  else if (typeof prop.image === 'string' && prop.image.startsWith('http')) photoUrl = prop.image;
-  else if (typeof prop.photo_url === 'string' && prop.photo_url.startsWith('http')) photoUrl = prop.photo_url;
-  else if (typeof prop.imageUrl === 'string' && prop.imageUrl.startsWith('http')) photoUrl = prop.imageUrl;
-  else if (Array.isArray(prop.photos) && prop.photos.length > 0) {
+  if (Array.isArray(prop.photos) && prop.photos.length > 0) {
     const f = prop.photos[0];
     photoUrl = typeof f === 'string' ? f : (f?.href || f?.url || '');
   }
+  if (!photoUrl && prop.primary_photo?.href) photoUrl = prop.primary_photo.href;
+  if (!photoUrl && prop.photo?.href) photoUrl = prop.photo?.href;
+  if (!photoUrl && typeof prop.thumbnail === 'string' && prop.thumbnail.startsWith('http')) photoUrl = prop.thumbnail;
+  if (!photoUrl && typeof prop.image === 'string' && prop.image.startsWith('http')) photoUrl = prop.image;
+  if (!photoUrl && typeof prop.photo_url === 'string' && prop.photo_url.startsWith('http')) photoUrl = prop.photo_url;
+  if (!photoUrl && typeof prop.imageUrl === 'string' && prop.imageUrl.startsWith('http')) photoUrl = prop.imageUrl;
 
-  // Upgrade Realtor.com photo URLs to larger size
-  // rdcpix.com size suffixes: s=small, e=medium, l=large
-  // e.g. https://ap.rdcpix.com/abc123s.jpg → abc123l.jpg
-  if (photoUrl && photoUrl.includes('rdcpix.com')) {
-    photoUrl = photoUrl.replace(/([-\w])s\.(jpg|jpeg|png|webp)/i, '$1l.$2');
-  }
+  // Upgrade to higher resolution version
+  photoUrl = upgradePhotoUrl(photoUrl);
 
   // Listing URL — build from permalink or property_id
   let listingUrl = '';
@@ -365,19 +373,18 @@ export async function POST(request: NextRequest) {
     debug.samplePhotoUrl = homes.find(h => h.photoUrl)?.photoUrl || 'none';
     debug.pricesFound = homes.slice(0, 5).map(h => h.price);
 
-    // Step 4: Prefer homes in price range, but keep all if too few match
-    const priceFiltered = homes.filter(h => h.price >= minPrice && h.price <= maxPrice);
-    debug.inPriceRange = priceFiltered.length;
-    homes = priceFiltered.length >= 2 ? priceFiltered : homes;
+    // Step 4: Strictly filter to price range — never show homes outside budget
+    homes = homes.filter(h => h.price >= minPrice && h.price <= maxPrice);
+    debug.inPriceRange = homes.length;
     homes = homes.slice(0, 12);
 
-    // Step 5: For homes without photos, try get-photos endpoint (limit to 8 to avoid rate limits)
-    const needPhotos = homes.filter(h => !h.photoUrl && h._propertyId).slice(0, 8);
-    if (needPhotos.length > 0) {
-      debug.fetchingPhotosFor = needPhotos.length;
-      const photoPromises = needPhotos.map(async (home) => {
+    // Step 5: Fetch high-res photos via get-photos endpoint for all listings with property IDs
+    const withIds = homes.filter(h => h._propertyId).slice(0, 8);
+    if (withIds.length > 0) {
+      debug.fetchingPhotosFor = withIds.length;
+      const photoPromises = withIds.map(async (home) => {
         const url = await getPhotos(home._propertyId!, home._listingId || '');
-        if (url) home.photoUrl = url;
+        if (url) home.photoUrl = upgradePhotoUrl(url);
       });
       await Promise.allSettled(photoPromises);
     }
@@ -386,6 +393,7 @@ export async function POST(request: NextRequest) {
     const cleaned = homes.map(({ _propertyId, _listingId, ...rest }) => rest);
     debug.finalCount = cleaned.length;
     debug.finalWithPhotos = cleaned.filter(h => h.photoUrl).length;
+    debug.photoUrls = cleaned.slice(0, 4).map(h => h.photoUrl || 'none');
 
     return NextResponse.json({
       success: true,
@@ -456,7 +464,7 @@ export async function GET(request: NextRequest) {
 
     for (const fmt of locationFormats) {
       try {
-        const searchUrl = `${BASE_URL}/property/search-sale?location=${encodeURIComponent(fmt.value)}&sort_by=RelevantListings&search_within_x_miles=0`;
+        const searchUrl = `${BASE_URL}/property/search-sale?location=${encodeURIComponent(fmt.value)}&sort_by=RelevantListings&search_within_x_miles=50`;
         const searchRes = await fetch(searchUrl, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
         const searchJson = await searchRes.json();
 
