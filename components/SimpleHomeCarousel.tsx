@@ -130,9 +130,9 @@ export default function SimpleHomeCarousel({
 
         if (!cancelled) {
           if (data.success && data.homes && data.homes.length > 0) {
-            // Only use homes that have actual photos and real listing URLs
+            // Only use homes that have actual photos
             const realHomes = data.homes.filter(
-              (h: Home) => h.photoUrl && h.photoUrl.startsWith('http') && h.price >= minPrice && h.price <= maxPrice
+              (h: Home) => h.photoUrl && h.photoUrl.startsWith('http')
             );
             if (realHomes.length > 0) {
               setHomes(realHomes.slice(0, MAX_HOMES));
