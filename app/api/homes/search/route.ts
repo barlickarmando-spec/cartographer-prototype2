@@ -93,18 +93,11 @@ function buildSearchQuery(city: string, stateCode: string): string {
 function upgradePhotoUrl(url: string): string {
   if (!url) return url;
   let upgraded = url;
-  if (/rdcpix\.com/i.test(upgraded)) {
-    // rdcpix photo URLs come in various formats:
-    //   .../abc123-m0xd-w300_rd_q80.jpg   (realty-in-us: w + rd + q params)
-    //   .../abc123-m0xd-w480_h360.jpg     (width + height)
-    //   .../abc123s.jpg                   (size suffix: s/t/m/l)
-    // Replace the entire sizing segment after the hash-format code with large dimensions
-    upgraded = upgraded.replace(/-w\d+[^.]*(?=\.jpg|\.jpeg|\.png|\.webp)/i, '-w1024_h768');
-    upgraded = upgraded.replace(/\/thumbs\//, '/');
-  } else {
-    upgraded = upgraded.replace(/-w\d+_h\d+(_x2)?/g, '-w1024_h768');
-    upgraded = upgraded.replace(/\/thumbs\//, '/');
-  }
+  // Strip any sizing/dimension params — rdcpix serves the original full-res image without them
+  // e.g. .../abc-m0xd-w300_rd_q80.jpg → .../abc-m0xd.jpg  (original resolution)
+  //      .../abc-m49s-w480_h360.jpg   → .../abc-m49s.jpg
+  upgraded = upgraded.replace(/-w\d+[^.]*(?=\.jpg|\.jpeg|\.png|\.webp)/i, '');
+  upgraded = upgraded.replace(/\/thumbs\//, '/');
   return upgraded;
 }
 
