@@ -416,17 +416,45 @@ export async function GET(request: NextRequest) {
         const searchRes = await fetch(searchUrl, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
         const searchJson = await searchRes.json();
 
-        const listings = searchJson.data || searchJson.properties || searchJson.results || [];
-        const firstListing = Array.isArray(listings) && listings.length > 0 ? listings[0] : null;
+        // Dump the raw shape of each top-level key
+        const dataShape: Record<string, string> = {};
+        for (const key of Object.keys(searchJson)) {
+          const val = searchJson[key];
+          if (Array.isArray(val)) dataShape[key] = `array(${val.length})`;
+          else if (val && typeof val === 'object') dataShape[key] = `object(${Object.keys(val).join(',')})`;
+          else dataShape[key] = `${typeof val}: ${JSON.stringify(val).slice(0, 100)}`;
+        }
+
+        // Try to find listings in nested data
+        let listings: any[] = [];
+        const data = searchJson.data;
+        if (Array.isArray(data)) {
+          listings = data;
+        } else if (data && typeof data === 'object') {
+          // Check all keys inside data for arrays
+          for (const key of Object.keys(data)) {
+            if (Array.isArray(data[key]) && data[key].length > 0) {
+              listings = data[key];
+              break;
+            }
+          }
+        }
+        if (listings.length === 0 && Array.isArray(searchJson.properties)) listings = searchJson.properties;
+        if (listings.length === 0 && Array.isArray(searchJson.results)) listings = searchJson.results;
+
+        const firstListing = listings.length > 0 ? listings[0] : null;
 
         steps.push({
           step: 'search-sale',
           url: searchUrl,
           status: searchRes.status,
           responseKeys: Object.keys(searchJson),
-          listingCount: Array.isArray(listings) ? listings.length : 0,
+          dataShape,
+          totalResultCount: searchJson.totalResultCount,
+          listingCount: listings.length,
           firstListingKeys: firstListing ? Object.keys(firstListing) : null,
-          firstListingPreview: firstListing ? JSON.stringify(firstListing).slice(0, 500) : null,
+          firstListingPreview: firstListing ? JSON.stringify(firstListing).slice(0, 800) : null,
+          rawDataPreview: JSON.stringify(searchJson.data).slice(0, 800),
         });
       } catch (e) {
         steps.push({ step: 'search-sale', error: e instanceof Error ? e.message : String(e) });
