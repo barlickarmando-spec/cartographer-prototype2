@@ -92,13 +92,9 @@ function buildSearchQuery(city: string, stateCode: string): string {
 
 function upgradePhotoUrl(url: string): string {
   if (!url) return url;
-  let upgraded = url;
-  // Strip any sizing/dimension params — rdcpix serves the original full-res image without them
-  // e.g. .../abc-m0xd-w300_rd_q80.jpg → .../abc-m0xd.jpg  (original resolution)
-  //      .../abc-m49s-w480_h360.jpg   → .../abc-m49s.jpg
-  upgraded = upgraded.replace(/-w\d+[^.]*(?=\.jpg|\.jpeg|\.png|\.webp)/i, '');
-  upgraded = upgraded.replace(/\/thumbs\//, '/');
-  return upgraded;
+  // Don't manipulate rdcpix URLs — the API returns working sizes and
+  // rewriting params has caused blurry/broken images. Just clean up thumbs path.
+  return url.replace(/\/thumbs\//, '/');
 }
 
 const MAX_LISTINGS = 42;

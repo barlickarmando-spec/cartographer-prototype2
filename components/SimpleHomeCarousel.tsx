@@ -219,7 +219,7 @@ export default function SimpleHomeCarousel({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[0, 1].map((i) => (
             <div key={i} className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden animate-pulse">
-              <div className="h-[50vh] sm:h-[60vh] bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE]" />
+              <div className="aspect-[4/3] bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE]" />
               <div className="p-3 space-y-2">
                 <div className="h-4 bg-[#E5E7EB] rounded w-20" />
                 <div className="h-3 bg-[#E5E7EB] rounded w-32" />
@@ -387,7 +387,7 @@ function GoogleImageFallback({
               rel="noopener noreferrer"
               className="group bg-white rounded-xl border border-[#E5E7EB] overflow-hidden hover:shadow-lg hover:border-[#5BA4E5] transition-all duration-200"
             >
-              <div className={`relative h-[40vh] sm:h-[50vh] bg-gradient-to-br ${gradient} overflow-hidden`}>
+              <div className={`relative aspect-[4/3] bg-gradient-to-br ${gradient} overflow-hidden`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={img.url}
@@ -575,12 +575,11 @@ function CompactHomeCard({ home, index, onClick }: { home: Home; index: number; 
   return (
     <button onClick={onClick}
       className="text-left bg-white rounded-xl border border-[#E5E7EB] overflow-hidden hover:shadow-lg transition-all duration-200 group cursor-pointer w-full">
-      <div className={`relative h-[50vh] sm:h-[60vh] bg-gradient-to-br ${gradient} overflow-hidden`}>
+      <div className={`relative aspect-[4/3] bg-gradient-to-br ${gradient} overflow-hidden`}>
         {home.photoUrl && !imgError ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img src={home.photoUrl} alt={`Home at ${home.address}`}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            sizes="(min-width: 768px) 50vw, 100vw"
             onError={() => setImgError(true)} loading="lazy" />
         ) : (
           <div className="flex flex-col items-center justify-center h-full gap-1">
