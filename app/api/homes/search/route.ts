@@ -144,11 +144,13 @@ async function searchForSale(
   minPrice: number,
   maxPrice: number,
 ): Promise<any[] | null> {
-  // Single call with wide radius to maximize results
+  // Include price filters so the API returns relevant listings
   const params = new URLSearchParams({
     location: locationId,
     sort_by: 'RelevantListings',
     search_within_x_miles: '50',
+    price_min: String(minPrice),
+    price_max: String(maxPrice),
   });
 
   const url = `${BASE_URL}/property/search-sale?${params.toString()}`;
@@ -387,10 +389,10 @@ export async function POST(request: NextRequest) {
     // Step 4: Strictly filter to price range — never show homes outside budget
     homes = homes.filter(h => h.price >= minPrice && h.price <= maxPrice);
     debug.inPriceRange = homes.length;
-    homes = homes.slice(0, 12);
+    homes = homes.slice(0, 24);
 
     // Step 5: Fetch high-res photos via get-photos endpoint for all listings with property IDs
-    const withIds = homes.filter(h => h._propertyId).slice(0, 8);
+    const withIds = homes.filter(h => h._propertyId).slice(0, 24);
     if (withIds.length > 0) {
       debug.fetchingPhotosFor = withIds.length;
       const photoPromises = withIds.map(async (home) => {
