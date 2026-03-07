@@ -109,6 +109,7 @@ export default function HomeAffordabilityPage() {
         result={currentResult}
         profile={profile}
         isLoading={isLoading && progress < 10}
+        onLocationChange={handleLocationClick}
       />
 
       {/* Section 2: National Heat Map */}
@@ -141,11 +142,6 @@ export default function HomeAffordabilityPage() {
               </button>
             </div>
           </div>
-          <p className="text-sm text-gray-500 mb-2">
-            {mapMode === 'sqft'
-              ? 'See how much home you can afford in each location — square footage, price per sqft, and estimated time to ownership. Click any area to view details.'
-              : 'Colors show your maximum sustainable home price in each state. Click any state or city to view your full profile there.'}
-          </p>
         </div>
 
         <div className="px-6 pb-6">

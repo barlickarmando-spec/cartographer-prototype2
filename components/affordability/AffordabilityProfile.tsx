@@ -1,9 +1,11 @@
 'use client';
 
+import { useState, useRef, useEffect } from 'react';
 import { CalculationResult } from '@/lib/calculation-engine';
 import { formatCurrency } from '@/lib/utils';
 import { createRatingColorScale } from '@/lib/color-scale';
 import { getPricePerSqft } from '@/lib/home-value-lookup';
+import { filterStates } from '@/lib/onboarding/locations';
 import type { UserProfile } from '@/lib/onboarding/types';
 
 const ratingScale = createRatingColorScale();
@@ -12,6 +14,7 @@ interface AffordabilityProfileProps {
   result: CalculationResult | null;
   profile: UserProfile | null;
   isLoading: boolean;
+  onLocationChange?: (location: string) => void;
 }
 
 const VIABILITY_LABELS: Record<string, { label: string; color: string }> = {
@@ -27,7 +30,24 @@ export default function AffordabilityProfile({
   result,
   profile,
   isLoading,
+  onLocationChange,
 }: AffordabilityProfileProps) {
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [locationSearch, setLocationSearch] = useState('');
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setShowLocationPicker(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredLocations = filterStates(locationSearch, 8);
+
   const maxAffordable = result?.houseProjections.maxAffordable;
   const maxPrice = maxAffordable?.maxSustainableHousePrice ?? 0;
   const monthlyPayment = maxAffordable
@@ -62,13 +82,57 @@ export default function AffordabilityProfile({
     <div className="bg-white rounded-2xl border border-carto-blue-pale/30 overflow-hidden">
       <div className="p-6">
         <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-xl font-bold text-carto-slate">
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-bold text-[#4A90D9]">
               Your Affordability Profile
             </h2>
-            <p className="text-sm text-carto-steel">
-              Based on your income, savings, debts, and life plans
-            </p>
+            <span className="text-[#6B7280] text-lg">—</span>
+            <div className="relative" ref={pickerRef}>
+              <button
+                onClick={() => {
+                  setShowLocationPicker(!showLocationPicker);
+                  setLocationSearch('');
+                }}
+                className="flex items-center gap-1.5 text-[#2C3E50] font-semibold text-lg hover:text-[#4A90D9] transition-colors"
+              >
+                {location || 'Select Location'}
+                <svg className="w-4 h-4 text-[#4A90D9]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showLocationPicker && onLocationChange && (
+                <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-[#E5E7EB] rounded-xl shadow-lg z-20 overflow-hidden">
+                  <div className="p-2">
+                    <input
+                      type="text"
+                      value={locationSearch}
+                      onChange={(e) => setLocationSearch(e.target.value)}
+                      placeholder="Search locations..."
+                      className="w-full px-3 py-2 text-sm border border-[#E5E7EB] rounded-lg focus:border-[#4A90D9] focus:ring-1 focus:ring-[#4A90D9] outline-none"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="max-h-48 overflow-y-auto">
+                    {filteredLocations.map((loc) => (
+                      <button
+                        key={loc}
+                        onClick={() => {
+                          onLocationChange(loc);
+                          setShowLocationPicker(false);
+                        }}
+                        className={`w-full text-left px-4 py-2 text-sm transition-colors ${
+                          loc === location
+                            ? 'bg-[#EFF6FF] text-[#4A90D9] font-medium'
+                            : 'text-[#2C3E50] hover:bg-[#F8FAFB]'
+                        }`}
+                      >
+                        {loc}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <span
