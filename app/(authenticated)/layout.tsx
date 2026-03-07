@@ -33,8 +33,8 @@ export default function AuthenticatedLayout({
     <div className="carto-headings min-h-screen bg-carto-sky">
       {/* Top Bar — mirrors homepage navbar style */}
       <nav className="fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-lg border-b border-slate-200/60 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+        <div className="px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center h-16">
             {/* Logo */}
             <Link href="/profile" className="flex items-center shrink-0 h-16 py-1">
               <Image
@@ -47,8 +47,8 @@ export default function AuthenticatedLayout({
               />
             </Link>
 
-            {/* Center links — same as homepage */}
-            <div className="hidden md:flex items-center gap-8">
+            {/* Center links — centered in remaining space */}
+            <div className="hidden md:flex flex-1 items-center justify-center gap-8">
               <Link href="/home-size-calculator" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">
                 Calculator
               </Link>
@@ -63,8 +63,8 @@ export default function AuthenticatedLayout({
               </Link>
             </div>
 
-            {/* Right side — Settings icon + Sign Out */}
-            <div className="flex items-center gap-3">
+            {/* Right side — Settings icon + Sign Out, pinned far right */}
+            <div className="flex items-center gap-3 shrink-0">
               <Link
                 href="/profile"
                 className="text-slate-600 hover:text-slate-900 transition-colors p-2 rounded-lg hover:bg-slate-100"
