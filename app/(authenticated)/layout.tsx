@@ -89,7 +89,7 @@ export default function AuthenticatedLayout({
       {/* Body: sidebar + content */}
       <div className="flex pt-16 min-h-screen">
         {/* Left Sidebar */}
-        <aside className="hidden md:flex flex-col w-56 shrink-0 fixed top-16 left-0 bottom-0 bg-[#B8D4EE] overflow-y-auto">
+        <aside className="hidden md:flex flex-col w-56 shrink-0 fixed top-16 left-0 bottom-0 bg-gradient-to-br from-[#4A90D9] to-[#3A7BC0] overflow-y-auto">
           <nav className="flex-1 py-4 px-3 space-y-2">
             {navItems.map((item) => (
               <Link
@@ -97,8 +97,8 @@ export default function AuthenticatedLayout({
                 href={item.href}
                 className={`group flex items-center gap-3 px-4 py-3.5 text-sm font-heading font-semibold transition-all duration-200 text-black rounded-l-lg rounded-r-full ${
                   isActive(item.href)
-                    ? 'bg-white/70 shadow-sm'
-                    : 'hover:bg-white/50 hover:pl-5 hover:shadow-sm'
+                    ? 'bg-white shadow-md'
+                    : 'bg-white/30 hover:bg-white/60 hover:pl-5 hover:shadow-md'
                 }`}
               >
                 <span className="w-5 h-5 flex items-center justify-center shrink-0">
