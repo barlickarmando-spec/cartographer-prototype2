@@ -1,28 +1,18 @@
 // app/api/homes/search/route.ts
 //
-// Two-tier real estate search:
-// Primary:  realty-in-us.p.rapidapi.com    (auto-complete → properties/v3/list)
-// Fallback: realtor-search.p.rapidapi.com  (auto-complete → search-sale → get-photos)
+// Real estate search using realty-in-us.p.rapidapi.com
+// (auto-complete → properties/v3/list)
 
 import { NextRequest, NextResponse } from 'next/server';
 
 // ── Config ──────────────────────────────────────────────────────────
 const API_KEY = process.env.RAPIDAPI_KEY || '3b86e8a737mshcc69ac4077e9c00p18b472jsnc475ce3e84b9';
 
-// Primary API
-const PRIMARY_HOST = 'realtor-search.p.rapidapi.com';
-const PRIMARY_URL = `https://${PRIMARY_HOST}`;
-const PRIMARY_HEADERS: Record<string, string> = {
+const API_HOST = 'realty-in-us.p.rapidapi.com';
+const API_URL = `https://${API_HOST}`;
+const API_HEADERS: Record<string, string> = {
   'X-RapidAPI-Key': API_KEY,
-  'X-RapidAPI-Host': PRIMARY_HOST,
-};
-
-// Fallback API
-const FALLBACK_HOST = 'realty-in-us.p.rapidapi.com';
-const FALLBACK_URL = `https://${FALLBACK_HOST}`;
-const FALLBACK_HEADERS: Record<string, string> = {
-  'X-RapidAPI-Key': API_KEY,
-  'X-RapidAPI-Host': FALLBACK_HOST,
+  'X-RapidAPI-Host': API_HOST,
   'Content-Type': 'application/json',
 };
 
@@ -99,11 +89,8 @@ function upgradePhotoUrl(url: string): string {
   if (!url) return url;
   let upgraded = url.replace(/(-w)\d+/, '$11280');
   upgraded = upgraded.replace(/(_h)\d+/, '$1960');
-  // Remove "thumbs" path segment which forces tiny sizes
   upgraded = upgraded.replace(/\/thumbs\//, '/');
-  // Remove any explicit size suffixes like "s.jpg" → "l.jpg" for large
   upgraded = upgraded.replace(/([_-])s(\.\w+)$/, '$1l$2');
-  // Some CDNs use ?w=N or &w=N query params — bump those too
   upgraded = upgraded.replace(/([?&])w=\d+/, '$1w=1280');
   upgraded = upgraded.replace(/([?&])h=\d+/, '$1h=960');
   return upgraded;
@@ -126,7 +113,7 @@ function getFullResPhotoUrl(url: string): string {
 
 const MAX_LISTINGS = 42;
 
-// ── Shared: normalize a listing into our Home interface ─────────────
+// ── Normalize a listing into our Home interface ─────────────────────
 function normalizeProperty(prop: any): {
   id: string;
   address: string;
@@ -142,8 +129,6 @@ function normalizeProperty(prop: any): {
   fullResPhotoUrl: string;
   listingUrl: string;
   status: string;
-  _propertyId?: string;
-  _listingId?: string;
 } {
   const loc = prop.location || {};
   const addr = loc.address || prop.address || {};
@@ -213,220 +198,29 @@ function normalizeProperty(prop: any): {
     fullResPhotoUrl: fullResPhoto,
     listingUrl,
     status: prop.status || 'for_sale',
-    _propertyId: prop.property_id || '',
-    _listingId: prop.listing_id || '',
   };
 }
 
 // =====================================================================
-// PRIMARY API: realtor-search.p.rapidapi.com
+// API: realty-in-us.p.rapidapi.com
 // =====================================================================
 
-async function primaryAutoComplete(query: string): Promise<string | null> {
-  const url = `${PRIMARY_URL}/auto-complete?input=${encodeURIComponent(query)}`;
-  console.log(`[homes/search][primary] Auto-complete: ${url}`);
-
-  const res = await fetch(url, {
-    headers: PRIMARY_HEADERS,
-    signal: AbortSignal.timeout(8000),
-  });
-
-  if (!res.ok) {
-    console.log(`[homes/search][primary] Auto-complete failed: ${res.status}`);
-    return null;
-  }
-
-  const json = await res.json();
-  const results = json.data || json.results || json;
-
-  if (!Array.isArray(results) || results.length === 0) {
-    console.log('[homes/search][primary] Auto-complete returned no results');
-    return null;
-  }
-
-  for (const r of results) {
-    if (r.city && r.state_code) {
-      console.log(`[homes/search][primary] Resolved to: ${r.city}, ${r.state_code}`);
-      return `${r.city}, ${r.state_code}`;
-    }
-  }
-
-  const first = results[0];
-  if (first.state_code) {
-    const capital = STATE_CAPITALS[first.state_code];
-    if (capital) {
-      console.log(`[homes/search][primary] State fallback: ${capital}, ${first.state_code}`);
-      return `${capital}, ${first.state_code}`;
-    }
-  }
-
-  for (const r of results) {
-    if (r.postal_code) return r.postal_code;
-  }
-
-  console.log('[homes/search][primary] No usable ID:', JSON.stringify(first).slice(0, 200));
-  return null;
-}
-
-function extractListings(json: any): any[] {
-  let listings = json.data || json.properties || json.results || json.listings || json.homes || [];
-
-  if (!Array.isArray(listings) && json.data && typeof json.data === 'object') {
-    if (json.data.home_search?.results && Array.isArray(json.data.home_search.results)) {
-      return json.data.home_search.results;
-    }
-    for (const key of Object.keys(json.data)) {
-      if (Array.isArray(json.data[key]) && json.data[key].length > 0) {
-        return json.data[key];
-      }
-    }
-  }
-
-  return Array.isArray(listings) ? listings : [];
-}
-
-const MAX_PAGES = 5;
-
-async function primarySearchForSale(
-  locationId: string,
-  minPrice: number,
-  maxPrice: number,
-): Promise<{ listings: any[]; totalAvailable: number } | null> {
-
-  const baseParamSets = [
-    {
-      location: locationId,
-      sort_by: 'RelevantListings',
-      search_within_x_miles: '50',
-      price_min: String(minPrice),
-      price_max: String(maxPrice),
-    },
-    {
-      location: locationId,
-      sort_by: 'RelevantListings',
-      search_within_x_miles: '50',
-    },
-  ];
-
-  for (const baseParams of baseParamSets) {
-    try {
-      const page1Params = new URLSearchParams({ ...baseParams, page: '1' });
-      const url1 = `${PRIMARY_URL}/property/search-sale?${page1Params.toString()}`;
-      console.log(`[homes/search][primary] Search page 1: ${url1}`);
-
-      const res1 = await fetch(url1, {
-        headers: PRIMARY_HEADERS,
-        signal: AbortSignal.timeout(12000),
-      });
-
-      if (!res1.ok) {
-        console.log(`[homes/search][primary] Search page 1 failed: ${res1.status}`);
-        continue;
-      }
-
-      const json1 = await res1.json();
-      const page1Listings = extractListings(json1);
-      const totalResultCount = json1.totalResultCount || json1.total || json1.meta?.total || 0;
-      const perPage = page1Listings.length;
-
-      console.log(`[homes/search][primary] Page 1: ${perPage} listings, total: ${totalResultCount}`);
-
-      if (perPage === 0) continue;
-
-      const allListings = [...page1Listings];
-
-      if (totalResultCount > perPage && allListings.length < MAX_LISTINGS) {
-        const totalPages = Math.min(MAX_PAGES, Math.ceil(totalResultCount / Math.max(perPage, 1)));
-        const pagePromises: Promise<any[]>[] = [];
-
-        for (let p = 2; p <= totalPages; p++) {
-          if (allListings.length + (p - 2) * perPage >= MAX_LISTINGS) break;
-          const pageParams = new URLSearchParams({ ...baseParams, page: String(p) });
-          const pageUrl = `${PRIMARY_URL}/property/search-sale?${pageParams.toString()}`;
-          console.log(`[homes/search][primary] Queueing page ${p}`);
-
-          pagePromises.push(
-            fetch(pageUrl, { headers: PRIMARY_HEADERS, signal: AbortSignal.timeout(12000) })
-              .then(async (res) => {
-                if (!res.ok) return [];
-                const json = await res.json();
-                return extractListings(json);
-              })
-              .catch((e) => {
-                console.log(`[homes/search][primary] Page ${p} error:`, e instanceof Error ? e.message : e);
-                return [];
-              })
-          );
-        }
-
-        const additionalPages = await Promise.all(pagePromises);
-        for (const pageResults of additionalPages) {
-          allListings.push(...pageResults);
-        }
-      }
-
-      console.log(`[homes/search][primary] Total fetched: ${allListings.length} (${totalResultCount} available)`);
-      return { listings: allListings, totalAvailable: totalResultCount || allListings.length };
-
-    } catch (e) {
-      console.log(`[homes/search][primary] Search error:`, e instanceof Error ? e.message : e);
-    }
-  }
-
-  return null;
-}
-
-async function primaryGetPhotos(propertyId: string, listingId: string): Promise<string> {
-  const idPayload = JSON.stringify({ property_id: propertyId, listing_id: listingId });
-  const encoded = Buffer.from(idPayload).toString('base64');
-  const url = `${PRIMARY_URL}/property/get-photos?property_id=${encodeURIComponent(encoded)}`;
-
-  try {
-    const res = await fetch(url, {
-      headers: PRIMARY_HEADERS,
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) return '';
-
-    const json = await res.json();
-    const photos = json.data || json.photos || json.images || [];
-
-    if (Array.isArray(photos) && photos.length > 0) {
-      const first = photos[0];
-      if (typeof first === 'string') return first;
-      return first?.href || first?.url || first?.src || first?.photo || '';
-    }
-
-    if (json.data?.photos && Array.isArray(json.data.photos) && json.data.photos.length > 0) {
-      const first = json.data.photos[0];
-      return first?.href || first?.url || first?.src || '';
-    }
-  } catch {
-    // Photo fetch is optional
-  }
-  return '';
-}
-
-// =====================================================================
-// FALLBACK API: realty-in-us.p.rapidapi.com
-// =====================================================================
-
-interface FallbackLocation {
+interface ResolvedLocation {
   city: string;
   state_code: string;
 }
 
-async function fallbackAutoComplete(query: string): Promise<FallbackLocation | null> {
-  const url = `${FALLBACK_URL}/locations/v2/auto-complete?input=${encodeURIComponent(query)}`;
-  console.log(`[homes/search][fallback] Auto-complete: ${url}`);
+async function autoComplete(query: string): Promise<ResolvedLocation | null> {
+  const url = `${API_URL}/locations/v2/auto-complete?input=${encodeURIComponent(query)}`;
+  console.log(`[homes/search] Auto-complete: ${url}`);
 
   const res = await fetch(url, {
-    headers: FALLBACK_HEADERS,
+    headers: API_HEADERS,
     signal: AbortSignal.timeout(8000),
   });
 
   if (!res.ok) {
-    console.log(`[homes/search][fallback] Auto-complete failed: ${res.status}`);
+    console.log(`[homes/search] Auto-complete failed: ${res.status}`);
     return null;
   }
 
@@ -434,20 +228,20 @@ async function fallbackAutoComplete(query: string): Promise<FallbackLocation | n
   const autocomplete = json.autocomplete || [];
 
   if (!Array.isArray(autocomplete) || autocomplete.length === 0) {
-    console.log('[homes/search][fallback] Auto-complete returned no results');
+    console.log('[homes/search] Auto-complete returned no results');
     return null;
   }
 
   for (const item of autocomplete) {
     if (item.area_type === 'city' && item.city && item.state_code) {
-      console.log(`[homes/search][fallback] Resolved to city: ${item.city}, ${item.state_code}`);
+      console.log(`[homes/search] Resolved to city: ${item.city}, ${item.state_code}`);
       return { city: item.city, state_code: item.state_code };
     }
   }
 
   for (const item of autocomplete) {
     if (item.city && item.state_code) {
-      console.log(`[homes/search][fallback] Resolved to: ${item.city}, ${item.state_code}`);
+      console.log(`[homes/search] Resolved to: ${item.city}, ${item.state_code}`);
       return { city: item.city, state_code: item.state_code };
     }
   }
@@ -456,17 +250,17 @@ async function fallbackAutoComplete(query: string): Promise<FallbackLocation | n
   if (first.state_code) {
     const capital = STATE_CAPITALS[first.state_code];
     if (capital) {
-      console.log(`[homes/search][fallback] State fallback: ${capital}, ${first.state_code}`);
+      console.log(`[homes/search] State fallback: ${capital}, ${first.state_code}`);
       return { city: capital, state_code: first.state_code };
     }
   }
 
-  console.log('[homes/search][fallback] No usable result:', JSON.stringify(first).slice(0, 200));
+  console.log('[homes/search] No usable result:', JSON.stringify(first).slice(0, 200));
   return null;
 }
 
-async function fallbackSearchListings(
-  loc: FallbackLocation,
+async function searchListings(
+  loc: ResolvedLocation,
   minPrice: number,
   maxPrice: number,
 ): Promise<{ listings: any[]; totalAvailable: number } | null> {
@@ -493,17 +287,17 @@ async function fallbackSearchListings(
 
   for (const body of bodyVariants) {
     try {
-      console.log(`[homes/search][fallback] POST /properties/v3/list:`, JSON.stringify(body).slice(0, 200));
+      console.log(`[homes/search] POST /properties/v3/list:`, JSON.stringify(body).slice(0, 200));
 
-      const res = await fetch(`${FALLBACK_URL}/properties/v3/list`, {
+      const res = await fetch(`${API_URL}/properties/v3/list`, {
         method: 'POST',
-        headers: FALLBACK_HEADERS,
+        headers: API_HEADERS,
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(15000),
       });
 
       if (!res.ok) {
-        console.log(`[homes/search][fallback] List failed: ${res.status}`);
+        console.log(`[homes/search] List failed: ${res.status}`);
         continue;
       }
 
@@ -516,13 +310,13 @@ async function fallbackSearchListings(
       if (!Array.isArray(results)) results = [];
 
       const total = homeSearch.total || json.data?.total || json.total || results.length;
-      console.log(`[homes/search][fallback] Got ${results.length} listings (${total} total)`);
+      console.log(`[homes/search] Got ${results.length} listings (${total} total)`);
 
       if (results.length > 0) {
         return { listings: results.slice(0, MAX_LISTINGS), totalAvailable: total };
       }
     } catch (e) {
-      console.log(`[homes/search][fallback] List error:`, e instanceof Error ? e.message : e);
+      console.log(`[homes/search] List error:`, e instanceof Error ? e.message : e);
     }
   }
 
@@ -558,52 +352,28 @@ export async function POST(request: NextRequest) {
 
     let listings: any[] = [];
     let totalAvailable = 0;
-    let source = 'none';
 
-    // ── Try primary API (realty-in-us) ──
+    // ── Resolve location and search ──
     try {
-      console.log('[homes/search] Trying primary (realty-in-us)...');
-      const resolved = await fallbackAutoComplete(searchQuery);
-      debug.primaryResolved = resolved;
+      console.log('[homes/search] Searching realty-in-us...');
+      const resolved = await autoComplete(searchQuery);
+      debug.resolved = resolved;
 
       if (resolved) {
-        const result = await fallbackSearchListings(resolved, minPrice, maxPrice);
+        const result = await searchListings(resolved, minPrice, maxPrice);
         if (result && result.listings.length > 0) {
           listings = result.listings;
           totalAvailable = result.totalAvailable;
-          source = 'realty-in-us';
         }
       }
-      debug.primaryCount = listings.length;
+      debug.listingCount = listings.length;
     } catch (e) {
-      console.log('[homes/search] Primary API error:', e instanceof Error ? e.message : e);
-      debug.primaryError = e instanceof Error ? e.message : String(e);
-    }
-
-    // ── Fallback to realtor-search if primary returned nothing ──
-    if (listings.length === 0) {
-      console.log('[homes/search] Primary returned no results, trying fallback (realtor-search)...');
-      try {
-        const locationId = await primaryAutoComplete(searchQuery);
-        debug.fallbackLocationId = locationId;
-
-        if (locationId) {
-          const result = await primarySearchForSale(locationId, minPrice, maxPrice);
-          if (result && result.listings.length > 0) {
-            listings = result.listings;
-            totalAvailable = result.totalAvailable;
-            source = 'realtor-search';
-          }
-        }
-        debug.fallbackCount = listings.length;
-      } catch (e) {
-        console.log('[homes/search] Fallback API error:', e instanceof Error ? e.message : e);
-        debug.fallbackError = e instanceof Error ? e.message : String(e);
-      }
+      console.log('[homes/search] API error:', e instanceof Error ? e.message : e);
+      debug.error = e instanceof Error ? e.message : String(e);
     }
 
     debug.rawListingCount = listings.length;
-    debug.source = source;
+    debug.source = 'realty-in-us';
 
     if (listings.length === 0) {
       return NextResponse.json({ success: true, homes: [], count: 0, totalAvailable: 0, source: 'no_results', debug });
@@ -640,7 +410,7 @@ export async function POST(request: NextRequest) {
         debug.priceFilterMode = 'expanded';
         debug.expandedRange = { min: expandedMin, max: expandedMax };
       } else {
-        // Keep all results — real listings are better than fallback
+        // Keep all results — real listings are better than nothing
         debug.priceFilterMode = 'none';
       }
     }
@@ -660,35 +430,16 @@ export async function POST(request: NextRequest) {
 
     homes = homes.slice(0, MAX_LISTINGS);
 
-    // Fetch photos for primary API listings that are missing them
-    if (source === 'realtor-search') {
-      const needPhotos = homes.filter(h => h._propertyId && !h.photoUrl).slice(0, 12);
-      if (needPhotos.length > 0) {
-        debug.fetchingPhotosFor = needPhotos.length;
-        const photoPromises = needPhotos.map(async (home) => {
-          const url = await primaryGetPhotos(home._propertyId!, home._listingId || '');
-          if (url) {
-            home.photoUrl = upgradePhotoUrl(url);
-            home.fullResPhotoUrl = getFullResPhotoUrl(url);
-          }
-        });
-        await Promise.allSettled(photoPromises);
-      }
-    }
-
-    // Remove internal fields (keep fullResPhotoUrl for client)
-    const cleaned = homes.map(({ _propertyId, _listingId, ...rest }) => rest);
-    debug.finalCount = cleaned.length;
-    debug.finalWithPhotos = cleaned.filter(h => h.photoUrl).length;
-    // Log sample photo URLs for debugging
-    debug.samplePhotoUrls = cleaned.slice(0, 3).map(h => h.photoUrl).filter(Boolean);
+    debug.finalCount = homes.length;
+    debug.finalWithPhotos = homes.filter(h => h.photoUrl).length;
+    debug.samplePhotoUrls = homes.slice(0, 3).map(h => h.photoUrl).filter(Boolean);
 
     return NextResponse.json({
       success: true,
-      homes: cleaned,
-      count: cleaned.length,
+      homes,
+      count: homes.length,
       totalAvailable,
-      source,
+      source: 'realty-in-us',
       debug,
     });
   } catch (error) {
@@ -709,35 +460,15 @@ export async function GET(request: NextRequest) {
     const searchQuery = buildSearchQuery(city, stateCode);
     const steps: any[] = [];
 
-    // Test primary
     try {
-      const locationId = await primaryAutoComplete(searchQuery);
-      steps.push({ step: 'primary-auto-complete', resolved: locationId });
-
-      if (locationId) {
-        const result = await primarySearchForSale(locationId, 100000, 500000);
-        const firstListing = result?.listings?.[0];
-        steps.push({
-          step: 'primary-search-sale',
-          totalAvailable: result?.totalAvailable,
-          listingCount: result?.listings?.length || 0,
-          firstListingKeys: firstListing ? Object.keys(firstListing) : null,
-        });
-      }
-    } catch (e) {
-      steps.push({ step: 'primary-error', error: e instanceof Error ? e.message : String(e) });
-    }
-
-    // Test fallback
-    try {
-      const resolved = await fallbackAutoComplete(searchQuery);
-      steps.push({ step: 'fallback-auto-complete', resolved });
+      const resolved = await autoComplete(searchQuery);
+      steps.push({ step: 'auto-complete', resolved });
 
       if (resolved) {
-        const result = await fallbackSearchListings(resolved, 100000, 500000);
+        const result = await searchListings(resolved, 100000, 500000);
         const firstListing = result?.listings?.[0];
         steps.push({
-          step: 'fallback-properties-list',
+          step: 'properties-list',
           totalAvailable: result?.totalAvailable,
           listingCount: result?.listings?.length || 0,
           samplePhotoRaw: firstListing?.primary_photo?.href || 'none',
@@ -745,12 +476,11 @@ export async function GET(request: NextRequest) {
         });
       }
     } catch (e) {
-      steps.push({ step: 'fallback-error', error: e instanceof Error ? e.message : String(e) });
+      steps.push({ step: 'error', error: e instanceof Error ? e.message : String(e) });
     }
 
     return NextResponse.json({
-      primaryHost: PRIMARY_HOST,
-      fallbackHost: FALLBACK_HOST,
+      apiHost: API_HOST,
       apiKeyConfigured: !!API_KEY,
       locationInput: testLocation,
       searchQuery,
@@ -760,9 +490,8 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     status: 'ready',
-    message: 'Real estate search API — primary: realtor-search, fallback: realty-in-us — add ?test=Boise to test',
+    message: 'Real estate search API (realty-in-us) — add ?test=Boise to test',
     apiKeyConfigured: !!API_KEY,
-    primaryHost: PRIMARY_HOST,
-    fallbackHost: FALLBACK_HOST,
+    apiHost: API_HOST,
   });
 }
