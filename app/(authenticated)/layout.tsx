@@ -34,7 +34,7 @@ export default function AuthenticatedLayout({
       {/* Top Bar — mirrors homepage navbar style */}
       <nav className="fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-lg border-b border-slate-200/60 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between h-20">
             {/* Logo */}
             <Link href="/profile" className="flex items-center shrink-0">
               <Image
@@ -42,7 +42,7 @@ export default function AuthenticatedLayout({
                 alt="Cartographer"
                 width={256}
                 height={64}
-                className="h-10 w-auto"
+                className="h-14 w-auto"
                 priority
               />
             </Link>
@@ -77,7 +77,7 @@ export default function AuthenticatedLayout({
               </Link>
               <button
                 onClick={handleSignOut}
-                className="bg-carto-blue text-white text-sm px-5 py-2 rounded-lg hover:bg-[#3A7BC0] transition-colors"
+                className="bg-[#4A90D9] text-white text-sm font-medium px-5 py-2 rounded-lg border-2 border-[#4A90D9] hover:bg-[#3A7BC0] hover:border-[#3A7BC0] transition-colors shadow-sm"
               >
                 Sign Out
               </button>
@@ -87,9 +87,9 @@ export default function AuthenticatedLayout({
       </nav>
 
       {/* Body: sidebar + content */}
-      <div className="flex pt-16 min-h-screen">
+      <div className="flex pt-20 min-h-screen">
         {/* Left Sidebar */}
-        <aside className="hidden md:flex flex-col w-56 shrink-0 fixed top-16 left-0 bottom-0 bg-white border-r-2 border-carto-blue overflow-y-auto">
+        <aside className="hidden md:flex flex-col w-56 shrink-0 fixed top-20 left-0 bottom-0 bg-[#E8F2FB] border-r-2 border-[#4A90D9] overflow-y-auto">
           <nav className="flex-1 py-4 px-3 space-y-1">
             {navItems.map((item) => (
               <Link
