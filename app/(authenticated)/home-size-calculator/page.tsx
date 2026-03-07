@@ -419,7 +419,7 @@ export default function HomeSizeCalculatorPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#5BA4E5]" />
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#4A90D9]" />
       </div>
     );
   }
@@ -428,8 +428,8 @@ export default function HomeSizeCalculatorPage() {
     <div className="space-y-6">
       {/* Page Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Home Size Calculator</h1>
-        <p className="text-gray-600">Calculate how big of a house you can afford or how long it takes to reach your target</p>
+        <h1 className="text-3xl font-extrabold text-carto-slate mb-2">Home Size Calculator</h1>
+        <p className="text-carto-steel">Calculate how big of a house you can afford or how long it takes to reach your target</p>
       </div>
 
       {/* ===== SEARCH BAR SECTION ===== */}
@@ -628,9 +628,9 @@ export default function HomeSizeCalculatorPage() {
                 {qualityFilters.map(q => {
                   const label = q === 'nice' ? 'Nice Area' : q === 'average' ? 'Average Area' : 'Any Area';
                   return (
-                    <span key={q} className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#EFF6FF] text-gray-800 rounded-full text-xs border border-[#5BA4E5]">
+                    <span key={q} className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#EFF6FF] text-gray-800 rounded-full text-xs border border-[#4A90D9]">
                       {label}
-                      <button onClick={() => toggleQuality(q)} className="text-[#5BA4E5] hover:text-[#4A93D4] font-bold ml-0.5">×</button>
+                      <button onClick={() => toggleQuality(q)} className="text-[#4A90D9] hover:text-[#3A7BC0] font-bold ml-0.5">×</button>
                     </span>
                   );
                 })}
@@ -670,7 +670,7 @@ export default function HomeSizeCalculatorPage() {
                       type="checkbox"
                       checked={qualityFilters.length === 3}
                       onChange={() => setQualityFilters(qualityFilters.length === 3 ? [] : ['nice', 'average', 'any'])}
-                      className="w-3.5 h-3.5 text-[#5BA4E5] border-gray-300 rounded focus:ring-[#5BA4E5] mr-3"
+                      className="w-3.5 h-3.5 text-[#4A90D9] border-gray-300 rounded focus:ring-[#4A90D9] mr-3"
                     />
                     Show All
                   </label>
@@ -694,7 +694,7 @@ export default function HomeSizeCalculatorPage() {
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleQuality(opt.key)}
-                        className="w-3.5 h-3.5 text-[#5BA4E5] border-gray-300 rounded focus:ring-[#5BA4E5] mr-3"
+                        className="w-3.5 h-3.5 text-[#4A90D9] border-gray-300 rounded focus:ring-[#4A90D9] mr-3"
                       />
                       {opt.label}
                     </label>
@@ -841,7 +841,7 @@ export default function HomeSizeCalculatorPage() {
           {recommendations.length > 0 && (
             <div className="mt-8">
               <div className="mb-5">
-                <h2 className="text-xl font-bold text-gray-900">If You Want A Larger House</h2>
+                <h2 className="text-xl font-bold text-carto-slate">If You Want A Larger House</h2>
                 <p className="text-sm text-gray-500 mt-1">
                   Based on your profile and filters, here are locations where you could get a bigger home for your money
                 </p>
@@ -861,7 +861,7 @@ export default function HomeSizeCalculatorPage() {
                         setPendingRecalc(true);
                       }}
                       className="text-left bg-white rounded-xl border border-gray-200 hover:shadow-md transition-all duration-200 group cursor-pointer"
-                      style={{ borderLeftWidth: '4px', borderLeftColor: '#5BA4E5' }}
+                      style={{ borderLeftWidth: '4px', borderLeftColor: '#4A90D9' }}
                     >
                       <div className="px-5 py-4 flex items-center justify-between gap-4">
                         {/* Left side: flag + location info */}
@@ -876,7 +876,7 @@ export default function HomeSizeCalculatorPage() {
                             />
                           )}
                           <div className="min-w-0">
-                            <h3 className="text-base font-bold text-gray-900 truncate group-hover:text-[#5BA4E5] transition-colors">
+                            <h3 className="text-base font-bold text-gray-900 truncate group-hover:text-[#4A90D9] transition-colors">
                               {rec.location}
                             </h3>
                             {/* Comparison metrics */}

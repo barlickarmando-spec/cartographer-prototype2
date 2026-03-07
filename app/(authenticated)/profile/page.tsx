@@ -181,7 +181,7 @@ export default function ProfilePage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#5BA4E5] mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4A90D9] mx-auto mb-4"></div>
           <p className="text-[#6B7280]">Loading your financial roadmap...</p>
         </div>
       </div>
@@ -195,7 +195,7 @@ export default function ProfilePage() {
           <p className="text-[#6B7280] mb-4">Unable to load results</p>
           <button 
             onClick={() => router.push('/onboarding')}
-            className="text-[#5BA4E5] hover:text-[#4A93D4] font-medium"
+            className="text-[#4A90D9] hover:text-[#3A7BC0] font-medium"
           >
             Start Over
           </button>
@@ -294,11 +294,11 @@ export default function ProfilePage() {
                 setShowLocationDropdown(true);
               }}
               placeholder="Search any state or city..."
-              className="w-full md:w-96 pl-10 pr-4 py-2 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none text-sm"
+              className="w-full md:w-96 pl-10 pr-4 py-2 rounded-lg border border-[#E5E7EB] focus:border-[#4A90D9] focus:ring-2 focus:ring-[#4A90D9] focus:ring-opacity-20 outline-none text-sm"
             />
             {locationSearchLoading && (
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#5BA4E5]"></div>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#4A90D9]"></div>
               </div>
             )}
           </div>
@@ -316,7 +316,7 @@ export default function ProfilePage() {
                       key={r.location}
                       onClick={() => { setSelectedResult(r); setShowLocationDropdown(false); setLocationSearch(''); }}
                       className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
-                        r.location === result.location ? 'bg-[#EFF6FF] text-[#5BA4E5]' : 'hover:bg-gray-50 text-gray-700'
+                        r.location === result.location ? 'bg-[#EFF6FF] text-[#4A90D9]' : 'hover:bg-gray-50 text-gray-700'
                       }`}
                     >
                       <span>{r.location}</span>
@@ -343,7 +343,7 @@ export default function ProfilePage() {
                           onClick={() => handleSelectLocation(match.label)}
                           className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors flex items-center gap-2"
                         >
-                          <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                          <svg className="w-4 h-4 text-[#4A90D9] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
                             <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
                           </svg>
@@ -383,7 +383,7 @@ export default function ProfilePage() {
       <div className="flex justify-end">
         <button
           onClick={() => router.push('/adjust-strategy')}
-          className="flex items-center gap-2 px-4 py-2 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-colors text-sm font-medium"
+          className="flex items-center gap-2 px-4 py-2 bg-[#4A90D9] text-white rounded-lg hover:bg-[#3A7BC0] transition-colors text-sm font-medium"
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -396,11 +396,11 @@ export default function ProfilePage() {
       <div className="bg-white rounded-2xl shadow-sm border border-[#E5E7EB] overflow-hidden">
         
         {/* TOP SECTION - Key Metrics */}
-        <div className="bg-gradient-to-br from-[#5BA4E5] to-[#4A93D4] p-8 text-white">
+        <div className="bg-gradient-to-br from-[#4A90D9] to-[#3A7BC0] p-8 text-white">
           <div className="flex items-start justify-between mb-6">
             {/* Left: text column */}
             <div className="flex-1 min-w-0">
-              <h1 className="text-3xl font-bold mb-2">{result.location}</h1>
+              <h1 className="text-3xl font-extrabold text-carto-slate mb-2">{result.location}</h1>
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-0.5">
                   {[1, 2, 3, 4, 5].map(i => {
@@ -511,7 +511,7 @@ export default function ProfilePage() {
             onClick={() => setShowNotes(!showNotes)}
             className="w-full px-8 py-4 flex items-center justify-between hover:bg-[#F8FAFB] transition-colors"
           >
-            <span className="font-semibold text-[#2C3E50]">
+            <span className="font-semibold text-carto-slate">
               {isViable ? 'Important Notes & Recommendations' : 'Tips to Make This Location Affordable'}
             </span>
             <svg 
@@ -528,13 +528,13 @@ export default function ProfilePage() {
             <div className="px-8 pb-6 space-y-4">
               {/* Recommendations */}
               <div>
-                <h3 className="font-semibold text-[#2C3E50] mb-3">
+                <h3 className="font-semibold text-carto-slate mb-3">
                   {isViable ? 'Recommendations' : 'How to Make It Work'}
                 </h3>
                 <ul className="space-y-2">
                   {result.recommendations.map((rec, i) => (
                     <li key={i} className="flex items-start gap-3">
-                      <span className="text-[#5BA4E5] mt-1">•</span>
+                      <span className="text-[#4A90D9] mt-1">•</span>
                       <span className="text-[#6B7280] text-sm flex-1">{rec}</span>
                     </li>
                   ))}
@@ -556,84 +556,84 @@ export default function ProfilePage() {
               {/* Your Inputs — formula inputs for testing */}
               {onboardingProfile && (
                 <div className="bg-[#F8FAFB] border border-[#E5E7EB] rounded-lg p-4">
-                  <h3 className="font-semibold text-[#2C3E50] mb-3">Your Inputs</h3>
+                  <h3 className="font-semibold text-carto-slate mb-3">Your Inputs</h3>
                   <ul className="space-y-1.5 text-sm text-[#6B7280]">
                     <li className="flex items-start gap-2">
-                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span className="text-[#4A90D9] mt-0.5">•</span>
                       <span>Occupation: <strong className="text-[#2C3E50]">{onboardingProfile.userOccupation}</strong></span>
                     </li>
                     {(onboardingProfile.userSalary ?? 0) > 0 && (
                       <li className="flex items-start gap-2">
-                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span className="text-[#4A90D9] mt-0.5">•</span>
                         <span>Your salary override: <strong className="text-[#2C3E50]">${(onboardingProfile.userSalary ?? 0).toLocaleString()}/yr</strong></span>
                       </li>
                     )}
                     {onboardingProfile.partnerOccupation && (
                       <li className="flex items-start gap-2">
-                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span className="text-[#4A90D9] mt-0.5">•</span>
                         <span>Partner occupation: <strong className="text-[#2C3E50]">{onboardingProfile.partnerOccupation}</strong></span>
                       </li>
                     )}
                     {onboardingProfile.usePartnerIncomeDoubling && (
                       <li className="flex items-start gap-2">
-                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span className="text-[#4A90D9] mt-0.5">•</span>
                         <span>Partner income: <strong className="text-[#2C3E50]">Doubling rule applied</strong></span>
                       </li>
                     )}
                     <li className="flex items-start gap-2">
-                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span className="text-[#4A90D9] mt-0.5">•</span>
                       <span>Age: <strong className="text-[#2C3E50]">{onboardingProfile.currentAge}</strong></span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span className="text-[#4A90D9] mt-0.5">•</span>
                       <span>Down payment: <strong className="text-[#2C3E50]">{((locationData.housing.downPaymentPercent || 0.107) * 100).toFixed(1)}%</strong></span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span className="text-[#4A90D9] mt-0.5">•</span>
                       <span>Discretionary income allocation: <strong className="text-[#2C3E50]">{onboardingProfile.disposableIncomeAllocation}%</strong></span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span className="text-[#4A90D9] mt-0.5">•</span>
                       <span>Current savings: <strong className="text-[#2C3E50]">${onboardingProfile.currentSavings.toLocaleString()}</strong></span>
                     </li>
                     {onboardingProfile.studentLoanDebt > 0 && (
                       <li className="flex items-start gap-2">
-                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span className="text-[#4A90D9] mt-0.5">•</span>
                         <span>Student loans: <strong className="text-[#2C3E50]">${onboardingProfile.studentLoanDebt.toLocaleString()} @ {onboardingProfile.studentLoanRate}%</strong></span>
                       </li>
                     )}
                     {onboardingProfile.creditCardDebt > 0 && (
                       <li className="flex items-start gap-2">
-                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span className="text-[#4A90D9] mt-0.5">•</span>
                         <span>Credit card debt: <strong className="text-[#2C3E50]">${onboardingProfile.creditCardDebt.toLocaleString()} @ {onboardingProfile.creditCardAPR}%</strong></span>
                       </li>
                     )}
                     {onboardingProfile.carDebt > 0 && (
                       <li className="flex items-start gap-2">
-                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span className="text-[#4A90D9] mt-0.5">•</span>
                         <span>Car debt: <strong className="text-[#2C3E50]">${onboardingProfile.carDebt.toLocaleString()} @ {onboardingProfile.carDebtRate}%</strong></span>
                       </li>
                     )}
                     {onboardingProfile.otherDebt > 0 && (
                       <li className="flex items-start gap-2">
-                        <span className="text-[#5BA4E5] mt-0.5">•</span>
+                        <span className="text-[#4A90D9] mt-0.5">•</span>
                         <span>Other debt: <strong className="text-[#2C3E50]">${onboardingProfile.otherDebt.toLocaleString()} @ {onboardingProfile.otherDebtRate}%</strong></span>
                       </li>
                     )}
                     <li className="flex items-start gap-2">
-                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span className="text-[#4A90D9] mt-0.5">•</span>
                       <span>Planned kids: <strong className="text-[#2C3E50]">{onboardingProfile.numKids}</strong></span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span className="text-[#4A90D9] mt-0.5">•</span>
                       <span>Household: <strong className="text-[#2C3E50]">{onboardingProfile.householdType} ({onboardingProfile.numEarners} earner{onboardingProfile.numEarners !== 1 ? 's' : ''})</strong></span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span className="text-[#4A90D9] mt-0.5">•</span>
                       <span>Required sqft: <strong className="text-[#2C3E50]">{result.requiredSqFt.toLocaleString()}</strong></span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-[#5BA4E5] mt-0.5">•</span>
+                      <span className="text-[#4A90D9] mt-0.5">•</span>
                       <span>Minimum allocation required: <strong className="text-[#2C3E50]">{result.minimumAllocationRequired}%</strong></span>
                     </li>
                   </ul>
@@ -641,7 +641,7 @@ export default function ProfilePage() {
               )}
 
               {/* Downloadable PDF */}
-              <button className="w-full bg-[#5BA4E5] text-white py-3 rounded-lg hover:bg-[#4A93D4] transition-colors font-medium flex items-center justify-center gap-2">
+              <button className="w-full bg-[#4A90D9] text-white py-3 rounded-lg hover:bg-[#3A7BC0] transition-colors font-medium flex items-center justify-center gap-2">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
@@ -653,7 +653,7 @@ export default function ProfilePage() {
 
         {/* MIDDLE SECTION - Cost of Living Details */}
         <div className="px-8 py-6 bg-[#F8FAFB]">
-          <h2 className="text-xl font-bold text-[#2C3E50] mb-6">Cost of Living Breakdown</h2>
+          <h2 className="text-xl font-bold text-carto-slate mb-6">Cost of Living Breakdown</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Left Column */}
@@ -663,7 +663,7 @@ export default function ProfilePage() {
                 <p className="text-sm text-[#6B7280] mb-1">
                   Total Household Income
                 </p>
-                <p className="text-2xl font-bold text-[#2C3E50]">
+                <p className="text-2xl font-bold text-carto-slate">
                   ${result.yearByYear[0]?.totalIncome.toLocaleString()}/year
                 </p>
                 <p className="text-xs text-[#9CA3AF] mt-1">
@@ -679,7 +679,7 @@ export default function ProfilePage() {
                 <p className="text-sm text-[#6B7280] mb-1">
                   Cost of Living (Excluding Housing)
                 </p>
-                <p className="text-2xl font-bold text-[#2C3E50]">
+                <p className="text-2xl font-bold text-carto-slate">
                   ${result.yearByYear[0]?.adjustedCOL.toLocaleString()}/year
                 </p>
                 <p className="text-xs text-[#9CA3AF] mt-1">
@@ -694,7 +694,7 @@ export default function ProfilePage() {
                 <p className="text-sm text-[#6B7280] mb-1">
                   {result.yearByYear[0]?.hasMortgage ? 'Mortgage Payment' : 'Rent Cost'}
                 </p>
-                <p className="text-2xl font-bold text-[#2C3E50]">
+                <p className="text-2xl font-bold text-carto-slate">
                   ${result.yearByYear[0]?.housingCost.toLocaleString()}/year
                 </p>
                 <p className="text-xs text-[#9CA3AF] mt-1">
@@ -708,7 +708,7 @@ export default function ProfilePage() {
                 <p className="text-sm text-[#6B7280] mb-1">
                   Total Cost of Living
                 </p>
-                <p className="text-2xl font-bold text-[#2C3E50]">
+                <p className="text-2xl font-bold text-carto-slate">
                   ${result.yearByYear[0]?.totalCOL.toLocaleString()}/year
                 </p>
                 <p className="text-xs text-[#9CA3AF] mt-1">
@@ -720,7 +720,7 @@ export default function ProfilePage() {
             {/* Right Column - Rent Reference Costs */}
             <div>
               <div className="bg-white rounded-lg p-6 border border-[#E5E7EB]">
-                <h3 className="font-semibold text-[#2C3E50] mb-2">Typical Rent Costs in {result.location}</h3>
+                <h3 className="font-semibold text-carto-slate mb-2">Typical Rent Costs in {result.location}</h3>
                 <p className="text-xs text-[#9CA3AF] mb-4">For reference (your actual cost is shown on left)</p>
                 
                 <div className="space-y-4">
@@ -731,7 +731,7 @@ export default function ProfilePage() {
                       <p className="text-xs text-[#9CA3AF]">~{locationData.rent.oneBedroomSqFt.toLocaleString()} sq ft</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xl font-bold text-[#5BA4E5]">
+                      <p className="text-xl font-bold text-[#4A90D9]">
                         ${locationData.rent.oneBedroomAnnual.toLocaleString()}/year
                       </p>
                       <p className="text-xs text-[#9CA3AF]">
@@ -747,7 +747,7 @@ export default function ProfilePage() {
                       <p className="text-xs text-[#9CA3AF]">~{locationData.rent.twoBedroomSqFt.toLocaleString()} sq ft</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xl font-bold text-[#5BA4E5]">
+                      <p className="text-xl font-bold text-[#4A90D9]">
                         ${locationData.rent.twoBedroomAnnual.toLocaleString()}/year
                       </p>
                       <p className="text-xs text-[#9CA3AF]">
@@ -763,7 +763,7 @@ export default function ProfilePage() {
                       <p className="text-xs text-[#9CA3AF]">~{locationData.rent.threeBedroomSqFt.toLocaleString()} sq ft</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xl font-bold text-[#5BA4E5]">
+                      <p className="text-xl font-bold text-[#4A90D9]">
                         ${locationData.rent.threeBedroomAnnual.toLocaleString()}/year
                       </p>
                       <p className="text-xs text-[#9CA3AF]">
@@ -781,7 +781,7 @@ export default function ProfilePage() {
         {result.houseProjections.maxAffordable && (
           <div className="px-8 py-6 bg-white border-t border-[#E5E7EB]">
             <div className="mb-4">
-              <h2 className="text-xl font-bold text-[#2C3E50] mb-1">Your Max Affordable Home</h2>
+              <h2 className="text-xl font-bold text-carto-slate mb-1">Your Max Affordable Home</h2>
               <p className="text-[#6B7280] text-sm">The most expensive home you can sustainably afford based on your income ceiling</p>
             </div>
             <div className="relative">
@@ -1033,7 +1033,7 @@ export default function ProfilePage() {
         {/* BOTTOM SECTION - Three House Projections */}
         <div className="px-8 py-6">
           <div className="mb-6">
-            <h2 className="text-2xl font-bold text-[#2C3E50] mb-2">Your Homeownership Projections</h2>
+            <h2 className="text-2xl font-bold text-carto-slate mb-2">Your Homeownership Projections</h2>
             <p className="text-[#6B7280] text-sm">Three ways to look at your path to owning a home</p>
           </div>
 
@@ -1097,7 +1097,7 @@ export default function ProfilePage() {
                         setCustomSearchAttempted(false);
                       }}
                       placeholder={customSearchUnit === 'years' ? 'e.g. 7' : 'e.g. 84'}
-                      className="w-24 px-3 py-2 border border-[#D1D5DB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#5BA4E5] focus:border-transparent"
+                      className="w-24 px-3 py-2 border border-[#D1D5DB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#4A90D9] focus:border-transparent"
                     />
                     <div className="flex bg-[#F3F4F6] rounded-lg p-0.5">
                       <button
@@ -1150,7 +1150,7 @@ export default function ProfilePage() {
                         setCustomSearchAttempted(true);
                         setCustomSearchProjection(proj);
                       }}
-                      className="px-4 py-2 bg-[#5BA4E5] text-white rounded-lg text-sm font-medium hover:bg-[#3B82F6] transition-colors"
+                      className="px-4 py-2 bg-[#4A90D9] text-white rounded-lg text-sm font-medium hover:bg-[#3B82F6] transition-colors"
                     >
                       Search
                     </button>
@@ -1194,36 +1194,36 @@ export default function ProfilePage() {
 
           {/* === SHOW YOUR WORK === */}
           <div className="mt-8 space-y-4">
-            <h2 className="text-xl font-bold text-[#2C3E50] mb-2">Show Your Work</h2>
+            <h2 className="text-xl font-bold text-carto-slate mb-2">Show Your Work</h2>
 
             {/* Key Assumptions / Bullet Points */}
             <div className="bg-[#F8FAFB] border border-[#E5E7EB] rounded-xl p-5">
-              <h3 className="font-semibold text-[#2C3E50] mb-3">How We Calculated This</h3>
+              <h3 className="font-semibold text-carto-slate mb-3">How We Calculated This</h3>
               <ul className="space-y-2 text-sm text-[#4B5563]">
                 {result.assumptions.map((a, i) => (
                   <li key={i} className="flex items-start gap-2">
-                    <span className="text-[#5BA4E5] mt-0.5">&#8226;</span>
+                    <span className="text-[#4A90D9] mt-0.5">&#8226;</span>
                     <span>{a}</span>
                   </li>
                 ))}
                 <li className="flex items-start gap-2">
-                  <span className="text-[#5BA4E5] mt-0.5">&#8226;</span>
+                  <span className="text-[#4A90D9] mt-0.5">&#8226;</span>
                   <span>Savings grow at 3% annually on existing balance</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-[#5BA4E5] mt-0.5">&#8226;</span>
+                  <span className="text-[#4A90D9] mt-0.5">&#8226;</span>
                   <span>Payment priority: Credit card debt &rarr; Student loans &rarr; Savings</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-[#5BA4E5] mt-0.5">&#8226;</span>
+                  <span className="text-[#4A90D9] mt-0.5">&#8226;</span>
                   <span>Mortgage threshold: Down payment ({((result.locationData.housing.downPaymentPercent || 0.107) * 100).toFixed(1)}%) + first year payment</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-[#5BA4E5] mt-0.5">&#8226;</span>
+                  <span className="text-[#4A90D9] mt-0.5">&#8226;</span>
                   <span>Sustainability cap: Max house where annual cost &le; allocated portion of worst-case disposable income</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-[#5BA4E5] mt-0.5">&#8226;</span>
+                  <span className="text-[#4A90D9] mt-0.5">&#8226;</span>
                   <span>Allocation: {onboardingProfile?.disposableIncomeAllocation ?? 75}% of disposable income directed toward financial goals</span>
                 </li>
               </ul>
@@ -1236,10 +1236,10 @@ export default function ProfilePage() {
                 className="w-full flex items-center justify-between px-6 py-4 hover:bg-[#F8FAFB] transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  <svg className="w-5 h-5 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 text-[#4A90D9]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                   </svg>
-                  <span className="font-semibold text-[#2C3E50]">Projected Necessary Home Size</span>
+                  <span className="font-semibold text-carto-slate">Projected Necessary Home Size</span>
                 </div>
                 <svg
                   className={`w-5 h-5 text-[#6B7280] transition-transform ${showNecessarySizeWork ? 'rotate-180' : ''}`}
@@ -1255,8 +1255,8 @@ export default function ProfilePage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-[#F8FAFB] border-b border-[#E5E7EB]">
-                          <th className="px-4 py-3 text-left font-semibold text-[#2C3E50]">Metric</th>
-                          <th className="px-4 py-3 text-right font-semibold text-[#2C3E50]">Value</th>
+                          <th className="px-4 py-3 text-left font-semibold text-carto-slate">Metric</th>
+                          <th className="px-4 py-3 text-right font-semibold text-carto-slate">Value</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1307,10 +1307,10 @@ export default function ProfilePage() {
                 className="w-full flex items-center justify-between px-6 py-4 hover:bg-[#F8FAFB] transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  <svg className="w-5 h-5 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 text-[#4A90D9]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span className="font-semibold text-[#2C3E50]">Max Home Value Timeline &amp; Savings</span>
+                  <span className="font-semibold text-carto-slate">Max Home Value Timeline &amp; Savings</span>
                 </div>
                 <svg
                   className={`w-5 h-5 text-[#6B7280] transition-transform ${showMaxValueWork ? 'rotate-180' : ''}`}
@@ -1326,8 +1326,8 @@ export default function ProfilePage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-[#F8FAFB] border-b border-[#E5E7EB]">
-                          <th className="px-4 py-3 text-left font-semibold text-[#2C3E50]">Metric</th>
-                          <th className="px-4 py-3 text-right font-semibold text-[#2C3E50]">Value</th>
+                          <th className="px-4 py-3 text-left font-semibold text-carto-slate">Metric</th>
+                          <th className="px-4 py-3 text-right font-semibold text-carto-slate">Value</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1389,7 +1389,7 @@ export default function ProfilePage() {
                   {/* Savings milestones at key years */}
                   {result.yearByYear.length > 0 && (
                     <div className="px-6 py-4 bg-[#F8FAFB] border-t border-[#E5E7EB]">
-                      <h4 className="font-semibold text-[#2C3E50] text-sm mb-3">Savings Milestones</h4>
+                      <h4 className="font-semibold text-carto-slate text-sm mb-3">Savings Milestones</h4>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         {[3, 5, 10, 15].map(yr => {
                           const snap = result.yearByYear.find(s => s.year === yr);
@@ -1419,7 +1419,7 @@ export default function ProfilePage() {
                   )}
                 </p>
                 <div className="bg-white rounded-lg border border-red-200 p-4">
-                  <h4 className="font-semibold text-[#2C3E50] text-sm mb-2">Largest Possible Home (with buffer)</h4>
+                  <h4 className="font-semibold text-carto-slate text-sm mb-2">Largest Possible Home (with buffer)</h4>
                   <p className="text-[#6B7280] text-xs mb-3">
                     If conditions improve, the most you could aim for with a safety buffer:
                   </p>
@@ -1460,10 +1460,10 @@ export default function ProfilePage() {
                   className="w-full flex items-center justify-between px-6 py-4 bg-white border border-[#E5E7EB] rounded-xl hover:bg-[#F8FAFB] transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <svg className="w-5 h-5 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 text-[#4A90D9]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                     </svg>
-                    <span className="font-semibold text-[#2C3E50]">Full Year-by-Year Breakdown</span>
+                    <span className="font-semibold text-carto-slate">Full Year-by-Year Breakdown</span>
                   </div>
                   <svg
                     className={`w-5 h-5 text-[#6B7280] transition-transform ${showYearByYear ? 'rotate-180' : ''}`}
@@ -1484,18 +1484,18 @@ export default function ProfilePage() {
                       <table className="w-full text-xs">
                         <thead>
                           <tr className="bg-[#F8FAFB] border-b border-[#E5E7EB]">
-                            <th className="px-3 py-2 text-left font-semibold text-[#2C3E50] sticky left-0 bg-[#F8FAFB] z-10">Year</th>
-                            <th className="px-3 py-2 text-left font-semibold text-[#2C3E50]">Age</th>
-                            <th className="px-3 py-2 text-left font-semibold text-[#2C3E50]">Event</th>
-                            <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Income</th>
-                            <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Adj COL</th>
-                            <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Housing</th>
-                            <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">DI</th>
-                            <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">EDI</th>
-                            <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Loan Debt</th>
-                            <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">CC Paid</th>
-                            <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">Savings</th>
-                            <th className="px-3 py-2 text-right font-semibold text-[#2C3E50]">No-Mtg Savings</th>
+                            <th className="px-3 py-2 text-left font-semibold text-carto-slate sticky left-0 bg-[#F8FAFB] z-10">Year</th>
+                            <th className="px-3 py-2 text-left font-semibold text-carto-slate">Age</th>
+                            <th className="px-3 py-2 text-left font-semibold text-carto-slate">Event</th>
+                            <th className="px-3 py-2 text-right font-semibold text-carto-slate">Income</th>
+                            <th className="px-3 py-2 text-right font-semibold text-carto-slate">Adj COL</th>
+                            <th className="px-3 py-2 text-right font-semibold text-carto-slate">Housing</th>
+                            <th className="px-3 py-2 text-right font-semibold text-carto-slate">DI</th>
+                            <th className="px-3 py-2 text-right font-semibold text-carto-slate">EDI</th>
+                            <th className="px-3 py-2 text-right font-semibold text-carto-slate">Loan Debt</th>
+                            <th className="px-3 py-2 text-right font-semibold text-carto-slate">CC Paid</th>
+                            <th className="px-3 py-2 text-right font-semibold text-carto-slate">Savings</th>
+                            <th className="px-3 py-2 text-right font-semibold text-carto-slate">No-Mtg Savings</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1545,7 +1545,7 @@ export default function ProfilePage() {
                                   {snap.ccDebtPayment > 0 ? `$${snap.ccDebtPayment.toLocaleString()}` : ''}
                                 </td>
                                 <td className="px-3 py-2 text-right font-medium">${Math.round(snap.savingsEnd).toLocaleString()}</td>
-                                <td className="px-3 py-2 text-right text-[#5BA4E5] font-medium">${Math.round(snap.savingsNoMortgage).toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right text-[#4A90D9] font-medium">${Math.round(snap.savingsNoMortgage).toLocaleString()}</td>
                               </tr>
                             );
                           })}
@@ -1555,7 +1555,7 @@ export default function ProfilePage() {
 
                     {/* Formula explanation */}
                     <div className="px-6 py-4 bg-[#F8FAFB] border-t border-[#E5E7EB] space-y-2">
-                      <h4 className="font-semibold text-[#2C3E50] text-sm">How it works:</h4>
+                      <h4 className="font-semibold text-carto-slate text-sm">How it works:</h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-[#6B7280]">
                         <div>
                           <p><strong>DI</strong> = Income - (Adj COL + Housing)</p>
@@ -1653,7 +1653,7 @@ function HouseProjectionCard({ title, subtitle, projection, location, showHomes,
           </div>
           <div className="text-right">
             <p className="text-sm text-[#6B7280] mb-1">Total Savings</p>
-            <p className="text-xl font-bold text-[#5BA4E5]">
+            <p className="text-xl font-bold text-[#4A90D9]">
               {formatCurrency(projection.totalSavings)}
             </p>
           </div>
@@ -1663,7 +1663,7 @@ function HouseProjectionCard({ title, subtitle, projection, location, showHomes,
           {/* Projected Price */}
           <div className="bg-[#EFF6FF] rounded-lg p-4">
             <p className="text-xs text-[#6B7280] mb-1">Max Sustainable Price</p>
-            <p className="text-2xl font-bold text-[#2C3E50]">
+            <p className="text-2xl font-bold text-carto-slate">
               {formatCurrency(projection.maxSustainableHousePrice)}
             </p>
           </div>
@@ -1671,7 +1671,7 @@ function HouseProjectionCard({ title, subtitle, projection, location, showHomes,
           {/* Estimated Size */}
           <div className="bg-[#F8FAFB] rounded-lg p-4">
             <p className="text-xs text-[#6B7280] mb-1">Estimated Size</p>
-            <p className="text-2xl font-bold text-[#2C3E50]">
+            <p className="text-2xl font-bold text-carto-slate">
               {estimatedSqFt.toLocaleString()} sqft
             </p>
             <p className="text-xs text-[#9CA3AF] mt-1">~${pricePerSqft}/sqft</p>
@@ -1682,13 +1682,13 @@ function HouseProjectionCard({ title, subtitle, projection, location, showHomes,
         <div className="grid grid-cols-3 gap-3 text-sm">
           <div>
             <p className="text-[#9CA3AF] text-xs">Down Payment</p>
-            <p className="font-semibold text-[#2C3E50]">
+            <p className="font-semibold text-carto-slate">
               {formatCurrency(projection.sustainableDownPayment)}
             </p>
           </div>
           <div>
             <p className="text-[#9CA3AF] text-xs">Annual Payment</p>
-            <p className="font-semibold text-[#2C3E50]">
+            <p className="font-semibold text-carto-slate">
               {formatCurrency(projection.sustainableAnnualPayment)}/yr
             </p>
           </div>
@@ -1708,9 +1708,9 @@ function HouseProjectionCard({ title, subtitle, projection, location, showHomes,
           onClick={onToggle}
           className="w-full px-6 py-4 flex items-center justify-between hover:bg-[#F8FAFB] transition-colors"
         >
-          <span className="font-medium text-[#5BA4E5]">See Potential Homes</span>
+          <span className="font-medium text-[#4A90D9]">See Potential Homes</span>
           <svg 
-            className={`w-5 h-5 text-[#5BA4E5] transition-transform ${showHomes ? 'rotate-180' : ''}`}
+            className={`w-5 h-5 text-[#4A90D9] transition-transform ${showHomes ? 'rotate-180' : ''}`}
             fill="none" 
             stroke="currentColor" 
             viewBox="0 0 24 24"

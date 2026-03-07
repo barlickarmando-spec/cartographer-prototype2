@@ -384,7 +384,7 @@ function LocationCard({
               <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <h3 className="text-lg font-bold text-gray-900 truncate">{result.location}</h3>
                 {isCurrent && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EFF6FF] text-[#5BA4E5] uppercase tracking-wider shrink-0">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EFF6FF] text-[#4A90D9] uppercase tracking-wider shrink-0">
                     Current
                   </span>
                 )}
@@ -523,13 +523,13 @@ function LocationCard({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <svg className="w-4 h-4 text-[#4A90D9]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
               <span className="text-sm font-medium text-gray-600">Time to Debt Free</span>
             </div>
-            <span className="text-sm font-bold text-[#5BA4E5]">{debtFree}</span>
+            <span className="text-sm font-bold text-[#4A90D9]">{debtFree}</span>
           </div>
 
           {/* Projected Home Value */}
@@ -988,7 +988,7 @@ export default function MyLocationsPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#5BA4E5] mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4A90D9] mx-auto mb-4"></div>
           <p className="text-gray-500">Loading your locations...</p>
         </div>
       </div>
@@ -1010,7 +1010,7 @@ export default function MyLocationsPage() {
   const renderEmptyState = (message: string) => (
     <div className="col-span-full text-center py-16">
       <div className="w-16 h-16 rounded-full bg-[#EFF6FF] flex items-center justify-center mx-auto mb-4">
-        <svg className="w-8 h-8 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+        <svg className="w-8 h-8 text-[#4A90D9]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
           <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
         </svg>
@@ -1028,7 +1028,7 @@ export default function MyLocationsPage() {
       <div>
         {allCalcLoading ? (
           <div className="flex items-center gap-3 py-16 justify-center">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#5BA4E5]"></div>
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#4A90D9]"></div>
             <span className="text-gray-500 text-sm">Calculating all locations...</span>
           </div>
         ) : (
@@ -1079,7 +1079,7 @@ export default function MyLocationsPage() {
                 <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
               </svg>
             </div>
-            <h2 className="text-base font-semibold text-gray-800">Your Saved Locations</h2>
+            <h2 className="text-base font-semibold text-carto-slate">Your Saved Locations</h2>
             <span className="text-xs text-gray-400 ml-1">({savedSorted.length})</span>
           </div>
           {savedSorted.length > 0 ? (
@@ -1097,16 +1097,16 @@ export default function MyLocationsPage() {
         <section>
           <div className="flex items-center gap-2 mb-4">
             <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] flex items-center justify-center">
-              <svg className="w-4 h-4 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <svg className="w-4 h-4 text-[#4A90D9]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
               </svg>
             </div>
-            <h2 className="text-base font-semibold text-gray-800">Other Locations</h2>
+            <h2 className="text-base font-semibold text-carto-slate">Other Locations</h2>
             <span className="text-xs text-gray-400 ml-1">({otherSorted.length})</span>
           </div>
           {allCalcLoading ? (
             <div className="flex items-center gap-3 py-12 justify-center">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#5BA4E5]"></div>
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#4A90D9]"></div>
               <span className="text-gray-500 text-sm">Calculating all locations...</span>
             </div>
           ) : visibleOther.length > 0 ? (
@@ -1185,11 +1185,11 @@ export default function MyLocationsPage() {
         <section>
           <div className="flex items-center gap-2 mb-4">
             <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] flex items-center justify-center">
-              <svg className="w-4 h-4 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <svg className="w-4 h-4 text-[#4A90D9]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
               </svg>
             </div>
-            <h2 className="text-base font-semibold text-gray-800">Search Result</h2>
+            <h2 className="text-base font-semibold text-carto-slate">Search Result</h2>
             <button
               onClick={clearSearchFilter}
               className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-gray-700 transition-all"
@@ -1214,7 +1214,7 @@ export default function MyLocationsPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
               </svg>
             </div>
-            <h2 className="text-base font-semibold text-gray-800">Similar Locations</h2>
+            <h2 className="text-base font-semibold text-carto-slate">Similar Locations</h2>
             {similarResults.length > 0 && (
               <span className="text-xs text-gray-400 ml-1">({similarResults.length})</span>
             )}
@@ -1263,11 +1263,11 @@ export default function MyLocationsPage() {
           <section>
             <div className="flex items-center gap-2 mb-4">
               <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] flex items-center justify-center">
-                <svg className="w-4 h-4 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <svg className="w-4 h-4 text-[#4A90D9]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                 </svg>
               </div>
-              <h2 className="text-base font-semibold text-gray-800">Search Results</h2>
+              <h2 className="text-base font-semibold text-carto-slate">Search Results</h2>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {uniqueSearchResults.map(renderCard)}
@@ -1280,12 +1280,12 @@ export default function MyLocationsPage() {
           <section>
             <div className="flex items-center gap-2 mb-4">
               <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] flex items-center justify-center">
-                <svg className="w-4 h-4 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <svg className="w-4 h-4 text-[#4A90D9]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
                 </svg>
               </div>
-              <h2 className="text-base font-semibold text-gray-800">Your Current Location</h2>
+              <h2 className="text-base font-semibold text-carto-slate">Your Current Location</h2>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {renderCard(currentResult)}
@@ -1298,16 +1298,16 @@ export default function MyLocationsPage() {
           <section>
             <div className="flex items-center gap-2 mb-4">
               <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] flex items-center justify-center">
-                <svg className="w-4 h-4 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <svg className="w-4 h-4 text-[#4A90D9]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" />
                 </svg>
               </div>
-              <h2 className="text-base font-semibold text-gray-800">Your Locations</h2>
+              <h2 className="text-base font-semibold text-carto-slate">Your Locations</h2>
               <span className="text-xs text-gray-400 ml-1">({allSectionResults.length})</span>
             </div>
             {suggestionsLoading ? (
               <div className="flex items-center gap-3 py-12 justify-center">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#5BA4E5]"></div>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#4A90D9]"></div>
                 <span className="text-gray-500 text-sm">Finding the best locations for you...</span>
               </div>
             ) : (
@@ -1343,8 +1343,8 @@ export default function MyLocationsPage() {
     <div className="space-y-6">
       {/* Page Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-1">My Locations</h1>
-        <p className="text-gray-500">Find the best cities for your career, lifestyle, and financial goals</p>
+        <h1 className="text-3xl font-extrabold text-carto-slate mb-1">My Locations</h1>
+        <p className="text-carto-steel">Find the best cities for your career, lifestyle, and financial goals</p>
       </div>
 
       {/* Filter Bar + Search */}
@@ -1513,7 +1513,7 @@ export default function MyLocationsPage() {
                               setGeoFilters(toggleGeoFilter(geoFilters, stateFilterVal));
                             }}
                             className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between font-medium ${
-                              isActive ? 'bg-[#EFF6FF] text-[#5BA4E5]' : 'text-gray-900 hover:bg-[#F8FAFB]'
+                              isActive ? 'bg-[#EFF6FF] text-[#4A90D9]' : 'text-gray-900 hover:bg-[#F8FAFB]'
                             }`}
                           >
                             <span className="flex items-center gap-2.5">
@@ -1548,7 +1548,7 @@ export default function MyLocationsPage() {
                                   setGeoFilters(toggleGeoFilter(geoFilters, cityFilterVal));
                                 }}
                                 className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
-                                  isActive ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                                  isActive ? 'bg-[#EFF6FF] text-[#4A90D9] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
                                 }`}
                               >
                                 <span className="flex items-center gap-2.5">
@@ -1580,7 +1580,7 @@ export default function MyLocationsPage() {
                           key={item.value}
                           onClick={() => { setShowFilter(item.value); setShowDropdownOpen(false); setBrowseAll(false); }}
                           className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
-                            showFilter === item.value ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                            showFilter === item.value ? 'bg-[#EFF6FF] text-[#4A90D9] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
                           }`}
                         >
                           {item.label}
@@ -1598,7 +1598,7 @@ export default function MyLocationsPage() {
                         {geoFilters.some(f => f.startsWith('state:') || f.startsWith('city:')) && (
                           <button
                             onClick={() => setGeoFilters(geoFilters.filter(f => !f.startsWith('state:') && !f.startsWith('city:')))}
-                            className="text-[10px] text-[#5BA4E5] hover:text-[#4A8FCC] font-semibold"
+                            className="text-[10px] text-[#4A90D9] hover:text-[#4A8FCC] font-semibold"
                           >
                             Clear
                           </button>
@@ -1607,7 +1607,7 @@ export default function MyLocationsPage() {
                       {!showStatesInDropdown ? (
                         <button
                           onClick={() => setShowStatesInDropdown(true)}
-                          className="w-full text-left px-4 py-2.5 text-sm text-[#5BA4E5] hover:bg-[#F8FAFB] transition-colors flex items-center justify-between font-medium"
+                          className="w-full text-left px-4 py-2.5 text-sm text-[#4A90D9] hover:bg-[#F8FAFB] transition-colors flex items-center justify-between font-medium"
                         >
                           Browse all states
                           {geoFilters.some(f => f.startsWith('state:') || f.startsWith('city:')) && (
@@ -1638,7 +1638,7 @@ export default function MyLocationsPage() {
                               <div
                                 key={stateName}
                                 className={`flex items-center text-sm transition-colors ${
-                                  isActive ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                                  isActive ? 'bg-[#EFF6FF] text-[#4A90D9] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
                                 }`}
                               >
                                 {/* State name — toggles the state filter */}
@@ -1684,7 +1684,7 @@ export default function MyLocationsPage() {
                         {geoFilters.some(f => f.startsWith('region:')) && (
                           <button
                             onClick={() => setGeoFilters(geoFilters.filter(f => !f.startsWith('region:')))}
-                            className="text-[10px] text-[#5BA4E5] hover:text-[#4A8FCC] font-semibold"
+                            className="text-[10px] text-[#4A90D9] hover:text-[#4A8FCC] font-semibold"
                           >
                             Clear
                           </button>
@@ -1701,7 +1701,7 @@ export default function MyLocationsPage() {
                               setBrowseAll(false);
                             }}
                             className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
-                              isActive ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                              isActive ? 'bg-[#EFF6FF] text-[#4A90D9] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
                             }`}
                           >
                             <span className="flex items-center gap-2.5">
@@ -1726,7 +1726,7 @@ export default function MyLocationsPage() {
                         {geoFilters.some(f => f.startsWith('weather:')) && (
                           <button
                             onClick={() => setGeoFilters(geoFilters.filter(f => !f.startsWith('weather:')))}
-                            className="text-[10px] text-[#5BA4E5] hover:text-[#4A8FCC] font-semibold"
+                            className="text-[10px] text-[#4A90D9] hover:text-[#4A8FCC] font-semibold"
                           >
                             Clear
                           </button>
@@ -1743,7 +1743,7 @@ export default function MyLocationsPage() {
                               setBrowseAll(false);
                             }}
                             className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
-                              isActive ? 'bg-[#EFF6FF] text-[#5BA4E5] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                              isActive ? 'bg-[#EFF6FF] text-[#4A90D9] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
                             }`}
                           >
                             <span className="flex items-center gap-2.5">
@@ -1889,7 +1889,7 @@ export default function MyLocationsPage() {
               />
               {searchLoading && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#5BA4E5]"></div>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#4A90D9]"></div>
                 </div>
               )}
             </div>
@@ -1903,13 +1903,13 @@ export default function MyLocationsPage() {
                     onClick={() => handleSelectSearchResult(item.label)}
                     className="w-full text-left px-4 py-2.5 text-sm hover:bg-[#F8FAFB] transition-colors first:rounded-t-xl last:rounded-b-xl flex items-center gap-2"
                   >
-                    <svg className="w-4 h-4 text-[#5BA4E5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <svg className="w-4 h-4 text-[#4A90D9] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
                     </svg>
                     <span className="text-gray-700">{item.label}</span>
                     {userLocationNames.has(item.label) && (
-                      <span className="ml-auto text-xs text-[#5BA4E5] font-medium">Already added</span>
+                      <span className="ml-auto text-xs text-[#4A90D9] font-medium">Already added</span>
                     )}
                   </button>
                 ))}

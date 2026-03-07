@@ -100,14 +100,14 @@ export default function AffordabilityProfile({
   if (!result || !profile) return null;
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+    <div className="bg-white rounded-2xl border border-carto-blue-pale/30 overflow-hidden">
       <div className="p-6">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">
+            <h2 className="text-xl font-bold text-carto-slate">
               Your Affordability Profile
             </h2>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-carto-steel">
               Based on your income, savings, debts, and life plans
             </p>
           </div>
@@ -141,7 +141,7 @@ export default function AffordabilityProfile({
             label="Max Home Value"
             value={maxPrice > 0 ? formatCurrency(maxPrice) : 'N/A'}
             sub={location}
-            accent="#5BA4E5"
+            accent="#4A90D9"
           />
           <MetricCard
             label="Monthly Payment"

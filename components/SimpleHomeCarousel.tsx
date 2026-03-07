@@ -263,20 +263,20 @@ export default function SimpleHomeCarousel({
           <p className="text-xs text-[#6B7280]">
             {formatPrice(minPrice)} - {formatPrice(maxPrice)} | {displayHomes.length} listing{displayHomes.length !== 1 ? 's' : ''}
             {totalAvailable > displayHomes.length && (
-              <span className="ml-1 text-[#5BA4E5]">({totalAvailable.toLocaleString()}+ on Realtor.com)</span>
+              <span className="ml-1 text-[#4A90D9]">({totalAvailable.toLocaleString()}+ on Realtor.com)</span>
             )}
             {source && <span className="ml-1 text-[#9CA3AF]">via {source}</span>}
           </p>
         </div>
         <div className="flex items-center gap-1.5">
           <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 0}
-            className="p-1.5 rounded-full border border-[#E5E7EB] text-[#5BA4E5] disabled:opacity-30 disabled:cursor-default hover:bg-[#EFF6FF] transition-colors">
+            className="p-1.5 rounded-full border border-[#E5E7EB] text-[#4A90D9] disabled:opacity-30 disabled:cursor-default hover:bg-[#EFF6FF] transition-colors">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
           <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= totalPages - 1}
-            className="p-1.5 rounded-full border border-[#E5E7EB] text-[#5BA4E5] disabled:opacity-30 disabled:cursor-default hover:bg-[#EFF6FF] transition-colors">
+            className="p-1.5 rounded-full border border-[#E5E7EB] text-[#4A90D9] disabled:opacity-30 disabled:cursor-default hover:bg-[#EFF6FF] transition-colors">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
@@ -304,13 +304,13 @@ export default function SimpleHomeCarousel({
             <span className="text-[10px] text-[#9CA3AF]">Page {currentPage + 1} of {totalPages}</span>
           </div>
           <div className="w-full bg-[#E5E7EB] rounded-full h-1.5">
-            <div className="bg-[#5BA4E5] h-1.5 rounded-full transition-all duration-300"
+            <div className="bg-[#4A90D9] h-1.5 rounded-full transition-all duration-300"
               style={{ width: `${((currentPage + 1) / totalPages) * 100}%` }} />
           </div>
           <div className="flex justify-center gap-1.5 mt-2">
             {Array.from({ length: totalPages }).map((_, i) => (
               <button key={i} onClick={() => goToPage(i)}
-                className={`w-2 h-2 rounded-full transition-all ${i === currentPage ? 'bg-[#5BA4E5] w-4' : 'bg-[#D1D5DB] hover:bg-[#9CA3AF]'}`} />
+                className={`w-2 h-2 rounded-full transition-all ${i === currentPage ? 'bg-[#4A90D9] w-4' : 'bg-[#D1D5DB] hover:bg-[#9CA3AF]'}`} />
             ))}
           </div>
         </div>
@@ -321,7 +321,7 @@ export default function SimpleHomeCarousel({
         href={buildRealtorSearchUrl(location, minPrice, maxPrice)}
         target="_blank"
         rel="noopener noreferrer"
-        className="flex items-center justify-center gap-2 w-full py-3 text-sm font-medium text-[#5BA4E5] hover:text-[#4A93D4] hover:bg-[#EFF6FF] rounded-lg transition-colors"
+        className="flex items-center justify-center gap-2 w-full py-3 text-sm font-medium text-[#4A90D9] hover:text-[#3A7BC0] hover:bg-[#EFF6FF] rounded-lg transition-colors"
       >
         Browse all listings on Realtor.com
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -388,7 +388,7 @@ function GoogleImageFallback({
               href={img.contextLink || '#'}
               target="_blank"
               rel="noopener noreferrer"
-              className="group bg-white rounded-xl border border-[#E5E7EB] overflow-hidden hover:shadow-lg hover:border-[#5BA4E5] transition-all duration-200"
+              className="group bg-white rounded-xl border border-[#E5E7EB] overflow-hidden hover:shadow-lg hover:border-[#4A90D9] transition-all duration-200"
             >
               <div className={`relative aspect-[4/3] bg-gradient-to-br ${gradient} overflow-hidden`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -416,7 +416,7 @@ function GoogleImageFallback({
       {/* Browse on Realtor.com CTA */}
       <div className="bg-gradient-to-r from-[#EFF6FF] to-[#DBEAFE] border border-[#BFDBFE] rounded-xl p-4">
         <div className="flex items-center gap-3">
-          <div className="flex-shrink-0 bg-[#5BA4E5] text-white p-2.5 rounded-full shadow">
+          <div className="flex-shrink-0 bg-[#4A90D9] text-white p-2.5 rounded-full shadow">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
@@ -431,7 +431,7 @@ function GoogleImageFallback({
             href={buildRealtorSearchUrl(location, minPrice, maxPrice)}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex-shrink-0 px-4 py-2 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-colors font-semibold text-sm shadow"
+            className="flex-shrink-0 px-4 py-2 bg-[#4A90D9] text-white rounded-lg hover:bg-[#3A7BC0] transition-colors font-semibold text-sm shadow"
           >
             Browse
           </a>
@@ -527,7 +527,7 @@ function BrowseRealtorInterface({
             href={link.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="group bg-white rounded-xl border border-[#E5E7EB] overflow-hidden hover:shadow-lg hover:border-[#5BA4E5] transition-all duration-200"
+            className="group bg-white rounded-xl border border-[#E5E7EB] overflow-hidden hover:shadow-lg hover:border-[#4A90D9] transition-all duration-200"
           >
             <div className={`bg-gradient-to-br ${link.gradient} p-4 flex items-center justify-center h-24`}>
               <div className={`${link.iconColor} group-hover:scale-110 transition-transform duration-200`}>
@@ -537,7 +537,7 @@ function BrowseRealtorInterface({
             <div className="p-3">
               <div className="flex items-center justify-between mb-0.5">
                 <p className="text-sm font-semibold text-[#2C3E50]">{link.label}</p>
-                <svg className="w-3.5 h-3.5 text-[#9CA3AF] group-hover:text-[#5BA4E5] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3.5 h-3.5 text-[#9CA3AF] group-hover:text-[#4A90D9] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                 </svg>
               </div>
@@ -550,7 +550,7 @@ function BrowseRealtorInterface({
       {/* Main CTA */}
       <div className="bg-gradient-to-r from-[#EFF6FF] to-[#DBEAFE] border border-[#BFDBFE] rounded-xl p-4">
         <div className="flex items-center gap-3">
-          <div className="flex-shrink-0 bg-[#5BA4E5] text-white p-2.5 rounded-full shadow">
+          <div className="flex-shrink-0 bg-[#4A90D9] text-white p-2.5 rounded-full shadow">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
@@ -565,7 +565,7 @@ function BrowseRealtorInterface({
             href={buildRealtorSearchUrl(location, minPrice, maxPrice)}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex-shrink-0 px-4 py-2 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-colors font-semibold text-sm shadow"
+            className="flex-shrink-0 px-4 py-2 bg-[#4A90D9] text-white rounded-lg hover:bg-[#3A7BC0] transition-colors font-semibold text-sm shadow"
           >
             Browse
           </a>
@@ -597,13 +597,13 @@ function CompactHomeCard({ home, index, onClick }: { home: Home; index: number; 
           />
         ) : (
           <div className="flex flex-col items-center justify-center h-full gap-1">
-            <svg className="w-8 h-8 text-[#5BA4E5] opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-8 h-8 text-[#4A90D9] opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
             </svg>
-            <span className="text-[10px] text-[#5BA4E5] opacity-60">{home.city}, {home.state}</span>
+            <span className="text-[10px] text-[#4A90D9] opacity-60">{home.city}, {home.state}</span>
           </div>
         )}
-        <div className="absolute top-2 left-2 bg-[#5BA4E5] text-white px-1.5 py-0.5 rounded-full text-[10px] font-bold shadow">
+        <div className="absolute top-2 left-2 bg-[#4A90D9] text-white px-1.5 py-0.5 rounded-full text-[10px] font-bold shadow">
           {formatPrice(home.price)}
         </div>
         {home.homeType && (
@@ -682,10 +682,10 @@ function FullScreenCarouselModal({
             />
           ) : (
             <div className={`flex flex-col items-center justify-center w-full h-full gap-3 bg-gradient-to-br ${gradient}`}>
-              <svg className="w-16 h-16 text-[#5BA4E5] opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-16 h-16 text-[#4A90D9] opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
               </svg>
-              <span className="text-sm text-[#5BA4E5] opacity-60">{home.city}, {home.state}</span>
+              <span className="text-sm text-[#4A90D9] opacity-60">{home.city}, {home.state}</span>
             </div>
           )}
 
@@ -736,7 +736,7 @@ function FullScreenCarouselModal({
 
             <div className="space-y-2 mb-5">
               <div className="flex items-start gap-2">
-                <svg className="w-4 h-4 text-[#5BA4E5] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-[#4A90D9] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
@@ -750,7 +750,7 @@ function FullScreenCarouselModal({
 
           <div className="mt-auto pt-4 border-t border-[#E5E7EB]">
             <a href={home.listingUrl} target="_blank" rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-gradient-to-r from-[#5BA4E5] to-[#4A93D4] text-white rounded-xl hover:from-[#4A93D4] hover:to-[#3982C3] transition-all font-semibold text-sm shadow">
+              className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-gradient-to-r from-[#4A90D9] to-[#3A7BC0] text-white rounded-xl hover:from-[#3A7BC0] hover:to-[#3982C3] transition-all font-semibold text-sm shadow">
               View Full Listing on Realtor.com
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -763,7 +763,7 @@ function FullScreenCarouselModal({
             {homes.map((h, i) => (
               <button key={h.id} onClick={() => onSetIndex(i)}
                 className={`flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden border-2 transition-all ${
-                  i === currentIndex ? 'border-[#5BA4E5] shadow' : 'border-transparent opacity-60 hover:opacity-100'}`}>
+                  i === currentIndex ? 'border-[#4A90D9] shadow' : 'border-transparent opacity-60 hover:opacity-100'}`}>
                 {h.photoUrl ? (
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img src={h.photoUrl} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />

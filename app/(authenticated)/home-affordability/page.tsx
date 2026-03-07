@@ -45,10 +45,10 @@ export default function HomeAffordabilityPage() {
     return (
       <div className="space-y-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl font-extrabold text-carto-slate mb-2">
             Home Affordability
           </h1>
-          <p className="text-gray-600">
+          <p className="text-carto-steel">
             Complete onboarding to see your affordability analysis.
           </p>
         </div>
@@ -74,10 +74,10 @@ export default function HomeAffordabilityPage() {
     <div className="space-y-8">
       {/* Page Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+        <h1 className="text-3xl font-extrabold text-carto-slate mb-2">
           Home Affordability
         </h1>
-        <p className="text-gray-600">
+        <p className="text-carto-steel">
           Your complete affordability analysis — projected home value, timeline,
           strategies, and where your money goes furthest
         </p>
@@ -91,10 +91,10 @@ export default function HomeAffordabilityPage() {
       />
 
       {/* Section 2: National Heat Map */}
-      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-carto-blue-pale/30 overflow-hidden">
         <div className="p-6 pb-0">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-900">
+            <h2 className="text-xl font-bold text-carto-slate">
               National Affordability Map
             </h2>
             <div className="flex bg-gray-100 rounded-full p-1">
@@ -149,8 +149,8 @@ export default function HomeAffordabilityPage() {
       <PreferencesPoll />
 
       {/* Section 6: Tips */}
-      <div className="bg-blue-50 rounded-xl p-6 border border-blue-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">
+      <div className="bg-carto-sky rounded-xl p-6 border border-carto-blue-pale/40">
+        <h3 className="text-lg font-bold text-carto-slate mb-3">
           Understanding Your Analysis
         </h3>
         <ul className="space-y-2">

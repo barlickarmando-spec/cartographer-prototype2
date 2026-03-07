@@ -32,9 +32,9 @@ export default function AuthenticatedLayout({
   const isActive = (href: string) => pathname.startsWith(href);
 
   return (
-    <div className="min-h-screen bg-[#F7FAFC]">
+    <div className="carto-headings min-h-screen bg-carto-sky">
       {/* Top Bar */}
-      <div className="bg-white border-b border-gray-200">
+      <div className="bg-white border-b border-carto-blue-pale/40">
         <div className="w-full px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           {/* Logo */}
           <Link href="/profile" className="flex items-center shrink-0">
@@ -52,7 +52,7 @@ export default function AuthenticatedLayout({
           <div className="flex items-center gap-4">
             <button
               onClick={handleSignOut}
-              className="text-sm text-gray-600 hover:text-gray-900 font-medium"
+              className="text-sm text-carto-steel hover:text-carto-slate font-heading font-semibold transition-colors"
             >
               Sign Out
             </button>
@@ -61,21 +61,20 @@ export default function AuthenticatedLayout({
       </div>
 
       {/* Main Navigation */}
-      <div className="bg-white border-b border-gray-200">
+      <div className="bg-white border-b border-carto-blue-pale/40">
         <div className="w-full px-4 sm:px-6 lg:px-8">
-          <nav className="flex items-center gap-1">
+          <nav className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
             {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-2 px-6 py-4 border-b-2 transition-colors ${
+                className={`flex items-center gap-2 px-5 py-3.5 border-b-2 transition-colors whitespace-nowrap ${
                   isActive(item.href)
-                    ? 'border-[#5BA4E5] text-[#5BA4E5]'
-                    : 'border-transparent text-gray-600 hover:text-gray-900'
+                    ? 'border-carto-blue text-carto-blue'
+                    : 'border-transparent text-carto-steel hover:text-carto-slate hover:border-carto-blue-pale'
                 }`}
               >
-                {/* Icon placeholder - will add specific icons */}
-                <span className="text-sm font-medium">{item.label}</span>
+                <span className="text-sm font-heading font-semibold">{item.label}</span>
               </Link>
             ))}
           </nav>

@@ -98,12 +98,12 @@ export default function StrategySimulator({
   const compareResult = latestSim || baseResult;
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+    <div className="bg-white rounded-2xl border border-carto-blue-pale/30 overflow-hidden">
       <div className="p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-1">
+        <h2 className="text-xl font-bold text-carto-slate mb-1">
           Strategy Simulator
         </h2>
-        <p className="text-sm text-gray-500 mb-6">
+        <p className="text-sm text-carto-steel mb-6">
           Adjust your strategy to see how it affects your affordability. Changes
           here are simulated — they won&apos;t modify your profile.
         </p>

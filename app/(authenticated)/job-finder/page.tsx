@@ -5,8 +5,8 @@ export default function JobFinderPage() {
     <div className="space-y-8">
       {/* Page Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Job Finder</h1>
-        <p className="text-gray-600">Find jobs in your target locations that match your career goals</p>
+        <h1 className="text-3xl font-extrabold text-carto-slate mb-2">Job Finder</h1>
+        <p className="text-carto-steel">Find jobs in your target locations that match your career goals</p>
       </div>
 
       {/* Search and Filters */}
@@ -19,7 +19,7 @@ export default function JobFinderPage() {
             <input
               type="text"
               placeholder="e.g., Software Engineer, Marketing Manager"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5BA4E5] focus:border-transparent"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4A90D9] focus:border-transparent"
             />
           </div>
           
@@ -27,7 +27,7 @@ export default function JobFinderPage() {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Location
             </label>
-            <select className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5BA4E5]">
+            <select className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4A90D9]">
               <option>All Target Locations</option>
               <option>Austin, TX</option>
               <option>Denver, CO</option>
@@ -39,7 +39,7 @@ export default function JobFinderPage() {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Salary Range
             </label>
-            <select className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5BA4E5]">
+            <select className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4A90D9]">
               <option>Any</option>
               <option>$50K - $75K</option>
               <option>$75K - $100K</option>
@@ -48,7 +48,7 @@ export default function JobFinderPage() {
           </div>
         </div>
         
-        <button className="mt-4 px-8 py-3 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-colors font-semibold">
+        <button className="mt-4 px-8 py-3 bg-[#4A90D9] text-white rounded-lg hover:bg-[#3A7BC0] transition-colors font-semibold">
           Search Jobs
         </button>
       </div>
@@ -56,7 +56,7 @@ export default function JobFinderPage() {
       {/* Job Listings */}
       <div className="space-y-4">
         {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="bg-white rounded-xl p-6 border border-gray-200 hover:border-[#5BA4E5] transition-colors cursor-pointer">
+          <div key={i} className="bg-white rounded-xl p-6 border border-gray-200 hover:border-[#4A90D9] transition-colors cursor-pointer">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 {/* Company Logo Placeholder */}
@@ -101,9 +101,9 @@ export default function JobFinderPage() {
               </div>
               
               <div className="text-right ml-4">
-                <p className="text-xl font-bold text-[#5BA4E5] mb-1">$XX,XXX</p>
+                <p className="text-xl font-bold text-[#4A90D9] mb-1">$XX,XXX</p>
                 <p className="text-sm text-gray-600">per year</p>
-                <button className="mt-3 px-4 py-2 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-colors text-sm font-medium">
+                <button className="mt-3 px-4 py-2 bg-[#4A90D9] text-white rounded-lg hover:bg-[#3A7BC0] transition-colors text-sm font-medium">
                   View Details
                 </button>
               </div>
@@ -130,7 +130,7 @@ export default function JobFinderPage() {
         <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
           Previous
         </button>
-        <button className="px-4 py-2 bg-[#5BA4E5] text-white rounded-lg">1</button>
+        <button className="px-4 py-2 bg-[#4A90D9] text-white rounded-lg">1</button>
         <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">2</button>
         <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">3</button>
         <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">

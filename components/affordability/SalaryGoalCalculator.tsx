@@ -105,12 +105,12 @@ export default function SalaryGoalCalculator() {
   );
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+    <div className="bg-white rounded-2xl border border-carto-blue-pale/30 overflow-hidden">
       <div className="p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-1">
+        <h2 className="text-xl font-bold text-carto-slate mb-1">
           Salary Goal Calculator
         </h2>
-        <p className="text-sm text-gray-500 mb-6">
+        <p className="text-sm text-carto-steel mb-6">
           Find out what salary you&apos;d need to afford a specific home size,
           number of kids, and location.
         </p>
