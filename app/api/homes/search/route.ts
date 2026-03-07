@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // ── Config ──────────────────────────────────────────────────────────
-const API_KEY = process.env.RAPIDAPI_KEY || '3b86e8a737mshcc69ac4077e9c00p18b472jsnc475ce3e84b9';
+const API_KEY = process.env.RAPIDAPI_KEY || '';
 
 const API_HOST = 'realty-in-us.p.rapidapi.com';
 const API_URL = `https://${API_HOST}`;
