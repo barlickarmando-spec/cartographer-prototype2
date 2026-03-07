@@ -379,19 +379,6 @@ export default function ProfilePage() {
         </p>
       </div>
 
-      {/* Adjust Strategy Button */}
-      <div className="flex justify-end">
-        <button
-          onClick={() => router.push('/adjust-strategy')}
-          className="flex items-center gap-2 px-4 py-2 bg-[#4A90D9] text-white rounded-lg hover:bg-[#3A7BC0] transition-colors text-sm font-medium"
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
-          Adjust Strategy
-        </button>
-      </div>
-
       {/* ===== BANNER/HEADER ===== */}
       <div className="bg-white rounded-2xl shadow-sm border border-[#E5E7EB] overflow-hidden">
         
@@ -653,7 +640,18 @@ export default function ProfilePage() {
 
         {/* MIDDLE SECTION - Cost of Living Details */}
         <div className="px-8 py-6 bg-[#F8FAFB]">
-          <h2 className="text-xl font-bold text-carto-slate mb-6">Cost of Living Breakdown</h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-carto-slate">Cost of Living Breakdown</h2>
+            <button
+              onClick={() => router.push('/adjust-strategy')}
+              className="flex items-center gap-2 px-4 py-2 bg-[#4A90D9] text-white rounded-lg hover:bg-[#3A7BC0] transition-colors text-sm font-medium"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              Adjust Strategy
+            </button>
+          </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Left Column */}
