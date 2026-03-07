@@ -165,7 +165,7 @@ export default function AdjustStrategyPage() {
           </div>
           <div className="w-full bg-[#E5E7EB] rounded-full h-2">
             <div
-              className="bg-[#5BA4E5] h-2 rounded-full transition-all duration-300"
+              className="bg-[#4A90D9] h-2 rounded-full transition-all duration-300"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
@@ -223,9 +223,9 @@ export default function AdjustStrategyPage() {
                 key={i}
                 className={`w-2 h-2 rounded-full transition-all ${
                   i === currentIdx
-                    ? "bg-[#5BA4E5] w-8"
+                    ? "bg-[#4A90D9] w-8"
                     : i < currentIdx
-                    ? "bg-[#5BA4E5]"
+                    ? "bg-[#4A90D9]"
                     : "bg-[#E5E7EB]"
                 }`}
               />
@@ -236,7 +236,7 @@ export default function AdjustStrategyPage() {
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex items-center gap-2 px-6 py-2.5 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm font-medium"
+              className="flex items-center gap-2 px-6 py-2.5 bg-[#4A90D9] text-white rounded-lg hover:bg-[#3A7BC0] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm font-medium"
             >
               {saving ? (
                 <>
@@ -258,7 +258,7 @@ export default function AdjustStrategyPage() {
           ) : (
             <button
               onClick={() => setCurrentIdx((i) => i + 1)}
-              className="flex items-center gap-2 px-6 py-2.5 bg-[#5BA4E5] text-white rounded-lg hover:bg-[#4A93D4] transition-all shadow-sm font-medium"
+              className="flex items-center gap-2 px-6 py-2.5 bg-[#4A90D9] text-white rounded-lg hover:bg-[#3A7BC0] transition-all shadow-sm font-medium"
             >
               Next
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

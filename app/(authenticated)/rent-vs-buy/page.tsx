@@ -4,9 +4,8 @@ export default function RentVsBuyPage() {
   return (
     <div className="space-y-8">
       {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Rent vs Buy Analysis</h1>
-        <p className="text-gray-600">Compare renting vs buying in different locations to make the best decision</p>
+      <div className="text-center">
+        <h1 className="text-3xl font-extrabold text-[#4A90D9]">Rent vs Buy Analysis</h1>
       </div>
 
       {/* Comparison Cards */}
@@ -14,7 +13,7 @@ export default function RentVsBuyPage() {
         {/* Renting Card */}
         <div className="bg-white rounded-xl p-8 border-2 border-gray-200">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Renting</h2>
+            <h2 className="text-2xl font-bold text-carto-slate">Renting</h2>
             <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
               <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -56,11 +55,11 @@ export default function RentVsBuyPage() {
         </div>
 
         {/* Buying Card */}
-        <div className="bg-white rounded-xl p-8 border-2 border-[#5BA4E5]">
+        <div className="bg-white rounded-xl p-8 border-2 border-[#4A90D9]">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Buying</h2>
-            <div className="w-12 h-12 bg-[#5BA4E5] bg-opacity-10 rounded-full flex items-center justify-center">
-              <svg className="w-6 h-6 text-[#5BA4E5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <h2 className="text-2xl font-bold text-carto-slate">Buying</h2>
+            <div className="w-12 h-12 bg-[#4A90D9] bg-opacity-10 rounded-full flex items-center justify-center">
+              <svg className="w-6 h-6 text-[#4A90D9]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
               </svg>
             </div>
@@ -103,7 +102,7 @@ export default function RentVsBuyPage() {
 
       {/* Location-Based Analysis */}
       <div className="bg-white rounded-xl p-8 border border-gray-200">
-        <h2 className="text-xl font-semibold text-gray-900 mb-6">Rent vs Buy by Location</h2>
+        <h2 className="text-xl font-bold text-carto-slate mb-6">Rent vs Buy by Location</h2>
         <div className="space-y-4">
           <p className="text-gray-600">Compare renting vs buying in different cities to find the best option for you</p>
           

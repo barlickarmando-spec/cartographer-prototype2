@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  /* Cartographer heading style — applied to authenticated pages via .carto-headings wrapper */
+  .carto-headings h1,
+  .carto-headings h2,
+  .carto-headings h3,
+  .carto-headings [data-heading] {
+    font-family: "Nunito", sans-serif;
+  }
+}
+
 @layer utilities {
   .scrollbar-hide {
     -ms-overflow-style: none;

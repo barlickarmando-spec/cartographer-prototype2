@@ -23,7 +23,7 @@ export default function ProjectionCards({ result, isLoading }: ProjectionCardsPr
   return (
     <div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-[#5BA4E5] rounded-xl p-6 text-white shadow-md">
+        <div className="bg-[#4A90D9] rounded-xl p-6 text-white shadow-md">
           <p className="text-sm font-medium mb-2">Projected Home Value</p>
           <p className="text-4xl font-bold">
             {isLoading ? placeholder : (maxHomeValue > 0 ? formatCurrency(maxHomeValue) : 'N/A')}

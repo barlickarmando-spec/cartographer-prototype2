@@ -4,9 +4,8 @@ export default function DebtPayoffPage() {
   return (
     <div className="space-y-8">
       {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Debt Payoff Calculator</h1>
-        <p className="text-gray-600">Optimize your debt repayment strategy and see how relocating could help</p>
+      <div className="text-center">
+        <h1 className="text-3xl font-extrabold text-[#4A90D9]">Debt Payoff Calculator</h1>
       </div>
 
       {/* Summary Cards - Based on Figma Design */}
@@ -23,7 +22,7 @@ export default function DebtPayoffPage() {
         </div>
 
         {/* Time to Payoff Card */}
-        <div className="bg-[#5BA4E5] rounded-xl p-6 text-white shadow-md">
+        <div className="bg-[#4A90D9] rounded-xl p-6 text-white shadow-md">
           <div className="flex items-center gap-2 mb-2">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -68,7 +67,7 @@ export default function DebtPayoffPage() {
             <input
               type="number"
               placeholder="500"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5BA4E5] focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4A90D9] focus:border-transparent"
             />
           </div>
           <div>
@@ -79,7 +78,7 @@ export default function DebtPayoffPage() {
               type="number"
               step="0.1"
               placeholder="5.5"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5BA4E5] focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4A90D9] focus:border-transparent"
             />
           </div>
         </div>
@@ -93,7 +92,7 @@ export default function DebtPayoffPage() {
         {/* City Cards - Placeholder */}
         <div className="space-y-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="p-6 border border-gray-200 rounded-lg hover:border-[#5BA4E5] transition-colors cursor-pointer">
+            <div key={i} className="p-6 border border-gray-200 rounded-lg hover:border-[#4A90D9] transition-colors cursor-pointer">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold text-gray-900 mb-1">City Name</h3>
@@ -102,7 +101,7 @@ export default function DebtPayoffPage() {
                 </div>
                 <div className="text-right">
                   <p className="text-sm text-gray-600 mb-1">Payoff time</p>
-                  <p className="text-2xl font-bold text-[#5BA4E5]">XX months</p>
+                  <p className="text-2xl font-bold text-[#4A90D9]">XX months</p>
                 </div>
               </div>
             </div>
