@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAffordabilityCalculations } from '@/hooks/useAffordabilityCalculations';
 import AffordabilityProfile from '@/components/affordability/AffordabilityProfile';
@@ -9,6 +9,7 @@ import StrategySimulator from '@/components/affordability/StrategySimulator';
 import SalaryGoalCalculator from '@/components/affordability/SalaryGoalCalculator';
 import PreferencesPoll from '@/components/affordability/PreferencesPoll';
 import { getSavedLocations, setSavedLocations } from '@/lib/storage';
+import { formatCurrency } from '@/lib/utils';
 
 type MapMode = 'value' | 'sqft';
 
@@ -40,6 +41,33 @@ export default function HomeAffordabilityPage() {
     },
     [router]
   );
+
+  const timelineItems = useMemo(() => {
+    if (!currentResult) return [];
+    const items: { label: string; value: string; sub?: string }[] = [];
+    if (currentResult.yearsToDebtFree > 0) {
+      items.push({ label: 'Debt Free', value: `${currentResult.yearsToDebtFree} yrs`, sub: `Age ${currentResult.ageDebtFree}` });
+    }
+    items.push({
+      label: 'Homeownership',
+      value: currentResult.yearsToMortgage > 0 ? `${currentResult.yearsToMortgage} yrs` : 'N/A',
+      sub: currentResult.yearsToMortgage > 0 ? `Age ${currentResult.ageMortgageAcquired}` : undefined,
+    });
+    return items;
+  }, [currentResult]);
+
+  const projections = useMemo(() => {
+    if (!currentResult) return [];
+    const p = currentResult.houseProjections;
+    return [
+      { label: '3 yrs', value: p.threeYears?.maxSustainableHousePrice ?? null },
+      { label: '5 yrs', value: p.fiveYears?.maxSustainableHousePrice ?? null },
+      { label: '10 yrs', value: p.tenYears?.maxSustainableHousePrice ?? null },
+      { label: '15 yrs', value: p.fifteenYears?.maxSustainableHousePrice ?? null },
+    ].filter((i) => i.value !== null && i.value > 0);
+  }, [currentResult]);
+
+  const kidViability = currentResult?.kidViability;
 
   if (error) {
     return (
@@ -131,6 +159,70 @@ export default function HomeAffordabilityPage() {
           />
         </div>
       </div>
+
+      {/* Timeline, Value Over Time, Kid Affordability */}
+      {currentResult && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Timeline */}
+          <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
+            <h3 className="text-sm font-semibold text-[#4A90D9] mb-3">Timeline</h3>
+            <div className="space-y-2.5">
+              {timelineItems.map((item) => (
+                <div key={item.label} className="flex justify-between items-baseline">
+                  <span className="text-sm text-[#6B7280]">{item.label}</span>
+                  <div className="text-right">
+                    <span className="text-sm font-semibold text-[#2C3E50]">{item.value}</span>
+                    {item.sub && <span className="text-[10px] text-[#9CA3AF] ml-1">{item.sub}</span>}
+                  </div>
+                </div>
+              ))}
+              <div className="flex justify-between items-baseline">
+                <span className="text-sm text-[#6B7280]">Min. Allocation</span>
+                <span className="text-sm font-semibold text-[#2C3E50]">{currentResult.minimumAllocationRequired}%</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Value Over Time */}
+          {projections.length > 0 && (
+            <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
+              <h3 className="text-sm font-semibold text-[#4A90D9] mb-3">Value Over Time</h3>
+              <div className="space-y-2.5">
+                {projections.map((p) => (
+                  <div key={p.label} className="flex justify-between items-center">
+                    <span className="text-sm text-[#6B7280]">{p.label}</span>
+                    <span className="text-sm font-semibold text-[#2C3E50]">{formatCurrency(p.value!)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Kid Affordability */}
+          {kidViability && profile?.kidsPlan !== 'no' && (
+            <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
+              <h3 className="text-sm font-semibold text-[#4A90D9] mb-3">Kid Affordability</h3>
+              <div className="space-y-2.5">
+                {[
+                  { label: '1st Child', data: kidViability.firstKid },
+                  { label: '2nd Child', data: kidViability.secondKid },
+                  { label: '3rd Child', data: kidViability.thirdKid },
+                ].map(({ label, data }) => (
+                  <div key={label} className="flex items-center justify-between">
+                    <span className="text-sm text-[#6B7280]">{label}</span>
+                    <div className="flex items-center gap-1.5">
+                      <div className={`w-2 h-2 rounded-full ${data.isViable ? 'bg-green-500' : 'bg-red-400'}`} />
+                      <span className="text-xs text-[#2C3E50]">
+                        {data.isViable ? (data.minimumAge ? `Viable at ${data.minimumAge}` : 'Viable') : data.reason ?? 'Not viable'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Section 3: Strategy Simulator */}
       <StrategySimulator defaultLocation={defaultLocation} />

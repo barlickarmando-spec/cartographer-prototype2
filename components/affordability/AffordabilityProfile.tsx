@@ -1,6 +1,5 @@
 'use client';
 
-import { useMemo } from 'react';
 import { CalculationResult } from '@/lib/calculation-engine';
 import { formatCurrency } from '@/lib/utils';
 import { createRatingColorScale } from '@/lib/color-scale';
@@ -41,46 +40,6 @@ export default function AffordabilityProfile({
   const viability = result?.viabilityClassification ?? 'no-viable-path';
   const viabilityInfo = VIABILITY_LABELS[viability] ?? VIABILITY_LABELS['no-viable-path'];
 
-  const kidViability = result?.kidViability;
-
-  const timelineItems = useMemo(() => {
-    if (!result) return [];
-    const items: { label: string; value: string; sub?: string }[] = [];
-
-    if (result.yearsToDebtFree > 0) {
-      items.push({
-        label: 'Debt Free',
-        value: `${result.yearsToDebtFree} yrs`,
-        sub: `Age ${result.ageDebtFree}`,
-      });
-    }
-
-    items.push({
-      label: 'Homeownership',
-      value:
-        result.yearsToMortgage > 0
-          ? `${result.yearsToMortgage} yrs`
-          : 'N/A',
-      sub:
-        result.yearsToMortgage > 0
-          ? `Age ${result.ageMortgageAcquired}`
-          : undefined,
-    });
-
-    return items;
-  }, [result]);
-
-  const projections = useMemo(() => {
-    if (!result) return [];
-    const p = result.houseProjections;
-    const items: { label: string; value: number | null }[] = [
-      { label: '3 yrs', value: p.threeYears?.maxSustainableHousePrice ?? null },
-      { label: '5 yrs', value: p.fiveYears?.maxSustainableHousePrice ?? null },
-      { label: '10 yrs', value: p.tenYears?.maxSustainableHousePrice ?? null },
-      { label: '15 yrs', value: p.fifteenYears?.maxSustainableHousePrice ?? null },
-    ];
-    return items.filter((i) => i.value !== null && i.value > 0);
-  }, [result]);
 
   if (isLoading) {
     return (
@@ -173,95 +132,6 @@ export default function AffordabilityProfile({
             }
             accent="#E76F51"
           />
-        </div>
-
-        {/* Timeline + Projections + Kids row */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Timeline */}
-          <div className="bg-gray-50 rounded-xl p-4">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-              Timeline
-            </h3>
-            <div className="space-y-3">
-              {timelineItems.map((item) => (
-                <div key={item.label} className="flex justify-between items-baseline">
-                  <span className="text-sm text-gray-700">{item.label}</span>
-                  <div className="text-right">
-                    <span className="text-sm font-semibold text-gray-900">
-                      {item.value}
-                    </span>
-                    {item.sub && (
-                      <span className="text-[10px] text-gray-400 ml-1">
-                        {item.sub}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-              <div className="flex justify-between items-baseline">
-                <span className="text-sm text-gray-700">Min. Allocation</span>
-                <span className="text-sm font-semibold text-gray-900">
-                  {result.minimumAllocationRequired}%
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Price projections over time */}
-          {projections.length > 0 && (
-            <div className="bg-gray-50 rounded-xl p-4">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                Value Over Time
-              </h3>
-              <div className="space-y-2">
-                {projections.map((p) => (
-                  <div
-                    key={p.label}
-                    className="flex justify-between items-center"
-                  >
-                    <span className="text-sm text-gray-600">{p.label}</span>
-                    <span className="text-sm font-semibold text-gray-900">
-                      {formatCurrency(p.value!)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Kid viability */}
-          {kidViability && profile.kidsPlan !== 'no' && (
-            <div className="bg-gray-50 rounded-xl p-4">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                Kid Affordability
-              </h3>
-              <div className="space-y-2.5">
-                {[
-                  { label: '1st Child', data: kidViability.firstKid },
-                  { label: '2nd Child', data: kidViability.secondKid },
-                  { label: '3rd Child', data: kidViability.thirdKid },
-                ].map(({ label, data }) => (
-                  <div key={label} className="flex items-center justify-between">
-                    <span className="text-sm text-gray-700">{label}</span>
-                    <div className="flex items-center gap-1.5">
-                      <div
-                        className={`w-2 h-2 rounded-full ${
-                          data.isViable ? 'bg-green-500' : 'bg-red-400'
-                        }`}
-                      />
-                      <span className="text-xs text-gray-600">
-                        {data.isViable
-                          ? data.minimumAge
-                            ? `Viable at ${data.minimumAge}`
-                            : 'Viable'
-                          : data.reason ?? 'Not viable'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Assumptions */}
