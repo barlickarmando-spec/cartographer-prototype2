@@ -99,6 +99,16 @@ export default function ProfilePage() {
         }
       }
 
+      // Check for override from heat map / Top Locations click
+      try {
+        const activeOverride = localStorage.getItem('active-profile-location');
+        if (activeOverride) {
+          const overrideMatch = sortedResults.find(r => r.location === activeOverride);
+          if (overrideMatch) resultToShow = overrideMatch;
+          localStorage.removeItem('active-profile-location');
+        }
+      } catch { /* ignore */ }
+
       setSelectedResult(resultToShow);
     } catch (error) {
       console.error('Error loading results:', error);

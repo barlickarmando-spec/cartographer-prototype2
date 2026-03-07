@@ -135,6 +135,16 @@ export default function USHeatMap({
     const sorted = [...viable].sort((a, b) => b.numericScore - a.numericScore);
 
     const bestLocations = sorted.slice(0, 5);
+
+    // Separate top states and top cities
+    const stateNames = new Set<string>();
+    stateData.forEach((_calc, name) => stateNames.add(name));
+
+    const viableStates = viable.filter((l) => stateNames.has(l.name));
+    const viableCities = viable.filter((l) => !stateNames.has(l.name));
+    const bestStates = [...viableStates].sort((a, b) => b.numericScore - a.numericScore).slice(0, 3);
+    const bestCities = [...viableCities].sort((a, b) => b.numericScore - a.numericScore).slice(0, 3);
+
     const worstViable = [...viable]
       .sort((a, b) => a.numericScore - b.numericScore)
       .slice(0, 5);
@@ -160,6 +170,8 @@ export default function USHeatMap({
 
     return {
       bestLocations,
+      bestStates,
+      bestCities,
       worstViable,
       unviableCount,
       totalLocations: allLocations.length,
@@ -303,32 +315,63 @@ export default function USHeatMap({
           {/* Compact Insights */}
           {insights && !isLoading && (
             <>
-              {/* Top 3 */}
-              <div>
-                <p className="text-xs font-semibold text-[#4A90D9] mb-2">Top Locations</p>
-                <div className="space-y-1.5">
-                  {insights.bestLocations.slice(0, 3).map((loc) => (
-                    <div
-                      key={loc.name}
-                      className="flex items-center justify-between text-xs cursor-pointer hover:bg-[#F0F7FF] rounded px-1.5 py-1 -mx-1.5 transition-colors"
-                      onClick={() => onLocationClick(loc.name)}
-                    >
-                      <span className="text-[#2C3E50] font-medium truncate flex-1 mr-2">
-                        {loc.name}
-                      </span>
-                      <span
-                        className="font-semibold text-[11px] px-1.5 py-0.5 rounded"
-                        style={{
-                          backgroundColor: ratingScale(loc.numericScore) + '22',
-                          color: ratingScale(loc.numericScore),
-                        }}
+              {/* Top States */}
+              {insights.bestStates.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-[#4A90D9] mb-2">Top States</p>
+                  <div className="space-y-1.5">
+                    {insights.bestStates.map((loc) => (
+                      <div
+                        key={loc.name}
+                        className="flex items-center justify-between text-xs cursor-pointer hover:bg-[#F0F7FF] rounded px-1.5 py-1 -mx-1.5 transition-colors"
+                        onClick={() => onLocationClick(loc.name)}
                       >
-                        {loc.numericScore.toFixed(1)}
-                      </span>
-                    </div>
-                  ))}
+                        <span className="text-[#2C3E50] font-medium truncate flex-1 mr-2">
+                          {loc.name}
+                        </span>
+                        <span
+                          className="font-semibold text-[11px] px-1.5 py-0.5 rounded"
+                          style={{
+                            backgroundColor: ratingScale(loc.numericScore) + '22',
+                            color: ratingScale(loc.numericScore),
+                          }}
+                        >
+                          {loc.numericScore.toFixed(1)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* Top Cities */}
+              {insights.bestCities.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-[#4A90D9] mb-2">Top Cities</p>
+                  <div className="space-y-1.5">
+                    {insights.bestCities.map((loc) => (
+                      <div
+                        key={loc.name}
+                        className="flex items-center justify-between text-xs cursor-pointer hover:bg-[#F0F7FF] rounded px-1.5 py-1 -mx-1.5 transition-colors"
+                        onClick={() => onLocationClick(loc.name)}
+                      >
+                        <span className="text-[#2C3E50] font-medium truncate flex-1 mr-2">
+                          {loc.name}
+                        </span>
+                        <span
+                          className="font-semibold text-[11px] px-1.5 py-0.5 rounded"
+                          style={{
+                            backgroundColor: ratingScale(loc.numericScore) + '22',
+                            color: ratingScale(loc.numericScore),
+                          }}
+                        >
+                          {loc.numericScore.toFixed(1)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Quick Stats */}
               <div>
