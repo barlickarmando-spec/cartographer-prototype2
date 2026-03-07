@@ -103,9 +103,25 @@ export default function ProfilePage() {
       try {
         const activeOverride = localStorage.getItem('active-profile-location');
         if (activeOverride) {
-          const overrideMatch = sortedResults.find(r => r.location === activeOverride);
-          if (overrideMatch) resultToShow = overrideMatch;
           localStorage.removeItem('active-profile-location');
+          const overrideMatch = sortedResults.find(r => r.location === activeOverride);
+          if (overrideMatch) {
+            resultToShow = overrideMatch;
+          } else {
+            // Location not in cached results — compute fresh
+            try {
+              const answersRaw = storedAnswers ? JSON.parse(storedAnswers) : null;
+              const prof = answersRaw ? normalizeOnboardingAnswers(answersRaw) : null;
+              if (prof) {
+                const freshResult = calculateAutoApproach(prof, activeOverride, 30);
+                if (freshResult) {
+                  resultToShow = freshResult;
+                  sortedResults.push(freshResult);
+                  setAllResults([...sortedResults]);
+                }
+              }
+            } catch { /* fall through to default */ }
+          }
         }
       } catch { /* ignore */ }
 
