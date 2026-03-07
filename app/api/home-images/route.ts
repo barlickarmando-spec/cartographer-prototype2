@@ -34,8 +34,9 @@ export async function GET(request: NextRequest) {
   const url = new URL('https://www.googleapis.com/customsearch/v1');
   url.searchParams.set('q', query);
   url.searchParams.set('searchType', 'image');
-  url.searchParams.set('num', '5');
-  url.searchParams.set('imgSize', 'xlarge');
+  url.searchParams.set('num', '6');
+  url.searchParams.set('imgSize', 'huge');
+  url.searchParams.set('imgType', 'photo');
   url.searchParams.set('safe', 'active');
   url.searchParams.set('key', apiKey);
   url.searchParams.set('cx', cx);
@@ -64,11 +65,20 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json();
-    const images = (data.items || []).map((item: any) => ({
-      url: item.link,
-      title: item.title,
-      contextLink: item.image?.contextLink || '',
-    }));
+    const images = (data.items || [])
+      .filter((item: any) => {
+        // Filter out tiny images that would be blurry
+        const w = item.image?.width || 0;
+        const h = item.image?.height || 0;
+        return w >= 400 && h >= 300;
+      })
+      .map((item: any) => ({
+        url: item.link,
+        title: item.title,
+        contextLink: item.image?.contextLink || '',
+        width: item.image?.width || 0,
+        height: item.image?.height || 0,
+      }));
 
     return NextResponse.json({ success: true, images, query });
   } catch (err) {

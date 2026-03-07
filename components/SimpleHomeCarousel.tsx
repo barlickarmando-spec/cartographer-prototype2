@@ -7,6 +7,8 @@ interface GoogleImage {
   url: string;
   title: string;
   contextLink: string;
+  width?: number;
+  height?: number;
 }
 
 interface SimpleHomeCarouselProps {
@@ -27,6 +29,7 @@ interface Home {
   sqft: number;
   homeType: string;
   photoUrl: string;
+  fullResPhotoUrl?: string;
   listingUrl: string;
   status: string;
 }
@@ -392,7 +395,11 @@ function GoogleImageFallback({
                 <img
                   src={img.url}
                   alt={img.title}
+                  width={img.width || undefined}
+                  height={img.height || undefined}
+                  sizes={visibleImages.length === 1 ? '100vw' : '(max-width: 640px) 100vw, 50vw'}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  decoding="async"
                   loading="lazy"
                   onError={() => setFailedUrls((prev) => new Set(prev).add(img.url))}
                 />
@@ -578,9 +585,16 @@ function CompactHomeCard({ home, index, onClick }: { home: Home; index: number; 
       <div className={`relative aspect-[4/3] bg-gradient-to-br ${gradient} overflow-hidden`}>
         {home.photoUrl && !imgError ? (
           /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={home.photoUrl} alt={`Home at ${home.address}`}
+          <img
+            src={home.photoUrl}
+            srcSet={home.fullResPhotoUrl ? `${home.photoUrl} 1280w, ${home.fullResPhotoUrl} 1920w` : undefined}
+            sizes="(max-width: 640px) 100vw, 50vw"
+            alt={`Home at ${home.address}`}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            onError={() => setImgError(true)} loading="lazy" />
+            decoding="async"
+            onError={() => setImgError(true)}
+            loading="lazy"
+          />
         ) : (
           <div className="flex flex-col items-center justify-center h-full gap-1">
             <svg className="w-8 h-8 text-[#5BA4E5] opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -656,8 +670,16 @@ function FullScreenCarouselModal({
         <div className={`relative w-full md:w-3/5 h-[40vh] md:h-auto md:min-h-[500px] bg-[#1a1a2e]`}>
           {home.photoUrl && !imgError ? (
             /* eslint-disable-next-line @next/next/no-img-element */
-            <img src={home.photoUrl} alt={`Home at ${home.address}`} className="w-full h-full object-cover"
-              onError={() => setImgError(true)} />
+            <img
+              src={home.fullResPhotoUrl || home.photoUrl}
+              srcSet={home.fullResPhotoUrl ? `${home.photoUrl} 1280w, ${home.fullResPhotoUrl} 1920w` : undefined}
+              sizes="(max-width: 768px) 100vw, 60vw"
+              alt={`Home at ${home.address}`}
+              className="w-full h-full object-cover"
+              decoding="async"
+              fetchPriority="high"
+              onError={() => setImgError(true)}
+            />
           ) : (
             <div className={`flex flex-col items-center justify-center w-full h-full gap-3 bg-gradient-to-br ${gradient}`}>
               <svg className="w-16 h-16 text-[#5BA4E5] opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -744,7 +766,7 @@ function FullScreenCarouselModal({
                   i === currentIndex ? 'border-[#5BA4E5] shadow' : 'border-transparent opacity-60 hover:opacity-100'}`}>
                 {h.photoUrl ? (
                   /* eslint-disable-next-line @next/next/no-img-element */
-                  <img src={h.photoUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                  <img src={h.photoUrl} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
                 ) : (
                   <div className={`w-full h-full bg-gradient-to-br ${CARD_GRADIENTS[i % CARD_GRADIENTS.length]}`} />
                 )}

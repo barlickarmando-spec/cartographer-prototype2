@@ -90,13 +90,37 @@ function buildSearchQuery(city: string, stateCode: string): string {
   return stateCode;
 }
 
+/**
+ * Upgrade a photo URL to high resolution.
+ * rdcpix CDN supports arbitrary width/height parameters.
+ * We request 1280x960 for card display (sharp on 2x Retina).
+ */
 function upgradePhotoUrl(url: string): string {
   if (!url) return url;
-  // Request 600px wide — rdcpix reliably serves this size and it matches
-  // our card aspect-ratio display without stretching beyond source resolution.
-  let upgraded = url.replace(/(-w)\d+/, '$1600');
-  upgraded = upgraded.replace(/(_h)\d+/, '$1450');
+  let upgraded = url.replace(/(-w)\d+/, '$11280');
+  upgraded = upgraded.replace(/(_h)\d+/, '$1960');
+  // Remove "thumbs" path segment which forces tiny sizes
   upgraded = upgraded.replace(/\/thumbs\//, '/');
+  // Remove any explicit size suffixes like "s.jpg" → "l.jpg" for large
+  upgraded = upgraded.replace(/([_-])s(\.\w+)$/, '$1l$2');
+  // Some CDNs use ?w=N or &w=N query params — bump those too
+  upgraded = upgraded.replace(/([?&])w=\d+/, '$1w=1280');
+  upgraded = upgraded.replace(/([?&])h=\d+/, '$1h=960');
+  return upgraded;
+}
+
+/**
+ * Get an even higher resolution URL for full-screen / modal display.
+ * Targets 1920x1440 for crisp rendering on large screens.
+ */
+function getFullResPhotoUrl(url: string): string {
+  if (!url) return url;
+  let upgraded = url.replace(/(-w)\d+/, '$11920');
+  upgraded = upgraded.replace(/(_h)\d+/, '$11440');
+  upgraded = upgraded.replace(/\/thumbs\//, '/');
+  upgraded = upgraded.replace(/([_-])s(\.\w+)$/, '$1l$2');
+  upgraded = upgraded.replace(/([?&])w=\d+/, '$1w=1920');
+  upgraded = upgraded.replace(/([?&])h=\d+/, '$1h=1440');
   return upgraded;
 }
 
@@ -115,6 +139,7 @@ function normalizeProperty(prop: any): {
   sqft: number;
   homeType: string;
   photoUrl: string;
+  fullResPhotoUrl: string;
   listingUrl: string;
   status: string;
   _propertyId?: string;
@@ -151,6 +176,7 @@ function normalizeProperty(prop: any): {
   if (!photoUrl && typeof prop.imageUrl === 'string' && prop.imageUrl.startsWith('http')) photoUrl = prop.imageUrl;
 
   const rawPhotoUrl = photoUrl;
+  const fullResPhoto = getFullResPhotoUrl(photoUrl);
   photoUrl = upgradePhotoUrl(photoUrl);
   if (rawPhotoUrl && rawPhotoUrl !== photoUrl) {
     console.log(`[photos] ${rawPhotoUrl} → ${photoUrl}`);
@@ -184,6 +210,7 @@ function normalizeProperty(prop: any): {
     sqft,
     homeType,
     photoUrl,
+    fullResPhotoUrl: fullResPhoto,
     listingUrl,
     status: prop.status || 'for_sale',
     _propertyId: prop.property_id || '',
@@ -640,13 +667,16 @@ export async function POST(request: NextRequest) {
         debug.fetchingPhotosFor = needPhotos.length;
         const photoPromises = needPhotos.map(async (home) => {
           const url = await primaryGetPhotos(home._propertyId!, home._listingId || '');
-          if (url) home.photoUrl = upgradePhotoUrl(url);
+          if (url) {
+            home.photoUrl = upgradePhotoUrl(url);
+            home.fullResPhotoUrl = getFullResPhotoUrl(url);
+          }
         });
         await Promise.allSettled(photoPromises);
       }
     }
 
-    // Remove internal fields
+    // Remove internal fields (keep fullResPhotoUrl for client)
     const cleaned = homes.map(({ _propertyId, _listingId, ...rest }) => rest);
     debug.finalCount = cleaned.length;
     debug.finalWithPhotos = cleaned.filter(h => h.photoUrl).length;
