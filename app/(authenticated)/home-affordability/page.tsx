@@ -87,8 +87,8 @@ export default function HomeAffordabilityPage() {
       <div className="bg-white rounded-2xl border border-carto-blue-pale/30 overflow-hidden">
         <div className="p-6 pb-0">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-carto-slate">
-              National Affordability Map
+            <h2 className="text-xl font-bold text-[#4A90D9]">
+              Your Housing Affordability Map
             </h2>
             <div className="flex bg-gray-100 rounded-full p-1">
               <button

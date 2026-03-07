@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { createRatingColorScale } from '@/lib/color-scale';
 import statePathsData from '@/lib/us-state-paths.json';
 import cityAreasData from '@/lib/us-city-areas.json';
@@ -11,6 +11,7 @@ import { formatCurrency } from '@/lib/utils';
 const GRAY = '#E5E7EB';
 const WIDTH = 960;
 const HEIGHT = 600;
+const DEFAULT_VIEWBOX = `0 0 ${WIDTH} ${HEIGHT}`;
 
 const statePaths = statePathsData as { name: string; d: string }[];
 const cityAreas = cityAreasData as unknown as Record<
@@ -42,6 +43,9 @@ export default function USHeatMap({
   onLocationClick,
 }: USHeatMapProps) {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  const [zoomedState, setZoomedState] = useState<string | null>(null);
+  const [viewBox, setViewBox] = useState(DEFAULT_VIEWBOX);
+  const svgRef = useRef<SVGSVGElement>(null);
 
   const ratingScale = useMemo(() => createRatingColorScale(), []);
 
@@ -68,6 +72,41 @@ export default function USHeatMap({
 
   const handleMouseLeave = useCallback(() => {
     setTooltip(null);
+  }, []);
+
+  const handleStateClick = useCallback(
+    (stateName: string, e: React.MouseEvent<SVGPathElement>) => {
+      if (zoomedState === stateName) {
+        onLocationClick(stateName);
+        return;
+      }
+      const pathEl = e.currentTarget;
+      const bbox = pathEl.getBBox();
+      const padding = 40;
+      const x = bbox.x - padding;
+      const y = bbox.y - padding;
+      const w = bbox.width + padding * 2;
+      const h = bbox.height + padding * 2;
+      // Maintain aspect ratio
+      const aspect = WIDTH / HEIGHT;
+      const boxAspect = w / h;
+      let vx = x, vy = y, vw = w, vh = h;
+      if (boxAspect > aspect) {
+        vh = vw / aspect;
+        vy = y - (vh - h) / 2;
+      } else {
+        vw = vh * aspect;
+        vx = x - (vw - w) / 2;
+      }
+      setViewBox(`${vx} ${vy} ${vw} ${vh}`);
+      setZoomedState(stateName);
+    },
+    [zoomedState, onLocationClick]
+  );
+
+  const handleZoomOut = useCallback(() => {
+    setViewBox(DEFAULT_VIEWBOX);
+    setZoomedState(null);
   }, []);
 
   const cityShapes = useMemo(() => {
@@ -154,24 +193,27 @@ export default function USHeatMap({
 
       <div className="flex items-start gap-3">
         {/* Map */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 relative">
           <svg
-            viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+            ref={svgRef}
+            viewBox={viewBox}
             className="w-full h-auto"
-            style={{ maxHeight: '70vh' }}
+            style={{ maxHeight: '70vh', transition: 'viewBox 0.5s' }}
           >
+            <style>{`svg { transition: all 0.5s ease-in-out; }`}</style>
             {statePaths.map((state, i) => {
               const calc = stateData.get(state.name);
               const fill = getFillColor(calc);
+              const isZoomed = zoomedState === state.name;
               return (
                 <path
                   key={i}
                   d={state.d}
                   fill={fill}
-                  stroke="#FFFFFF"
-                  strokeWidth={0.5}
+                  stroke={isZoomed ? '#4A90D9' : '#FFFFFF'}
+                  strokeWidth={isZoomed ? 2 : 0.5}
                   cursor="pointer"
-                  onClick={() => onLocationClick(state.name)}
+                  onClick={(e) => handleStateClick(state.name, e)}
                   onMouseEnter={(e) => {
                     if (calc) handleMouseEnter(state.name, calc, e);
                   }}
@@ -202,6 +244,18 @@ export default function USHeatMap({
               );
             })}
           </svg>
+
+          {zoomedState && (
+            <button
+              onClick={handleZoomOut}
+              className="absolute top-3 left-3 flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#4A90D9] text-[#4A90D9] rounded-lg shadow-md hover:bg-[#4A90D9] hover:text-white transition-colors text-sm font-medium"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
+              </svg>
+              Zoom Out
+            </button>
+          )}
         </div>
 
         {/* Legend */}
