@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { CalculationResult } from '@/lib/calculation-engine';
 import { formatCurrency } from '@/lib/utils';
 import { createRatingColorScale } from '@/lib/color-scale';
 import { getPricePerSqft } from '@/lib/home-value-lookup';
-import { filterStates } from '@/lib/onboarding/locations';
+import LocationPicker from '@/components/shared/LocationPicker';
 import type { UserProfile } from '@/lib/onboarding/types';
 
 const ratingScale = createRatingColorScale();
@@ -33,20 +33,6 @@ export default function AffordabilityProfile({
   onLocationChange,
 }: AffordabilityProfileProps) {
   const [showLocationPicker, setShowLocationPicker] = useState(false);
-  const [locationSearch, setLocationSearch] = useState('');
-  const pickerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
-        setShowLocationPicker(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const filteredLocations = filterStates(locationSearch, 8);
 
   const maxAffordable = result?.houseProjections.maxAffordable;
   const maxPrice = maxAffordable?.maxSustainableHousePrice ?? 0;
@@ -82,17 +68,23 @@ export default function AffordabilityProfile({
     <div className="bg-white rounded-2xl border border-carto-blue-pale/30 overflow-hidden">
       <div className="p-6">
         <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-bold text-[#4A90D9]">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <h2 className="text-xl font-bold text-[#4A90D9] shrink-0">
               Your Affordability Profile
             </h2>
-            <span className="text-[#6B7280] text-lg">—</span>
-            <div className="relative" ref={pickerRef}>
-              <button
-                onClick={() => {
-                  setShowLocationPicker(!showLocationPicker);
-                  setLocationSearch('');
+            <span className="text-[#6B7280] text-lg shrink-0">—</span>
+            {showLocationPicker && onLocationChange ? (
+              <LocationPicker
+                value={location}
+                onChange={(loc) => {
+                  onLocationChange(loc);
+                  setShowLocationPicker(false);
                 }}
+                className="w-72"
+              />
+            ) : (
+              <button
+                onClick={() => setShowLocationPicker(true)}
                 className="flex items-center gap-1.5 text-[#2C3E50] font-semibold text-lg hover:text-[#4A90D9] transition-colors"
               >
                 {location || 'Select Location'}
@@ -100,39 +92,7 @@ export default function AffordabilityProfile({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
-              {showLocationPicker && onLocationChange && (
-                <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-[#E5E7EB] rounded-xl shadow-lg z-20 overflow-hidden">
-                  <div className="p-2">
-                    <input
-                      type="text"
-                      value={locationSearch}
-                      onChange={(e) => setLocationSearch(e.target.value)}
-                      placeholder="Search locations..."
-                      className="w-full px-3 py-2 text-sm border border-[#E5E7EB] rounded-lg focus:border-[#4A90D9] focus:ring-1 focus:ring-[#4A90D9] outline-none"
-                      autoFocus
-                    />
-                  </div>
-                  <div className="max-h-48 overflow-y-auto">
-                    {filteredLocations.map((loc) => (
-                      <button
-                        key={loc}
-                        onClick={() => {
-                          onLocationChange(loc);
-                          setShowLocationPicker(false);
-                        }}
-                        className={`w-full text-left px-4 py-2 text-sm transition-colors ${
-                          loc === location
-                            ? 'bg-[#EFF6FF] text-[#4A90D9] font-medium'
-                            : 'text-[#2C3E50] hover:bg-[#F8FAFB]'
-                        }`}
-                      >
-                        {loc}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <span
@@ -229,12 +189,12 @@ function MetricCard({
 }) {
   return (
     <div
-      className="rounded-xl p-4 text-white"
+      className="rounded-xl p-6 text-white"
       style={{ backgroundColor: accent }}
     >
-      <p className="text-xs font-medium opacity-90 mb-1">{label}</p>
-      <p className="text-2xl font-bold">{value}</p>
-      {sub && <p className="text-xs opacity-80 mt-1">{sub}</p>}
+      <p className="text-sm font-medium opacity-90 mb-2">{label}</p>
+      <p className="text-3xl font-bold">{value}</p>
+      {sub && <p className="text-sm opacity-80 mt-2">{sub}</p>}
     </div>
   );
 }

@@ -198,7 +198,7 @@ export default function USHeatMap({
             ref={svgRef}
             viewBox={viewBox}
             className="w-full h-auto"
-            style={{ maxHeight: '70vh', transition: 'viewBox 0.5s' }}
+            style={{ maxHeight: '85vh', transition: 'viewBox 0.5s' }}
           >
             <style>{`svg { transition: all 0.5s ease-in-out; }`}</style>
             {statePaths.map((state, i) => {
@@ -263,23 +263,23 @@ export default function USHeatMap({
         </div>
 
         {/* Legend + Insights */}
-        <div className="w-44 flex-shrink-0 pt-4 space-y-5">
+        <div className="w-56 flex-shrink-0 pt-4 space-y-5">
           {/* Legend */}
           <div>
-            <p className="text-xs font-semibold text-[#2C3E50] mb-2.5">
+            <p className="text-sm font-semibold text-[#2C3E50] mb-3">
               Affordability Rating
             </p>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {legendSteps.map((score, i) => (
-                <div key={score} className="flex items-center gap-2">
+                <div key={score} className="flex items-center gap-2.5">
                   <div
-                    className="w-4 h-4 rounded"
+                    className="w-5 h-5 rounded"
                     style={{
                       backgroundColor:
                         score === 0 ? GRAY : ratingScale(score),
                     }}
                   />
-                  <span className="text-xs text-[#6B7280]">
+                  <span className="text-sm text-[#6B7280]">
                     {legendLabels[i]}
                   </span>
                 </div>
@@ -295,7 +295,7 @@ export default function USHeatMap({
                     strokeWidth="1.2"
                   />
                 </svg>
-                <span className="text-xs text-[#6B7280]">Metro area</span>
+                <span className="text-sm text-[#6B7280]">Metro area</span>
               </div>
             </div>
           </div>

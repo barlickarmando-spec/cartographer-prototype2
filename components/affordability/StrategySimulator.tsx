@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { calculateAutoApproach, CalculationResult } from '@/lib/calculation-engine';
 import { normalizeOnboardingAnswers } from '@/lib/onboarding/normalize';
 import { getOnboardingAnswers } from '@/lib/storage';
 import { formatCurrency } from '@/lib/utils';
 import { createRatingColorScale } from '@/lib/color-scale';
-import { filterStates } from '@/lib/onboarding/locations';
+import LocationPicker from '@/components/shared/LocationPicker';
 import type { OnboardingAnswers } from '@/lib/onboarding/types';
 
 const ratingScale = createRatingColorScale();
@@ -42,21 +42,6 @@ export default function StrategySimulator({
   const [location, setLocation] = useState(defaultLocation);
   const [simResults, setSimResults] = useState<SimResult[]>([]);
   const [isComputing, setIsComputing] = useState(false);
-  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
-  const [locationSearchText, setLocationSearchText] = useState('');
-  const locationDropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (locationDropdownRef.current && !locationDropdownRef.current.contains(e.target as Node)) {
-        setShowLocationDropdown(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const filteredSimLocations = filterStates(locationSearchText, 8);
 
   const baseResult = useMemo(() => {
     if (!answers) return null;
@@ -128,56 +113,11 @@ export default function StrategySimulator({
           {/* Controls */}
           <div className="space-y-5">
             {/* Location */}
-            <div ref={locationDropdownRef} className="relative">
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                Simulate Location
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowLocationDropdown(!showLocationDropdown);
-                  setLocationSearchText('');
-                }}
-                className="w-full flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2 text-sm text-left focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 focus:border-[#4A90D9] bg-white"
-              >
-                <span className="text-[#2C3E50] font-medium">{location}</span>
-                <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              {showLocationDropdown && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#E5E7EB] rounded-xl shadow-lg z-20 overflow-hidden">
-                  <div className="p-2">
-                    <input
-                      type="text"
-                      value={locationSearchText}
-                      onChange={(e) => setLocationSearchText(e.target.value)}
-                      placeholder="Search states..."
-                      className="w-full px-3 py-2 text-sm border border-[#E5E7EB] rounded-lg focus:border-[#4A90D9] focus:ring-1 focus:ring-[#4A90D9] outline-none"
-                      autoFocus
-                    />
-                  </div>
-                  <div className="max-h-48 overflow-y-auto">
-                    {filteredSimLocations.map((loc) => (
-                      <button
-                        key={loc}
-                        onClick={() => {
-                          setLocation(loc);
-                          setShowLocationDropdown(false);
-                        }}
-                        className={`w-full text-left px-4 py-2 text-sm transition-colors ${
-                          loc === location
-                            ? 'bg-[#EFF6FF] text-[#4A90D9] font-medium'
-                            : 'text-[#2C3E50] hover:bg-[#F8FAFB]'
-                        }`}
-                      >
-                        {loc}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <LocationPicker
+              value={location}
+              onChange={setLocation}
+              label="Simulate Location"
+            />
 
             {/* Allocation slider */}
             <div>
