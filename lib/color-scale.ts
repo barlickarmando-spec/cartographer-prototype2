@@ -32,8 +32,8 @@ function interpolateColorStops(stops: RGB[], t: number): string {
 const RED_YELLOW_GREEN_STOPS: RGB[] = [
   [210, 75, 80],   // 0 - brighter rose
   [228, 120, 95],  // ~1.7 - warm coral
-  [238, 170, 110], // ~3.3 - warm amber
-  [235, 215, 145], // 5 - soft gold (neutral)
+  [245, 180, 100], // ~3.3 - warm amber
+  [250, 220, 70],  // 5 - bright golden yellow
   [170, 210, 125], // ~6.7 - fresh sage
   [90, 185, 105],  // ~8.3 - vivid green
   [45, 155, 70],   // 10 - rich green

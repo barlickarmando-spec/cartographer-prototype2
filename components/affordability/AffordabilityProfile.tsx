@@ -124,13 +124,11 @@ export default function AffordabilityProfile({
             label="Max Home Value"
             value={maxPrice > 0 ? formatCurrency(maxPrice) : 'N/A'}
             sub={location}
-            accent="#4A90D9"
           />
           <MetricCard
             label="Monthly Payment"
             value={monthlyPayment > 0 ? `$${monthlyPayment.toLocaleString()}` : 'N/A'}
             sub="Sustainable mortgage"
-            accent="#4DB6AC"
           />
           <MetricCard
             label="Home Size"
@@ -140,7 +138,6 @@ export default function AffordabilityProfile({
                 : 'N/A'
             }
             sub={pricePerSqft > 0 ? `$${pricePerSqft}/sqft locally` : ''}
-            accent="#7E57C2"
           />
           <MetricCard
             label="Time to Own"
@@ -154,7 +151,6 @@ export default function AffordabilityProfile({
                 ? `Age ${result.ageMortgageAcquired}`
                 : ''
             }
-            accent="#E76F51"
           />
         </div>
 
@@ -180,17 +176,14 @@ function MetricCard({
   label,
   value,
   sub,
-  accent,
 }: {
   label: string;
   value: string;
   sub: string;
-  accent: string;
 }) {
   return (
     <div
-      className="rounded-xl p-6 text-white"
-      style={{ backgroundColor: accent }}
+      className="rounded-xl p-6 text-white bg-[#4A90D9]"
     >
       <p className="text-sm font-medium opacity-90 mb-2">{label}</p>
       <p className="text-3xl font-bold">{value}</p>
