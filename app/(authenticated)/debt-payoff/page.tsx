@@ -4,9 +4,8 @@ export default function DebtPayoffPage() {
   return (
     <div className="space-y-8">
       {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-extrabold text-carto-slate mb-2">Debt Payoff Calculator</h1>
-        <p className="text-carto-steel">Optimize your debt repayment strategy and see how relocating could help</p>
+      <div className="text-center">
+        <h1 className="text-3xl font-extrabold text-[#4A90D9]">Debt Payoff Calculator</h1>
       </div>
 
       {/* Summary Cards - Based on Figma Design */}

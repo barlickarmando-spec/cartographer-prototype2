@@ -4,9 +4,8 @@ export default function JobFinderPage() {
   return (
     <div className="space-y-8">
       {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-extrabold text-carto-slate mb-2">Job Finder</h1>
-        <p className="text-carto-steel">Find jobs in your target locations that match your career goals</p>
+      <div className="text-center">
+        <h1 className="text-3xl font-extrabold text-[#4A90D9]">Job Finder</h1>
       </div>
 
       {/* Search and Filters */}

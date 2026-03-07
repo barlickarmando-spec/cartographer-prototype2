@@ -44,13 +44,10 @@ export default function HomeAffordabilityPage() {
   if (error) {
     return (
       <div className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-extrabold text-carto-slate mb-2">
+        <div className="text-center">
+          <h1 className="text-3xl font-extrabold text-[#4A90D9]">
             Home Affordability
           </h1>
-          <p className="text-carto-steel">
-            Complete onboarding to see your affordability analysis.
-          </p>
         </div>
         <div className="bg-yellow-50 rounded-xl p-6 border border-yellow-200">
           <p className="text-yellow-800">
@@ -73,14 +70,10 @@ export default function HomeAffordabilityPage() {
   return (
     <div className="space-y-8">
       {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-extrabold text-carto-slate mb-2">
+      <div className="text-center">
+        <h1 className="text-3xl font-extrabold text-[#4A90D9]">
           Home Affordability
         </h1>
-        <p className="text-carto-steel">
-          Your complete affordability analysis — projected home value, timeline,
-          strategies, and where your money goes furthest
-        </p>
       </div>
 
       {/* Section 1: Your Affordability Profile */}

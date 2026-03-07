@@ -4,9 +4,8 @@ export default function RentVsBuyPage() {
   return (
     <div className="space-y-8">
       {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-extrabold text-carto-slate mb-2">Rent vs Buy Analysis</h1>
-        <p className="text-carto-steel">Compare renting vs buying in different locations to make the best decision</p>
+      <div className="text-center">
+        <h1 className="text-3xl font-extrabold text-[#4A90D9]">Rent vs Buy Analysis</h1>
       </div>
 
       {/* Comparison Cards */}

@@ -1342,9 +1342,8 @@ export default function MyLocationsPage() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-extrabold text-carto-slate mb-1">My Locations</h1>
-        <p className="text-carto-steel">Find the best cities for your career, lifestyle, and financial goals</p>
+      <div className="text-center">
+        <h1 className="text-3xl font-extrabold text-[#4A90D9]">My Locations</h1>
       </div>
 
       {/* Filter Bar + Search */}

@@ -427,9 +427,8 @@ export default function HomeSizeCalculatorPage() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-extrabold text-carto-slate mb-2">Home Size Calculator</h1>
-        <p className="text-carto-steel">Calculate how big of a house you can afford or how long it takes to reach your target</p>
+      <div className="text-center">
+        <h1 className="text-3xl font-extrabold text-[#4A90D9]">Home Size Calculator</h1>
       </div>
 
       {/* ===== SEARCH BAR SECTION ===== */}
