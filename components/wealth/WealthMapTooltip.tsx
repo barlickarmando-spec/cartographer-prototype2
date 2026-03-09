@@ -78,8 +78,8 @@ export default function WealthMapTooltip({ locationName, data, mode, rating, pos
               <span className="font-semibold text-white">+{Math.round(data.appreciationPctAt30)}%</span>
             </div>
             <div className="flex justify-between gap-8">
-              <span className="text-white/80">Effective Equity</span>
-              <span className="font-semibold text-white">{formatCurrency(data.effectiveWealth)}</span>
+              <span className="text-white/80">Total Effective Wealth</span>
+              <span className="font-semibold text-white">{formatCurrency(data.totalEffectiveWealth)}</span>
             </div>
           </div>
         ) : (

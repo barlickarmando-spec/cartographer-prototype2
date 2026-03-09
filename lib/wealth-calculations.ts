@@ -4,6 +4,7 @@
  */
 
 import { getTypicalHomeValue, getPricePerSqft } from './home-value-lookup';
+import { getLocationData } from './data-extraction';
 
 // Historical average US home appreciation rate (nominal, ~3.5-4% long-term)
 const DEFAULT_APPRECIATION_RATE = 0.038;
@@ -46,7 +47,12 @@ export interface LocationWealth {
   wealthAt50: number;
   appreciationAt30: number;
   appreciationPctAt30: number;
-  effectiveWealth: number; // equity + savings after 30 years
+  effectiveWealth: number; // equity after 30 years
+  totalWealth: number; // equity + savings at sell year
+  rppFactor: number; // regional price parity factor (1.0 = national avg)
+  totalEffectiveWealth: number; // totalWealth adjusted by RPP
+  wealthAtSell: number; // total wealth at the sell year
+  sellYear: number;
   isViable: boolean;
 }
 
@@ -176,6 +182,21 @@ export function analyzeSale(
   };
 }
 
+// National average COL for 1-person household (approximate baseline)
+const NATIONAL_AVG_COL_ONE_PERSON = 35_000;
+
+/**
+ * Compute Regional Price Parity factor for a location.
+ * RPP > 1 means more expensive than national average, < 1 means cheaper.
+ */
+export function getRppFactor(locationName: string): number {
+  const locData = getLocationData(locationName);
+  if (!locData) return 1.0;
+  const localCOL = locData.adjustedCOL.onePerson;
+  if (!localCOL || localCOL <= 0) return 1.0;
+  return localCOL / NATIONAL_AVG_COL_ONE_PERSON;
+}
+
 /**
  * Calculate wealth metrics for a specific location given a max affordable home price.
  */
@@ -185,8 +206,10 @@ export function calculateLocationWealth(
   yearsToOwn: number,
   isViable: boolean,
   annualSavings: number = 0,
+  sellYear: number = 30,
 ): LocationWealth {
   const currentHomeValue = getTypicalHomeValue(locationName);
+  const rpp = getRppFactor(locationName);
 
   if (!isViable || maxAffordablePrice <= 0) {
     return {
@@ -201,6 +224,11 @@ export function calculateLocationWealth(
       appreciationAt30: 0,
       appreciationPctAt30: 0,
       effectiveWealth: 0,
+      totalWealth: 0,
+      rppFactor: rpp,
+      totalEffectiveWealth: 0,
+      wealthAtSell: 0,
+      sellYear,
       isViable: false,
     };
   }
@@ -218,6 +246,10 @@ export function calculateLocationWealth(
   const at25 = timeline.find(t => t.year === 25);
   const at30 = timeline.find(t => t.year === 30);
   const at50 = timeline.find(t => t.year === 50);
+  const atSell = timeline.find(t => t.year === sellYear);
+
+  const totalWealthVal = atSell?.totalWealth ?? at30?.totalWealth ?? 0;
+  const effectiveWealthVal = at30?.equity ?? 0;
 
   return {
     name: locationName,
@@ -230,7 +262,12 @@ export function calculateLocationWealth(
     wealthAt50: at50?.totalWealth ?? 0,
     appreciationAt30: at30?.appreciationGain ?? 0,
     appreciationPctAt30: at30?.appreciationPct ?? 0,
-    effectiveWealth: at30?.equity ?? 0,
+    effectiveWealth: effectiveWealthVal,
+    totalWealth: totalWealthVal,
+    rppFactor: rpp,
+    totalEffectiveWealth: rpp > 0 ? totalWealthVal / rpp : totalWealthVal,
+    wealthAtSell: atSell?.totalWealth ?? 0,
+    sellYear,
     isViable,
   };
 }

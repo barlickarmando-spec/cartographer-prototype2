@@ -20,9 +20,10 @@ export interface WealthData {
   isLoading: boolean;
   progress: number;
   error: string | null;
+  recompute: (sellYear: number) => void;
 }
 
-export function useWealthCalculations(): WealthData {
+export function useWealthCalculations(initialSellYear: number = 30): WealthData {
   const [stateData, setStateData] = useState<Map<string, LocationWealth>>(new Map());
   const [cityData, setCityData] = useState<Map<string, LocationWealth>>(new Map());
   const [currentResult, setCurrentResult] = useState<CalculationResult | null>(null);
@@ -31,8 +32,14 @@ export function useWealthCalculations(): WealthData {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const cancelledRef = useRef(false);
+  const sellYearRef = useRef(initialSellYear);
 
-  const computeAll = useCallback(async () => {
+  const computeAll = useCallback(async (sellYear: number) => {
+    cancelledRef.current = false;
+    setIsLoading(true);
+    setProgress(0);
+    sellYearRef.current = sellYear;
+
     const answers = getOnboardingAnswers<OnboardingAnswers>();
     if (!answers) {
       setError('No onboarding data found');
@@ -77,6 +84,7 @@ export function useWealthCalculations(): WealthData {
               result.yearsToMortgage,
               result.isViable,
               annualSavings,
+              sellYear,
             );
             newStateData.set(stateName, wealth);
           }
@@ -111,6 +119,7 @@ export function useWealthCalculations(): WealthData {
               result.yearsToMortgage,
               result.isViable,
               annualSavings,
+              sellYear,
             );
             newCityData.set(cityName, wealth);
           }
@@ -126,11 +135,16 @@ export function useWealthCalculations(): WealthData {
     setProgress(100);
   }, []);
 
-  useEffect(() => {
-    cancelledRef.current = false;
-    computeAll();
-    return () => { cancelledRef.current = true; };
+  const recompute = useCallback((sellYear: number) => {
+    cancelledRef.current = true;
+    // Small delay to let previous computation cancel
+    setTimeout(() => computeAll(sellYear), 10);
   }, [computeAll]);
 
-  return { stateData, cityData, currentResult, profile, isLoading, progress, error };
+  useEffect(() => {
+    computeAll(initialSellYear);
+    return () => { cancelledRef.current = true; };
+  }, [computeAll, initialSellYear]);
+
+  return { stateData, cityData, currentResult, profile, isLoading, progress, error, recompute };
 }

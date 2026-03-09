@@ -39,11 +39,17 @@ interface TooltipState {
 
 export default function WealthGenerationPage() {
   const router = useRouter();
-  const { stateData, cityData, currentResult, profile, isLoading, progress, error } = useWealthCalculations();
 
   const [mapMode, setMapMode] = useState<MapMode>('wealth-gain');
   const [selectedLocation, setSelectedLocation] = useState('');
   const [sellYear, setSellYear] = useState(15);
+  const [pendingSellYear, setPendingSellYear] = useState(15);
+
+  // Calculator location override
+  const [calcLocation, setCalcLocation] = useState('');
+  const [pendingCalcLocation, setPendingCalcLocation] = useState('');
+
+  const { stateData, cityData, currentResult, profile, isLoading, progress, error, recompute } = useWealthCalculations(sellYear);
 
   // Tooltip state
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
@@ -58,10 +64,14 @@ export default function WealthGenerationPage() {
     setTooltip(null);
   }, []);
 
-  // Calculator location override
-  const [calcLocation, setCalcLocation] = useState('');
-
   const activeLocation = calcLocation || selectedLocation || currentResult?.location || '';
+
+  // Handle Calculate button press
+  const handleCalculate = useCallback(() => {
+    setCalcLocation(pendingCalcLocation);
+    setSellYear(pendingSellYear);
+    recompute(pendingSellYear);
+  }, [pendingCalcLocation, pendingSellYear, recompute]);
 
   // Compute wealth data for selected location
   const locationCalcResult = useMemo(() => {
@@ -99,9 +109,10 @@ export default function WealthGenerationPage() {
 
   const getHeatValue = useCallback((loc: LocationWealth): number => {
     switch (mapMode) {
-      case 'wealth-gain': return loc.wealthAt30;
+      case 'wealth-gain': return loc.wealthAtSell > 0 ? loc.wealthAtSell : loc.wealthAt30;
       case 'pct-increase': return loc.appreciationPctAt30;
-      case 'effective-wealth': return loc.effectiveWealth;
+      case 'total-wealth': return loc.totalWealth;
+      case 'total-effective-wealth': return loc.totalEffectiveWealth;
       default: return 0;
     }
   }, [mapMode]);
@@ -172,6 +183,9 @@ export default function WealthGenerationPage() {
   const chartH = 200;
   const chartPad = 40;
 
+  // Check if pending settings differ from applied
+  const hasPendingChanges = pendingSellYear !== sellYear || pendingCalcLocation !== calcLocation;
+
   if (error) {
     return (
       <div className="space-y-8">
@@ -201,10 +215,10 @@ export default function WealthGenerationPage() {
       {/* Calculator Controls */}
       <div className="bg-white rounded-2xl border border-carto-blue-pale/30 p-6">
         <h2 className="text-xl font-bold text-[#4A90D9] mb-4">Settings</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
           <LocationPicker
-            value={activeLocation}
-            onChange={setCalcLocation}
+            value={pendingCalcLocation || activeLocation}
+            onChange={setPendingCalcLocation}
             label="Location"
           />
           <div>
@@ -214,13 +228,13 @@ export default function WealthGenerationPage() {
               min={5}
               max={50}
               step={1}
-              value={sellYear}
-              onChange={(e) => setSellYear(Number(e.target.value))}
+              value={pendingSellYear}
+              onChange={(e) => setPendingSellYear(Number(e.target.value))}
               className="w-full accent-[#4A90D9]"
             />
             <div className="flex justify-between text-xs text-[#9CA3AF] mt-1">
               <span>5 yrs</span>
-              <span className="font-semibold text-[#2C3E50]">{sellYear} years</span>
+              <span className="font-semibold text-[#2C3E50]">{pendingSellYear} years</span>
               <span>50 yrs</span>
             </div>
           </div>
@@ -231,24 +245,38 @@ export default function WealthGenerationPage() {
             </p>
             <p className="text-xs text-[#9CA3AF] mt-1">Max affordable in {activeLocation || 'selected location'}</p>
           </div>
+          <div>
+            <button
+              onClick={handleCalculate}
+              disabled={isLoading}
+              className={`w-full px-6 py-3 rounded-xl font-semibold text-white transition-all ${
+                hasPendingChanges
+                  ? 'bg-[#4A90D9] hover:bg-[#3A7BC8] shadow-md'
+                  : 'bg-[#4A90D9]/60 hover:bg-[#4A90D9]/80'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              {isLoading ? 'Computing...' : 'Calculate'}
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Wealth Heat Map */}
       <div className="bg-white rounded-2xl border border-carto-blue-pale/30 overflow-hidden">
         <div className="p-6 pb-0">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <h2 className="text-xl font-bold text-[#4A90D9]">Wealth Generation Map</h2>
             <div className="flex bg-gray-100 rounded-full p-1">
               {([
                 { key: 'wealth-gain', label: 'Wealth Gain' },
                 { key: 'pct-increase', label: '% Increase' },
-                { key: 'effective-wealth', label: 'Effective Wealth' },
+                { key: 'total-wealth', label: 'Total Wealth' },
+                { key: 'total-effective-wealth', label: 'Total Effective Wealth' },
               ] as { key: MapMode; label: string }[]).map(({ key, label }) => (
                 <button
                   key={key}
                   onClick={() => setMapMode(key)}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                     mapMode === key
                       ? 'bg-white text-gray-900 shadow-sm'
                       : 'text-gray-500 hover:text-gray-700'
@@ -290,7 +318,7 @@ export default function WealthGenerationPage() {
                       strokeLinejoin="round"
                       strokeLinecap="round"
                       cursor="pointer"
-                      onClick={() => setCalcLocation(state.name)}
+                      onClick={() => { setPendingCalcLocation(state.name); setCalcLocation(state.name); }}
                       onMouseEnter={(e) => { if (loc) handleMouseEnter(state.name, loc, e); }}
                       onMouseMove={handleMouseMove}
                       onMouseLeave={handleMouseLeave}
@@ -312,7 +340,7 @@ export default function WealthGenerationPage() {
                         strokeLinejoin="round"
                         fillOpacity={0.92}
                         cursor="pointer"
-                        onClick={() => setCalcLocation(cityName)}
+                        onClick={() => { setPendingCalcLocation(cityName); setCalcLocation(cityName); }}
                         onMouseEnter={(e) => handleMouseEnter(cityName, loc, e)}
                         onMouseMove={handleMouseMove}
                         onMouseLeave={handleMouseLeave}
@@ -338,9 +366,10 @@ export default function WealthGenerationPage() {
             <div className="w-56 flex-shrink-0 pt-4 space-y-5">
               <div>
                 <p className="text-sm font-semibold text-[#2C3E50] mb-3">
-                  {mapMode === 'wealth-gain' ? 'Wealth at 30 Years' :
+                  {mapMode === 'wealth-gain' ? `Wealth Gain (${sellYear} yrs)` :
                    mapMode === 'pct-increase' ? '% Home Appreciation' :
-                   'Effective Equity'}
+                   mapMode === 'total-wealth' ? `Total Wealth (${sellYear} yrs)` :
+                   `Total Effective Wealth (RPP-adj)`}
                 </p>
                 <div className="space-y-2">
                   {[10, 7.5, 5, 2.5, 0].map((score, i) => (
@@ -362,7 +391,7 @@ export default function WealthGenerationPage() {
                       <div
                         key={loc.name}
                         className="flex items-center justify-between text-xs cursor-pointer hover:bg-[#F0F7FF] rounded px-1.5 py-1 -mx-1.5 transition-colors"
-                        onClick={() => setCalcLocation(loc.name)}
+                        onClick={() => { setPendingCalcLocation(loc.name); setCalcLocation(loc.name); }}
                       >
                         <span className="text-[#2C3E50] font-medium truncate flex-1 mr-2">{loc.name}</span>
                         <span className="font-semibold text-[11px] text-[#4A90D9]">
@@ -384,7 +413,7 @@ export default function WealthGenerationPage() {
                       <div
                         key={loc.name}
                         className="flex items-center justify-between text-xs cursor-pointer hover:bg-[#F0F7FF] rounded px-1.5 py-1 -mx-1.5 transition-colors"
-                        onClick={() => setCalcLocation(loc.name)}
+                        onClick={() => { setPendingCalcLocation(loc.name); setCalcLocation(loc.name); }}
                       >
                         <span className="text-[#2C3E50] font-medium truncate flex-1 mr-2">{loc.name}</span>
                         <span className="font-semibold text-[11px] text-[#4A90D9]">
@@ -457,10 +486,21 @@ export default function WealthGenerationPage() {
                   );
                 })}
 
+                {/* Sell year marker */}
+                {(() => {
+                  const x = chartPad + ((sellYear / 50) * (chartW - chartPad - 10));
+                  return (
+                    <>
+                      <line x1={x} y1={20} x2={x} y2={chartH} stroke="#E76F51" strokeWidth={1} strokeDasharray="4,3" />
+                      <text x={x} y={chartH + 28} textAnchor="middle" fontSize={8} fill="#E76F51">Sell ({sellYear}yr)</text>
+                    </>
+                  );
+                })()}
+
                 {/* Total Wealth line */}
                 {(() => {
                   const maxW = Math.max(...timeline.map(t => t.totalWealth), 1);
-                  const points = timeline.map((t, i) => {
+                  const points = timeline.map((t) => {
                     const x = chartPad + ((t.year / 50) * (chartW - chartPad - 10));
                     const y = chartH - ((t.totalWealth / maxW) * (chartH - 20));
                     return `${x},${y}`;
@@ -667,9 +707,10 @@ export default function WealthGenerationPage() {
         <h3 className="text-lg font-bold text-carto-slate mb-3">Understanding Wealth Generation</h3>
         <ul className="space-y-2">
           {[
-            { title: 'Wealth Gain', desc: 'Total wealth accumulated through home equity plus savings over 30 years of ownership.' },
+            { title: 'Wealth Gain', desc: 'Total wealth accumulated through home equity plus savings over the sell period.' },
             { title: '% Increase', desc: 'How much your home value grows from appreciation alone — higher in markets with strong demand.' },
-            { title: 'Effective Wealth', desc: 'Your net equity position after 30 years — home value minus any remaining mortgage.' },
+            { title: 'Total Wealth', desc: 'Your total wealth (equity + savings) at the sell year — the full picture of what you\'ve built.' },
+            { title: 'Total Effective Wealth', desc: 'Total wealth adjusted for Regional Price Parity — shows what your wealth is actually worth relative to local costs.' },
             { title: 'Upgrade Path', desc: 'When you sell, your equity becomes a down payment for a larger home — building generational wealth.' },
           ].map(tip => (
             <li key={tip.title} className="flex items-start gap-2 text-sm text-gray-700">
