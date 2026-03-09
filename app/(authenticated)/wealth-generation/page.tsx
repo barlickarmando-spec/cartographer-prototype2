@@ -30,6 +30,11 @@ const GRAY = '#E5E7EB';
 const WIDTH = 960;
 const HEIGHT = 600;
 
+const COMPARE_COLORS = [
+  '#4A90D9', '#E76F51', '#4DB6AC', '#7E57C2', '#F59E0B',
+  '#EC4899', '#10B981', '#6366F1', '#EF4444', '#14B8A6',
+];
+
 interface TooltipState {
   name: string;
   data: LocationWealth;
@@ -48,6 +53,10 @@ export default function WealthGenerationPage() {
   // Calculator location override
   const [calcLocation, setCalcLocation] = useState('');
   const [pendingCalcLocation, setPendingCalcLocation] = useState('');
+
+  // Compare locations for multi-line chart
+  const [compareLocations, setCompareLocations] = useState<string[]>([]);
+  const [compareSearch, setCompareSearch] = useState('');
 
   const { stateData, cityData, currentResult, profile, isLoading, progress, error, recompute } = useWealthCalculations(sellYear);
 
@@ -103,6 +112,55 @@ export default function WealthGenerationPage() {
   }, [maxPrice, sellYear]);
 
   const historicalTrend = useMemo(() => getHistoricalTrend(30), []);
+
+  // Compute timelines for all compare locations (including active)
+  const compareTimelines = useMemo(() => {
+    const allLocs = [activeLocation, ...compareLocations].filter(Boolean);
+    const unique = [...new Set(allLocs)];
+    const results: { name: string; timeline: WealthProjection[]; color: string }[] = [];
+
+    const answers = (() => {
+      try {
+        return getOnboardingAnswers<OnboardingAnswers>(
+          (d): d is OnboardingAnswers => d != null && typeof d === 'object'
+        );
+      } catch { return null; }
+    })();
+    if (!answers) return results;
+
+    const prof = normalizeOnboardingAnswers(answers);
+
+    unique.forEach((loc, i) => {
+      try {
+        const result = calculateAutoApproach(prof, loc, 30);
+        if (!result) return;
+        const mp = result.houseProjections.maxAffordable?.maxSustainableHousePrice ?? 0;
+        if (mp <= 0) return;
+        const savings = result.yearByYear?.[0]?.savingsContribution ?? 0;
+        const tl = generateWealthTimeline(mp, result.yearsToMortgage, 50, 0.038, savings);
+        results.push({ name: loc, timeline: tl, color: COMPARE_COLORS[i % COMPARE_COLORS.length] });
+      } catch { /* skip */ }
+    });
+
+    return results;
+  }, [activeLocation, compareLocations]);
+
+  // All locations list for search
+  const allLocationNames = useMemo(() => {
+    const names: string[] = [];
+    stateData.forEach((_, k) => names.push(k));
+    cityData.forEach((_, k) => names.push(k));
+    return names.sort();
+  }, [stateData, cityData]);
+
+  const filteredCompareOptions = useMemo(() => {
+    if (!compareSearch.trim()) return [];
+    const q = compareSearch.toLowerCase();
+    const existing = new Set([activeLocation, ...compareLocations].map(s => s.toLowerCase()));
+    return allLocationNames
+      .filter(n => n.toLowerCase().includes(q) && !existing.has(n.toLowerCase()))
+      .slice(0, 8);
+  }, [compareSearch, allLocationNames, activeLocation, compareLocations]);
 
   // Heat map color scale based on mode
   const ratingScale = useMemo(() => createRatingColorScale(), []);
@@ -454,8 +512,8 @@ export default function WealthGenerationPage() {
             ))}
           </div>
 
-          {/* Wealth Over Time Chart */}
-          {timeline.length > 0 && (
+          {/* Wealth Over Time Chart — Compare Locations */}
+          {compareTimelines.length > 0 && (
             <div>
               <h3 className="text-sm font-semibold text-[#4A90D9] mb-3">Wealth Growth Over Time</h3>
               <svg viewBox={`0 0 ${chartW} ${chartH + 40}`} className="w-full h-auto">
@@ -465,9 +523,9 @@ export default function WealthGenerationPage() {
 
                 {/* Y-axis labels */}
                 {(() => {
-                  const maxW = Math.max(...timeline.map(t => t.totalWealth), 1);
+                  const allMax = Math.max(...compareTimelines.flatMap(ct => ct.timeline.map(t => t.totalWealth)), 1);
                   return [0, 0.25, 0.5, 0.75, 1].map(pct => {
-                    const val = maxW * pct;
+                    const val = allMax * pct;
                     const y = chartH - (pct * (chartH - 20));
                     return (
                       <text key={pct} x={chartPad - 4} y={y + 3} textAnchor="end" fontSize={9} fill="#9CA3AF">
@@ -481,7 +539,7 @@ export default function WealthGenerationPage() {
                 {(() => {
                   const startAge = profile?.currentAge ?? 22;
                   return [10, 20, 30, 40, 50].map(y => {
-                    const x = chartPad + ((y / 50) * (chartW - chartPad - 10));
+                    const x = chartPad + ((y / 50) * (chartW - chartPad - chartRight));
                     return (
                       <text key={y} x={x} y={chartH + 15} textAnchor="middle" fontSize={9} fill="#9CA3AF">
                         Age {startAge + y}
@@ -493,56 +551,104 @@ export default function WealthGenerationPage() {
                 {/* Sell year marker */}
                 {(() => {
                   const startAge = profile?.currentAge ?? 22;
-                  const x = chartPad + ((sellYear / 50) * (chartW - chartPad - 10));
+                  const x = chartPad + ((sellYear / 50) * (chartW - chartPad - chartRight));
                   return (
                     <>
-                      <line x1={x} y1={20} x2={x} y2={chartH} stroke="#E76F51" strokeWidth={1} strokeDasharray="4,3" />
-                      <text x={x} y={chartH + 28} textAnchor="middle" fontSize={8} fill="#E76F51">Sell (Age {startAge + sellYear})</text>
+                      <line x1={x} y1={20} x2={x} y2={chartH} stroke="#888" strokeWidth={1} strokeDasharray="4,3" />
+                      <text x={x} y={chartH + 28} textAnchor="middle" fontSize={8} fill="#888">Sell (Age {startAge + sellYear})</text>
                     </>
                   );
                 })()}
 
-                {/* Total Wealth line */}
+                {/* Location lines */}
                 {(() => {
-                  const maxW = Math.max(...timeline.map(t => t.totalWealth), 1);
-                  const points = timeline.map((t) => {
-                    const x = chartPad + ((t.year / 50) * (chartW - chartPad - 10));
-                    const y = chartH - ((t.totalWealth / maxW) * (chartH - 20));
-                    return `${x},${y}`;
-                  }).join(' ');
-                  return <polyline points={points} fill="none" stroke="#4A90D9" strokeWidth={2} />;
-                })()}
-
-                {/* Home Value line */}
-                {(() => {
-                  const maxW = Math.max(...timeline.map(t => t.totalWealth), 1);
-                  const points = timeline.filter(t => t.homeValue > 0).map(t => {
-                    const x = chartPad + ((t.year / 50) * (chartW - chartPad - 10));
-                    const y = chartH - ((t.homeValue / maxW) * (chartH - 20));
-                    return `${x},${y}`;
-                  }).join(' ');
-                  return <polyline points={points} fill="none" stroke="#4DB6AC" strokeWidth={2} strokeDasharray="4,3" />;
-                })()}
-
-                {/* Equity line */}
-                {(() => {
-                  const maxW = Math.max(...timeline.map(t => t.totalWealth), 1);
-                  const points = timeline.filter(t => t.equity > 0).map(t => {
-                    const x = chartPad + ((t.year / 50) * (chartW - chartPad - 10));
-                    const y = chartH - ((t.equity / maxW) * (chartH - 20));
-                    return `${x},${y}`;
-                  }).join(' ');
-                  return <polyline points={points} fill="none" stroke="#7E57C2" strokeWidth={2} strokeDasharray="6,3" />;
+                  const allMax = Math.max(...compareTimelines.flatMap(ct => ct.timeline.map(t => t.totalWealth)), 1);
+                  return compareTimelines.map((ct) => {
+                    const points = ct.timeline.map((t) => {
+                      const x = chartPad + ((t.year / 50) * (chartW - chartPad - chartRight));
+                      const y = chartH - ((t.totalWealth / allMax) * (chartH - 20));
+                      return `${x},${y}`;
+                    }).join(' ');
+                    return (
+                      <polyline
+                        key={ct.name}
+                        points={points}
+                        fill="none"
+                        stroke={ct.color}
+                        strokeWidth={2}
+                      />
+                    );
+                  });
                 })()}
 
                 {/* Legend */}
-                <rect x={chartPad + 10} y={15} width={12} height={3} fill="#4A90D9" />
-                <text x={chartPad + 26} y={19} fontSize={9} fill="#2C3E50">Total Wealth</text>
-                <rect x={chartPad + 110} y={15} width={12} height={3} fill="#4DB6AC" />
-                <text x={chartPad + 126} y={19} fontSize={9} fill="#2C3E50">Home Value</text>
-                <rect x={chartPad + 200} y={15} width={12} height={3} fill="#7E57C2" />
-                <text x={chartPad + 216} y={19} fontSize={9} fill="#2C3E50">Equity</text>
+                {compareTimelines.map((ct, i) => {
+                  const xOff = chartPad + 10 + i * 120;
+                  return (
+                    <g key={ct.name}>
+                      <rect x={xOff} y={15} width={12} height={3} fill={ct.color} />
+                      <text x={xOff + 16} y={19} fontSize={8} fill="#2C3E50">
+                        {ct.name.length > 14 ? ct.name.slice(0, 13) + '...' : ct.name}
+                      </text>
+                    </g>
+                  );
+                })}
               </svg>
+
+              {/* Compare Locations picker */}
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <p className="text-xs font-semibold text-[#2C3E50] mb-2">Compare Locations</p>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {/* Active location tag */}
+                  {activeLocation && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium text-white" style={{ backgroundColor: COMPARE_COLORS[0] }}>
+                      {activeLocation}
+                      <span className="text-white/60 text-[10px] ml-1">primary</span>
+                    </span>
+                  )}
+                  {/* Compare location tags */}
+                  {compareLocations.map((loc, i) => (
+                    <span
+                      key={loc}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium text-white"
+                      style={{ backgroundColor: COMPARE_COLORS[(i + 1) % COMPARE_COLORS.length] }}
+                    >
+                      {loc}
+                      <button
+                        onClick={() => setCompareLocations(prev => prev.filter(l => l !== loc))}
+                        className="ml-1 hover:text-white/60 transition-colors"
+                      >
+                        x
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="relative max-w-sm">
+                  <input
+                    type="text"
+                    value={compareSearch}
+                    onChange={(e) => setCompareSearch(e.target.value)}
+                    placeholder="Add a location to compare..."
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/30 focus:border-[#4A90D9]"
+                  />
+                  {filteredCompareOptions.length > 0 && (
+                    <div className="absolute z-20 left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 max-h-48 overflow-y-auto">
+                      {filteredCompareOptions.map(loc => (
+                        <button
+                          key={loc}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-[#F0F7FF] transition-colors"
+                          onClick={() => {
+                            setCompareLocations(prev => [...prev, loc]);
+                            setCompareSearch('');
+                          }}
+                        >
+                          {loc}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>
