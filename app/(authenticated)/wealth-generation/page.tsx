@@ -476,23 +476,27 @@ export default function WealthGenerationPage() {
                   });
                 })()}
 
-                {/* X-axis labels */}
-                {[10, 20, 30, 40, 50].map(y => {
-                  const x = chartPad + ((y / 50) * (chartW - chartPad - 10));
-                  return (
-                    <text key={y} x={x} y={chartH + 15} textAnchor="middle" fontSize={9} fill="#9CA3AF">
-                      {y}yr
-                    </text>
-                  );
-                })}
+                {/* X-axis labels (age) */}
+                {(() => {
+                  const startAge = profile?.currentAge ?? 22;
+                  return [10, 20, 30, 40, 50].map(y => {
+                    const x = chartPad + ((y / 50) * (chartW - chartPad - 10));
+                    return (
+                      <text key={y} x={x} y={chartH + 15} textAnchor="middle" fontSize={9} fill="#9CA3AF">
+                        Age {startAge + y}
+                      </text>
+                    );
+                  });
+                })()}
 
                 {/* Sell year marker */}
                 {(() => {
+                  const startAge = profile?.currentAge ?? 22;
                   const x = chartPad + ((sellYear / 50) * (chartW - chartPad - 10));
                   return (
                     <>
                       <line x1={x} y1={20} x2={x} y2={chartH} stroke="#E76F51" strokeWidth={1} strokeDasharray="4,3" />
-                      <text x={x} y={chartH + 28} textAnchor="middle" fontSize={8} fill="#E76F51">Sell ({sellYear}yr)</text>
+                      <text x={x} y={chartH + 28} textAnchor="middle" fontSize={8} fill="#E76F51">Sell (Age {startAge + sellYear})</text>
                     </>
                   );
                 })()}
