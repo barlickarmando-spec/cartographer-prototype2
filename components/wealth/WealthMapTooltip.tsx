@@ -33,7 +33,7 @@ function StarRow({ rating }: { rating: number }) {
 export default function WealthMapTooltip({ locationName, data, mode, rating, position }: WealthMapTooltipProps) {
   const viabilityLabel = !data.isViable
     ? 'Not Viable'
-    : rating >= 4 ? 'Excellent' : rating >= 3 ? 'Good' : rating >= 2 ? 'Fair' : 'Low';
+    : rating >= 4 ? 'Excellent' : rating >= 3 ? 'Strong' : rating >= 2 ? 'Fair' : 'Low';
   const viabilityBg = !data.isViable
     ? 'bg-red-400/30'
     : rating >= 4 ? 'bg-green-400/30' : rating >= 3 ? 'bg-blue-400/30' : rating >= 2 ? 'bg-yellow-400/30' : 'bg-red-400/30';
