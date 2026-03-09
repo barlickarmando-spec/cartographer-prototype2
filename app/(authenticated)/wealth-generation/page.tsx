@@ -57,6 +57,11 @@ export default function WealthGenerationPage() {
   const [compareLocations, setCompareLocations] = useState<string[]>([]);
   const [compareSearch, setCompareSearch] = useState('');
 
+  // Chart line visibility toggles
+  const [showTotalWealth, setShowTotalWealth] = useState(true);
+  const [showHomeValue, setShowHomeValue] = useState(true);
+  const [showEquity, setShowEquity] = useState(true);
+
   const { stateData, cityData, currentResult, profile, isLoading, progress, error, recompute } = useWealthCalculations(sellYear);
 
   // Tooltip state
@@ -550,33 +555,64 @@ export default function WealthGenerationPage() {
           {/* Wealth Over Time Chart — Compare Locations */}
           {compareTimelines.length > 0 && (
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-[#4A90D9]">Wealth Growth Over Time</h3>
-                {/* Legend — positioned above chart */}
-                <div className="flex items-center gap-4 flex-wrap">
-                  {compareTimelines.map((ct) => (
-                    <div key={`legend-loc-${ct.name}`} className="flex items-center gap-1.5">
-                      <div className="w-3 h-[3px] rounded-full" style={{ backgroundColor: ct.color }} />
-                      <span className="text-[11px] text-[#2C3E50] font-medium">
-                        {ct.name.length > 16 ? ct.name.slice(0, 15) + '...' : ct.name}
-                      </span>
-                    </div>
-                  ))}
-                  {compareTimelines.length > 0 && (
-                    <>
-                      <div className="w-px h-3 bg-gray-200" />
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-3 h-[3px] rounded-full opacity-40" style={{ backgroundColor: compareTimelines[0].color }} />
-                        <span className="text-[11px] text-[#6B7280]">Home Value</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-3 h-[3px] rounded-full" style={{ backgroundColor: compareTimelines[0].color, opacity: 1 }}>
-                          <div className="w-full h-full" style={{ backgroundImage: `repeating-linear-gradient(90deg, ${compareTimelines[0].color} 0 3px, transparent 3px 6px)` }} />
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-[#4A90D9]">Wealth Growth Over Time</h3>
+                  {/* Location legend */}
+                  {compareTimelines.length > 1 && (
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {compareTimelines.map((ct) => (
+                        <div key={`legend-loc-${ct.name}`} className="flex items-center gap-1.5">
+                          <div className="w-3.5 h-1 rounded-full" style={{ backgroundColor: ct.color }} />
+                          <span className="text-xs text-[#2C3E50] font-medium">
+                            {ct.name.length > 18 ? ct.name.slice(0, 17) + '...' : ct.name}
+                          </span>
                         </div>
-                        <span className="text-[11px] text-[#6B7280]">Equity</span>
-                      </div>
-                    </>
+                      ))}
+                    </div>
                   )}
+                </div>
+                {/* Line type toggles */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowTotalWealth(v => !v)}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-lg border text-sm font-medium transition-all ${
+                      showTotalWealth
+                        ? 'bg-[#4A90D9]/10 border-[#4A90D9]/30 text-[#4A90D9]'
+                        : 'bg-white border-[#E5E7EB] text-[#9CA3AF] hover:border-[#D1D5DB]'
+                    }`}
+                  >
+                    <svg width="20" height="4" className="flex-shrink-0">
+                      <line x1="0" y1="2" x2="20" y2="2" stroke={showTotalWealth ? '#4A90D9' : '#D1D5DB'} strokeWidth="2.5" />
+                    </svg>
+                    Net Wealth
+                  </button>
+                  <button
+                    onClick={() => setShowHomeValue(v => !v)}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-lg border text-sm font-medium transition-all ${
+                      showHomeValue
+                        ? 'bg-[#4A90D9]/10 border-[#4A90D9]/30 text-[#4A90D9]'
+                        : 'bg-white border-[#E5E7EB] text-[#9CA3AF] hover:border-[#D1D5DB]'
+                    }`}
+                  >
+                    <svg width="20" height="4" className="flex-shrink-0">
+                      <line x1="0" y1="2" x2="20" y2="2" stroke={showHomeValue ? '#4A90D9' : '#D1D5DB'} strokeWidth="1.5" strokeOpacity={showHomeValue ? 0.4 : 1} />
+                    </svg>
+                    Home Value
+                  </button>
+                  <button
+                    onClick={() => setShowEquity(v => !v)}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-lg border text-sm font-medium transition-all ${
+                      showEquity
+                        ? 'bg-[#4A90D9]/10 border-[#4A90D9]/30 text-[#4A90D9]'
+                        : 'bg-white border-[#E5E7EB] text-[#9CA3AF] hover:border-[#D1D5DB]'
+                    }`}
+                  >
+                    <svg width="20" height="4" className="flex-shrink-0">
+                      <line x1="0" y1="2" x2="20" y2="2" stroke={showEquity ? '#4A90D9' : '#D1D5DB'} strokeWidth="1.5" strokeDasharray="4,2" />
+                    </svg>
+                    Equity
+                  </button>
                 </div>
               </div>
               <svg viewBox={`0 0 ${chartW} ${chartH + 40}`} className="w-full h-auto">
@@ -587,7 +623,13 @@ export default function WealthGenerationPage() {
                 {/* Y-axis labels */}
                 {(() => {
                   const allMax = Math.max(
-                    ...compareTimelines.flatMap(ct => ct.timeline.map(t => Math.max(t.totalWealth, t.homeValue))),
+                    ...compareTimelines.flatMap(ct => ct.timeline.map(t => {
+                      let max = 0;
+                      if (showTotalWealth) max = Math.max(max, t.totalWealth);
+                      if (showHomeValue) max = Math.max(max, t.homeValue);
+                      if (showEquity) max = Math.max(max, t.equity);
+                      return max;
+                    })),
                     1
                   );
                   return [0, 0.25, 0.5, 0.75, 1].map(pct => {
@@ -626,10 +668,16 @@ export default function WealthGenerationPage() {
                   );
                 })()}
 
-                {/* Location lines — Total Wealth (solid), Home Value (lighter), Equity (dashed) */}
+                {/* Location lines — filtered by toggle state */}
                 {(() => {
                   const allMax = Math.max(
-                    ...compareTimelines.flatMap(ct => ct.timeline.map(t => Math.max(t.totalWealth, t.homeValue))),
+                    ...compareTimelines.flatMap(ct => ct.timeline.map(t => {
+                      let max = 0;
+                      if (showTotalWealth) max = Math.max(max, t.totalWealth);
+                      if (showHomeValue) max = Math.max(max, t.homeValue);
+                      if (showEquity) max = Math.max(max, t.equity);
+                      return max;
+                    })),
                     1
                   );
                   return compareTimelines.flatMap((ct) => {
@@ -640,35 +688,46 @@ export default function WealthGenerationPage() {
                         return `${x},${y}`;
                       }).join(' ');
 
-                    return [
-                      // Home Value — lighter/thinner
-                      <polyline
-                        key={`${ct.name}-homeValue`}
-                        points={toPoints(t => t.homeValue)}
-                        fill="none"
-                        stroke={ct.color}
-                        strokeWidth={1.5}
-                        strokeOpacity={0.35}
-                      />,
-                      // Equity — dashed
-                      <polyline
-                        key={`${ct.name}-equity`}
-                        points={toPoints(t => t.equity)}
-                        fill="none"
-                        stroke={ct.color}
-                        strokeWidth={1.5}
-                        strokeDasharray="5,3"
-                        strokeOpacity={0.7}
-                      />,
-                      // Total Wealth — solid bold
-                      <polyline
-                        key={`${ct.name}-totalWealth`}
-                        points={toPoints(t => t.totalWealth)}
-                        fill="none"
-                        stroke={ct.color}
-                        strokeWidth={2.5}
-                      />,
-                    ];
+                    const lines: React.ReactElement[] = [];
+
+                    if (showHomeValue) {
+                      lines.push(
+                        <polyline
+                          key={`${ct.name}-homeValue`}
+                          points={toPoints(t => t.homeValue)}
+                          fill="none"
+                          stroke={ct.color}
+                          strokeWidth={1.5}
+                          strokeOpacity={0.35}
+                        />
+                      );
+                    }
+                    if (showEquity) {
+                      lines.push(
+                        <polyline
+                          key={`${ct.name}-equity`}
+                          points={toPoints(t => t.equity)}
+                          fill="none"
+                          stroke={ct.color}
+                          strokeWidth={1.5}
+                          strokeDasharray="5,3"
+                          strokeOpacity={0.7}
+                        />
+                      );
+                    }
+                    if (showTotalWealth) {
+                      lines.push(
+                        <polyline
+                          key={`${ct.name}-totalWealth`}
+                          points={toPoints(t => t.totalWealth)}
+                          fill="none"
+                          stroke={ct.color}
+                          strokeWidth={2.5}
+                        />
+                      );
+                    }
+
+                    return lines;
                   });
                 })()}
               </svg>
