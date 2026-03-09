@@ -179,9 +179,10 @@ export default function WealthGenerationPage() {
   }, [timeline]);
 
   // Chart dimensions
-  const chartW = 600;
+  const chartW = 640;
   const chartH = 200;
   const chartPad = 40;
+  const chartRight = 30;
 
   // Check if pending settings differ from applied
   const hasPendingChanges = pendingSellYear !== sellYear || pendingCalcLocation !== calcLocation;
@@ -459,7 +460,7 @@ export default function WealthGenerationPage() {
               <h3 className="text-sm font-semibold text-[#4A90D9] mb-3">Wealth Growth Over Time</h3>
               <svg viewBox={`0 0 ${chartW} ${chartH + 40}`} className="w-full h-auto">
                 {/* Axes */}
-                <line x1={chartPad} y1={chartH} x2={chartW - 10} y2={chartH} stroke="#E5E7EB" strokeWidth={1} />
+                <line x1={chartPad} y1={chartH} x2={chartW - chartRight} y2={chartH} stroke="#E5E7EB" strokeWidth={1} />
                 <line x1={chartPad} y1={10} x2={chartPad} y2={chartH} stroke="#E5E7EB" strokeWidth={1} />
 
                 {/* Y-axis labels */}
@@ -628,7 +629,7 @@ export default function WealthGenerationPage() {
         </p>
 
         <svg viewBox={`0 0 ${chartW} ${chartH + 40}`} className="w-full h-auto">
-          <line x1={chartPad} y1={chartH} x2={chartW - 10} y2={chartH} stroke="#E5E7EB" strokeWidth={1} />
+          <line x1={chartPad} y1={chartH} x2={chartW - chartRight} y2={chartH} stroke="#E5E7EB" strokeWidth={1} />
           <line x1={chartPad} y1={10} x2={chartPad} y2={chartH} stroke="#E5E7EB" strokeWidth={1} />
 
           {/* Y-axis */}
