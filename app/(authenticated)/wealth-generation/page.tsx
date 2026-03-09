@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, type MouseEvent as ReactMouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWealthCalculations } from '@/hooks/useWealthCalculations';
 import { calculateAutoApproach } from '@/lib/calculation-engine';
@@ -19,7 +19,8 @@ import { createRatingColorScale } from '@/lib/color-scale';
 import LocationPicker from '@/components/shared/LocationPicker';
 import statePathsData from '@/lib/us-state-paths.json';
 import cityAreasData from '@/lib/us-city-areas.json';
-import HeatMapTooltip from '@/components/affordability/HeatMapTooltip';
+import WealthMapTooltip from '@/components/wealth/WealthMapTooltip';
+import type { MapMode } from '@/components/wealth/types';
 import type { OnboardingAnswers } from '@/lib/onboarding/types';
 
 const statePaths = statePathsData as { name: string; d: string }[];
@@ -29,7 +30,11 @@ const GRAY = '#E5E7EB';
 const WIDTH = 960;
 const HEIGHT = 600;
 
-type MapMode = 'wealth-gain' | 'pct-increase' | 'effective-wealth';
+interface TooltipState {
+  name: string;
+  data: LocationWealth;
+  position: { x: number; y: number };
+}
 
 export default function WealthGenerationPage() {
   const router = useRouter();
@@ -38,6 +43,26 @@ export default function WealthGenerationPage() {
   const [mapMode, setMapMode] = useState<MapMode>('wealth-gain');
   const [selectedLocation, setSelectedLocation] = useState('');
   const [sellYear, setSellYear] = useState(15);
+
+  // Tooltip state
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+
+  const handleMouseEnter = useCallback(
+    (name: string, data: LocationWealth, e: ReactMouseEvent) => {
+      setTooltip({ name, data, position: { x: e.clientX, y: e.clientY } });
+    },
+    []
+  );
+
+  const handleMouseMove = useCallback((e: ReactMouseEvent) => {
+    setTooltip((prev) =>
+      prev ? { ...prev, position: { x: e.clientX, y: e.clientY } } : null
+    );
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setTooltip(null);
+  }, []);
 
   // Calculator location override
   const [calcLocation, setCalcLocation] = useState('');
@@ -256,6 +281,9 @@ export default function WealthGenerationPage() {
                       strokeLinecap="round"
                       cursor="pointer"
                       onClick={() => setCalcLocation(state.name)}
+                      onMouseEnter={(e) => { if (loc) handleMouseEnter(state.name, loc, e); }}
+                      onMouseMove={handleMouseMove}
+                      onMouseLeave={handleMouseLeave}
                       className="transition-opacity hover:opacity-80"
                     />
                   );
@@ -275,12 +303,24 @@ export default function WealthGenerationPage() {
                         fillOpacity={0.92}
                         cursor="pointer"
                         onClick={() => setCalcLocation(cityName)}
+                        onMouseEnter={(e) => handleMouseEnter(cityName, loc, e)}
+                        onMouseMove={handleMouseMove}
+                        onMouseLeave={handleMouseLeave}
                         className="transition-opacity hover:opacity-75"
                       />
                     );
                   })}
                 </g>
               </svg>
+
+              {tooltip && (
+                <WealthMapTooltip
+                  locationName={tooltip.name}
+                  data={tooltip.data}
+                  mode={mapMode}
+                  position={tooltip.position}
+                />
+              )}
             </div>
 
             {/* Legend + Top Locations */}
