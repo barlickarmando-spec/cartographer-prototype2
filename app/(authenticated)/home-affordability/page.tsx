@@ -3,13 +3,16 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAffordabilityCalculations } from '@/hooks/useAffordabilityCalculations';
+import { calculateAutoApproach, CalculationResult } from '@/lib/calculation-engine';
+import { normalizeOnboardingAnswers } from '@/lib/onboarding/normalize';
+import { getOnboardingAnswers, getSavedLocations, setSavedLocations } from '@/lib/storage';
 import AffordabilityProfile from '@/components/affordability/AffordabilityProfile';
 import USHeatMap from '@/components/affordability/USHeatMap';
 import StrategySimulator from '@/components/affordability/StrategySimulator';
 import SalaryGoalCalculator from '@/components/affordability/SalaryGoalCalculator';
 import PreferencesPoll from '@/components/affordability/PreferencesPoll';
-import { getSavedLocations, setSavedLocations } from '@/lib/storage';
 import { formatCurrency } from '@/lib/utils';
+import type { OnboardingAnswers } from '@/lib/onboarding/types';
 
 type MapMode = 'value' | 'sqft';
 
@@ -25,6 +28,8 @@ export default function HomeAffordabilityPage() {
     progress,
     error,
   } = useAffordabilityCalculations();
+
+  const [profileResult, setProfileResult] = useState<CalculationResult | null>(null);
 
   const handleLocationClick = useCallback(
     (locationName: string) => {
@@ -42,32 +47,50 @@ export default function HomeAffordabilityPage() {
     [router]
   );
 
+  const handleProfileLocationChange = useCallback(
+    (locationName: string) => {
+      try {
+        const answers = getOnboardingAnswers<OnboardingAnswers>(
+          (d): d is OnboardingAnswers => d != null && typeof d === 'object'
+        );
+        if (answers) {
+          const prof = normalizeOnboardingAnswers(answers);
+          const result = calculateAutoApproach(prof, locationName, 30);
+          if (result) setProfileResult(result);
+        }
+      } catch { /* ignore */ }
+    },
+    []
+  );
+
+  const activeResult = profileResult ?? currentResult;
+
   const timelineItems = useMemo(() => {
-    if (!currentResult) return [];
+    if (!activeResult) return [];
     const items: { label: string; value: string; sub?: string }[] = [];
-    if (currentResult.yearsToDebtFree > 0) {
-      items.push({ label: 'Debt Free', value: `${currentResult.yearsToDebtFree} yrs`, sub: `Age ${currentResult.ageDebtFree}` });
+    if (activeResult.yearsToDebtFree > 0) {
+      items.push({ label: 'Debt Free', value: `${activeResult.yearsToDebtFree} yrs`, sub: `Age ${activeResult.ageDebtFree}` });
     }
     items.push({
       label: 'Homeownership',
-      value: currentResult.yearsToMortgage > 0 ? `${currentResult.yearsToMortgage} yrs` : 'N/A',
-      sub: currentResult.yearsToMortgage > 0 ? `Age ${currentResult.ageMortgageAcquired}` : undefined,
+      value: activeResult.yearsToMortgage > 0 ? `${activeResult.yearsToMortgage} yrs` : 'N/A',
+      sub: activeResult.yearsToMortgage > 0 ? `Age ${activeResult.ageMortgageAcquired}` : undefined,
     });
     return items;
-  }, [currentResult]);
+  }, [activeResult]);
 
   const projections = useMemo(() => {
-    if (!currentResult) return [];
-    const p = currentResult.houseProjections;
+    if (!activeResult) return [];
+    const p = activeResult.houseProjections;
     return [
       { label: '3 yrs', value: p.threeYears?.maxSustainableHousePrice ?? null },
       { label: '5 yrs', value: p.fiveYears?.maxSustainableHousePrice ?? null },
       { label: '10 yrs', value: p.tenYears?.maxSustainableHousePrice ?? null },
       { label: '15 yrs', value: p.fifteenYears?.maxSustainableHousePrice ?? null },
     ].filter((i) => i.value !== null && i.value > 0);
-  }, [currentResult]);
+  }, [activeResult]);
 
-  const kidViability = currentResult?.kidViability;
+  const kidViability = activeResult?.kidViability;
 
   if (error) {
     return (
@@ -93,7 +116,7 @@ export default function HomeAffordabilityPage() {
     );
   }
 
-  const defaultLocation = currentResult?.location ?? 'Utah';
+  const defaultLocation = activeResult?.location ?? 'Utah';
 
   return (
     <div className="space-y-8">
@@ -106,10 +129,10 @@ export default function HomeAffordabilityPage() {
 
       {/* Section 1: Your Affordability Profile */}
       <AffordabilityProfile
-        result={currentResult}
+        result={profileResult ?? currentResult}
         profile={profile}
         isLoading={isLoading && progress < 10}
-        onLocationChange={handleLocationClick}
+        onLocationChange={handleProfileLocationChange}
       />
 
       {/* Section 2: National Heat Map */}
@@ -157,7 +180,7 @@ export default function HomeAffordabilityPage() {
       </div>
 
       {/* Timeline, Value Over Time, Kid Affordability */}
-      {currentResult && (
+      {activeResult && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Timeline */}
           <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
@@ -174,7 +197,7 @@ export default function HomeAffordabilityPage() {
               ))}
               <div className="flex justify-between items-baseline">
                 <span className="text-sm text-[#6B7280]">Min. Allocation</span>
-                <span className="text-sm font-semibold text-[#2C3E50]">{currentResult.minimumAllocationRequired}%</span>
+                <span className="text-sm font-semibold text-[#2C3E50]">{activeResult.minimumAllocationRequired}%</span>
               </div>
             </div>
           </div>

@@ -213,6 +213,13 @@ export default function USHeatMap({
             style={{ maxHeight: '85vh', transition: 'viewBox 0.5s' }}
           >
             <style>{`svg { transition: all 0.5s ease-in-out; }`}</style>
+            <defs>
+              <clipPath id="us-boundary-clip">
+                {statePaths.map((state, i) => (
+                  <path key={i} d={state.d} />
+                ))}
+              </clipPath>
+            </defs>
             {statePaths.map((state, i) => {
               const calc = stateData.get(state.name);
               const fill = getFillColor(calc);
@@ -238,27 +245,29 @@ export default function USHeatMap({
               );
             })}
 
-            {cityShapes.map(({ name, d, calc }) => {
-              const fill = getFillColor(calc);
-              return (
-                <path
-                  key={name}
-                  d={d}
-                  fill={fill}
-                  stroke="#444"
-                  strokeWidth={1}
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                  fillOpacity={0.92}
-                  cursor="pointer"
-                  onClick={() => onLocationClick(name)}
-                  onMouseEnter={(e) => handleMouseEnter(name, calc, e)}
-                  onMouseMove={handleMouseMove}
-                  onMouseLeave={handleMouseLeave}
-                  className="transition-opacity hover:opacity-75"
-                />
-              );
-            })}
+            <g clipPath="url(#us-boundary-clip)">
+              {cityShapes.map(({ name, d, calc }) => {
+                const fill = getFillColor(calc);
+                return (
+                  <path
+                    key={name}
+                    d={d}
+                    fill={fill}
+                    stroke="#666"
+                    strokeWidth={0.5}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    fillOpacity={0.92}
+                    cursor="pointer"
+                    onClick={() => onLocationClick(name)}
+                    onMouseEnter={(e) => handleMouseEnter(name, calc, e)}
+                    onMouseMove={handleMouseMove}
+                    onMouseLeave={handleMouseLeave}
+                    className="transition-opacity hover:opacity-75"
+                  />
+                );
+              })}
+            </g>
           </svg>
 
           {zoomedState && (

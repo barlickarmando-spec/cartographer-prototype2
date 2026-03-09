@@ -131,6 +131,12 @@ export interface YearSnapshot {
   // Annual expenses injected into COL
   annualExpensesTotal: number;
 
+  // Home Value Tracking (post-mortgage acquisition)
+  homeValue: number;           // Current home value with appreciation (0 if no mortgage)
+  mortgageBalance: number;     // Remaining mortgage principal (0 if no mortgage or paid off)
+  homeEquity: number;          // homeValue - mortgageBalance
+  netWealth: number;           // savingsEnd + homeEquity - loanDebtEnd
+
   // Debug info
   debugNotes: string[];
 }
@@ -261,7 +267,8 @@ export interface KidViabilityResult {
 function calculateAutoApproach(
   profile: UserProfile,
   locationName: string,
-  simulationYears: number = 30
+  simulationYears: number = 30,
+  disableEarlyExit: boolean = false
 ): CalculationResult | null {
   
   let locationData: LocationData | null = null;
@@ -351,7 +358,7 @@ function calculateAutoApproach(
 
     // Run year-by-year simulation
     console.log(`Starting simulation for ${locationName}, ${simulationYears} years`);
-    const simulation = runYearByYearSimulation(simProfile, locationData, simulationYears);
+    const simulation = runYearByYearSimulation(simProfile, locationData, simulationYears, disableEarlyExit);
     
     if (simulation.snapshots.length === 0) {
       return createErrorResult(locationName, locationData, 'Simulation produced no results');
@@ -539,7 +546,8 @@ interface SimulationResult {
 function runYearByYearSimulation(
   profile: UserProfile,
   locationData: LocationData,
-  years: number
+  years: number,
+  disableEarlyExit: boolean = false
 ): SimulationResult {
   const snapshots: YearSnapshot[] = [];
   
@@ -600,6 +608,11 @@ function runYearByYearSimulation(
   // housePriceChosen and its annual payment are set at acquisition time
   let chosenHousePrice = 0;
   let calculatedAnnualMortgagePayment = 0;
+
+  // Home value tracking for wealth projections
+  let currentHomeValue = 0;
+  let currentMortgageBalance = 0;
+  const appreciationRate = locationData.housing.appreciationRate || 0.038;
 
   // === YEAR 1 SAVINGS WATERFALL ===
   // Apply initial savings to debts in priority order: CC → loans → remainder stays as savings
@@ -965,9 +978,33 @@ function runYearByYearSimulation(
       }
     }
     
+    // === UPDATE HOME VALUE & MORTGAGE BALANCE ===
+    if (hasMortgage) {
+      if (mortgageAcquiredThisYear) {
+        // First year: set initial values
+        currentHomeValue = chosenHousePrice;
+        currentMortgageBalance = chosenHousePrice * (1 - downPaymentPct);
+      } else {
+        // Subsequent years: appreciate home, amortize mortgage
+        currentHomeValue *= (1 + appreciationRate);
+        // Amortize using P&I only (exclude property tax/insurance portion)
+        const piAnnualPayment = calculatedAnnualMortgagePayment - (chosenHousePrice * 0.015);
+        const monthlyRate = mortgageRateVal / 12;
+        const monthlyPI = piAnnualPayment / 12;
+        let bal = currentMortgageBalance;
+        for (let m = 0; m < 12; m++) {
+          const interest = bal * monthlyRate;
+          const principal = Math.min(monthlyPI - interest, bal);
+          bal = Math.max(0, bal - principal);
+        }
+        currentMortgageBalance = bal;
+      }
+    }
+
     // === RECORD SNAPSHOT ===
     const savingsGrowthThisYear = savingsStartYear * SAVINGS_GROWTH_RATE;
-    
+    const homeEquity = currentHomeValue - currentMortgageBalance;
+
     snapshots.push({
       year,
       age: ageThisYear,
@@ -997,6 +1034,10 @@ function runYearByYearSimulation(
       kidBornThisYear,
       relationshipStartedThisYear,
       annualExpensesTotal,
+      homeValue: currentHomeValue,
+      mortgageBalance: currentMortgageBalance,
+      homeEquity,
+      netWealth: savings + homeEquity - loanDebt,
       debugNotes,
     });
 
@@ -1009,9 +1050,9 @@ function runYearByYearSimulation(
     }
 
     // === EARLY EXIT CONDITIONS ===
-    
-    // Success condition: Main goals achieved
-    if (hasMortgage && loanDebt === 0 && year >= 15) {
+
+    // Success condition: Main goals achieved (skip when wealth projections need full timeline)
+    if (!disableEarlyExit && hasMortgage && loanDebt === 0 && year >= 15) {
       console.log(`Success! Mortgage acquired and debt-free by year ${year}`);
       return {
         snapshots,

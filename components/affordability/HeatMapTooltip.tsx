@@ -18,12 +18,11 @@ export default function HeatMapTooltip({ locationName, data, mode, position }: H
 
   return (
     <div
-      className="fixed z-50 pointer-events-none shadow-2xl min-w-[340px]"
+      className="fixed z-50 pointer-events-none shadow-2xl min-w-[340px] bg-[#4A90D9]"
       style={{
         left: position.x + 16,
         top: position.y - 12,
         transform: position.x > window.innerWidth - 380 ? 'translateX(-110%)' : undefined,
-        backgroundColor: ratingColor,
       }}
     >
       <div className="px-7 py-6">
