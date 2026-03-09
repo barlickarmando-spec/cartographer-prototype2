@@ -572,48 +572,6 @@ export default function WealthGenerationPage() {
                     </div>
                   )}
                 </div>
-                {/* Line type toggles */}
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowTotalWealth(v => !v)}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-lg border text-sm font-medium transition-all ${
-                      showTotalWealth
-                        ? 'bg-[#4A90D9]/10 border-[#4A90D9]/30 text-[#4A90D9]'
-                        : 'bg-white border-[#E5E7EB] text-[#9CA3AF] hover:border-[#D1D5DB]'
-                    }`}
-                  >
-                    <svg width="20" height="4" className="flex-shrink-0">
-                      <line x1="0" y1="2" x2="20" y2="2" stroke={showTotalWealth ? '#4A90D9' : '#D1D5DB'} strokeWidth="2.5" />
-                    </svg>
-                    Net Wealth
-                  </button>
-                  <button
-                    onClick={() => setShowHomeValue(v => !v)}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-lg border text-sm font-medium transition-all ${
-                      showHomeValue
-                        ? 'bg-[#4A90D9]/10 border-[#4A90D9]/30 text-[#4A90D9]'
-                        : 'bg-white border-[#E5E7EB] text-[#9CA3AF] hover:border-[#D1D5DB]'
-                    }`}
-                  >
-                    <svg width="20" height="4" className="flex-shrink-0">
-                      <line x1="0" y1="2" x2="20" y2="2" stroke={showHomeValue ? '#4A90D9' : '#D1D5DB'} strokeWidth="1.5" strokeOpacity={showHomeValue ? 0.4 : 1} />
-                    </svg>
-                    Home Value
-                  </button>
-                  <button
-                    onClick={() => setShowEquity(v => !v)}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-lg border text-sm font-medium transition-all ${
-                      showEquity
-                        ? 'bg-[#4A90D9]/10 border-[#4A90D9]/30 text-[#4A90D9]'
-                        : 'bg-white border-[#E5E7EB] text-[#9CA3AF] hover:border-[#D1D5DB]'
-                    }`}
-                  >
-                    <svg width="20" height="4" className="flex-shrink-0">
-                      <line x1="0" y1="2" x2="20" y2="2" stroke={showEquity ? '#4A90D9' : '#D1D5DB'} strokeWidth="1.5" strokeDasharray="4,2" />
-                    </svg>
-                    Equity
-                  </button>
-                </div>
               </div>
               <svg viewBox={`0 0 ${chartW} ${chartH + 40}`} className="w-full h-auto">
                 {/* Axes */}
@@ -732,58 +690,93 @@ export default function WealthGenerationPage() {
                 })()}
               </svg>
 
-              {/* Compare Locations picker */}
+              {/* Adjust Graph */}
               <div className="mt-4 pt-4 border-t border-gray-100">
-                <p className="text-xs font-semibold text-[#2C3E50] mb-2">Compare Locations</p>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {/* Active location tag */}
-                  {activeLocation && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium text-white" style={{ backgroundColor: COMPARE_COLORS[0] }}>
-                      {activeLocation}
-                      <span className="text-white/60 text-[10px] ml-1">primary</span>
-                    </span>
-                  )}
-                  {/* Compare location tags */}
-                  {compareLocations.map((loc, i) => (
-                    <span
-                      key={loc}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium text-white"
-                      style={{ backgroundColor: COMPARE_COLORS[(i + 1) % COMPARE_COLORS.length] }}
-                    >
-                      {loc}
-                      <button
-                        onClick={() => setCompareLocations(prev => prev.filter(l => l !== loc))}
-                        className="ml-1 hover:text-white/60 transition-colors"
-                      >
-                        x
-                      </button>
-                    </span>
-                  ))}
-                </div>
-                <div className="relative max-w-sm">
-                  <input
-                    type="text"
-                    value={compareSearch}
-                    onChange={(e) => setCompareSearch(e.target.value)}
-                    placeholder="Add a location to compare..."
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/30 focus:border-[#4A90D9]"
-                  />
-                  {filteredCompareOptions.length > 0 && (
-                    <div className="absolute z-20 left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 max-h-48 overflow-y-auto">
-                      {filteredCompareOptions.map(loc => (
-                        <button
-                          key={loc}
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-[#F0F7FF] transition-colors"
-                          onClick={() => {
-                            setCompareLocations(prev => [...prev, loc]);
-                            setCompareSearch('');
-                          }}
-                        >
-                          {loc}
-                        </button>
-                      ))}
+                <p className="text-xs font-semibold text-[#2C3E50] mb-3">Adjust Graph</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Graph Lines selector */}
+                  <div className="relative">
+                    <label className="block text-xs font-medium text-[#6B7280] mb-1.5">Graph Lines</label>
+                    <div className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] bg-white">
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { key: 'totalWealth' as const, label: 'Net Wealth', active: showTotalWealth, toggle: () => setShowTotalWealth(v => !v), strokeEl: <line x1="0" y1="2" x2="16" y2="2" stroke="currentColor" strokeWidth="2.5" /> },
+                          { key: 'homeValue' as const, label: 'Home Value', active: showHomeValue, toggle: () => setShowHomeValue(v => !v), strokeEl: <line x1="0" y1="2" x2="16" y2="2" stroke="currentColor" strokeWidth="1.5" strokeOpacity={0.4} /> },
+                          { key: 'equity' as const, label: 'Equity', active: showEquity, toggle: () => setShowEquity(v => !v), strokeEl: <line x1="0" y1="2" x2="16" y2="2" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4,2" /> },
+                        ].map(item => (
+                          <button
+                            key={item.key}
+                            onClick={item.toggle}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              item.active
+                                ? 'bg-[#4A90D9]/10 text-[#4A90D9] border border-[#4A90D9]/30'
+                                : 'bg-[#F3F4F6] text-[#9CA3AF] border border-transparent hover:border-[#D1D5DB]'
+                            }`}
+                          >
+                            <svg width="16" height="4" className="flex-shrink-0">
+                              {item.strokeEl}
+                            </svg>
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  )}
+                  </div>
+
+                  {/* Compare Locations selector */}
+                  <div className="relative">
+                    <label className="block text-xs font-medium text-[#6B7280] mb-1.5">Compare Locations</label>
+                    <div className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] bg-white">
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {activeLocation && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium text-white" style={{ backgroundColor: COMPARE_COLORS[0] }}>
+                            {activeLocation}
+                            <span className="text-white/60 text-[10px] ml-1">primary</span>
+                          </span>
+                        )}
+                        {compareLocations.map((loc, i) => (
+                          <span
+                            key={loc}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium text-white"
+                            style={{ backgroundColor: COMPARE_COLORS[(i + 1) % COMPARE_COLORS.length] }}
+                          >
+                            {loc}
+                            <button
+                              onClick={() => setCompareLocations(prev => prev.filter(l => l !== loc))}
+                              className="ml-1 hover:text-white/60 transition-colors"
+                            >
+                              x
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={compareSearch}
+                          onChange={(e) => setCompareSearch(e.target.value)}
+                          placeholder="Search locations to compare..."
+                          className="w-full px-3 py-2 text-sm border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 focus:border-[#4A90D9] transition-all"
+                        />
+                        {filteredCompareOptions.length > 0 && (
+                          <div className="absolute z-20 left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-[#E5E7EB] max-h-48 overflow-y-auto">
+                            {filteredCompareOptions.map(loc => (
+                              <button
+                                key={loc}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-[#F0F7FF] transition-colors"
+                                onClick={() => {
+                                  setCompareLocations(prev => [...prev, loc]);
+                                  setCompareSearch('');
+                                }}
+                              >
+                                {loc}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
