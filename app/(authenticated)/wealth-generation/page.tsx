@@ -273,50 +273,88 @@ export default function WealthGenerationPage() {
 
       {/* Calculator Controls */}
       <div className="bg-white rounded-2xl border border-carto-blue-pale/30 p-6">
-        <h2 className="text-xl font-bold text-[#4A90D9] mb-4">Settings</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
-          <LocationPicker
-            value={pendingCalcLocation || activeLocation}
-            onChange={setPendingCalcLocation}
-            label="Location"
-          />
-          <div>
-            <label className="block text-xs font-medium text-[#6B7280] mb-1.5">Sell After (Years)</label>
-            <input
-              type="range"
-              min={5}
-              max={50}
-              step={1}
-              value={pendingSellYear}
-              onChange={(e) => setPendingSellYear(Number(e.target.value))}
-              className="w-full accent-[#4A90D9]"
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-xl font-bold text-[#4A90D9]">Settings</h2>
+          {hasPendingChanges && (
+            <span className="text-xs text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full font-medium">Unsaved changes</span>
+          )}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+          {/* Location */}
+          <div className="bg-[#F8FAFB] rounded-xl p-4 border border-[#E5E7EB]">
+            <LocationPicker
+              value={pendingCalcLocation || activeLocation}
+              onChange={setPendingCalcLocation}
+              label="Location"
             />
-            <div className="flex justify-between text-xs text-[#9CA3AF] mt-1">
-              <span>5 yrs</span>
-              <span className="font-semibold text-[#2C3E50]">{pendingSellYear} years</span>
-              <span>50 yrs</span>
+          </div>
+
+          {/* Sell After */}
+          <div className="bg-[#F8FAFB] rounded-xl p-4 border border-[#E5E7EB]">
+            <label className="block text-xs font-medium text-[#6B7280] mb-2">Sell After</label>
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <input
+                  type="range"
+                  min={5}
+                  max={50}
+                  step={1}
+                  value={pendingSellYear}
+                  onChange={(e) => setPendingSellYear(Number(e.target.value))}
+                  className="w-full accent-[#4A90D9] h-1.5"
+                />
+                <div className="flex justify-between text-[10px] text-[#9CA3AF] mt-1">
+                  <span>5 yrs</span>
+                  <span>50 yrs</span>
+                </div>
+              </div>
+              <div className="w-16 text-center px-3 py-2 rounded-lg border border-[#E5E7EB] bg-white">
+                <span className="text-lg font-bold text-[#2C3E50]">{pendingSellYear}</span>
+                <span className="text-[10px] text-[#9CA3AF] block -mt-0.5">years</span>
+              </div>
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-[#6B7280] mb-1.5">Home Price</label>
-            <p className="text-2xl font-bold text-[#2C3E50]">
-              {maxPrice > 0 ? formatCurrency(maxPrice) : 'N/A'}
+        </div>
+
+        <div className="flex items-center gap-4">
+          {/* Home Price display */}
+          <div className="flex-1 flex items-center gap-3 bg-[#F0F7FF] rounded-xl px-4 py-3 border border-[#4A90D9]/15">
+            <div className="w-8 h-8 rounded-lg bg-[#4A90D9]/10 flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 text-[#4A90D9]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs text-[#6B7280]">Max Affordable Home</p>
+              <p className="text-lg font-bold text-[#2C3E50] leading-tight">
+                {maxPrice > 0 ? formatCurrency(maxPrice) : 'N/A'}
+              </p>
+            </div>
+            <p className="ml-auto text-xs text-[#9CA3AF] max-w-[120px] text-right leading-tight">
+              in {activeLocation || 'selected location'}
             </p>
-            <p className="text-xs text-[#9CA3AF] mt-1">Max affordable in {activeLocation || 'selected location'}</p>
           </div>
-          <div>
-            <button
-              onClick={handleCalculate}
-              disabled={isLoading}
-              className={`w-full px-6 py-3 rounded-xl font-semibold text-white transition-all ${
-                hasPendingChanges
-                  ? 'bg-[#4A90D9] hover:bg-[#3A7BC8] shadow-md'
-                  : 'bg-[#4A90D9]/60 hover:bg-[#4A90D9]/80'
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
-            >
-              {isLoading ? 'Computing...' : 'Calculate'}
-            </button>
-          </div>
+
+          {/* Calculate button */}
+          <button
+            onClick={handleCalculate}
+            disabled={isLoading}
+            className={`px-8 py-3.5 rounded-xl font-semibold text-white transition-all flex items-center gap-2 ${
+              hasPendingChanges
+                ? 'bg-[#4A90D9] hover:bg-[#3A7BC8] shadow-md hover:shadow-lg'
+                : 'bg-[#4A90D9]/60 hover:bg-[#4A90D9]/80'
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            {isLoading ? (
+              <>
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Computing...
+              </>
+            ) : 'Calculate'}
+          </button>
         </div>
       </div>
 
@@ -515,7 +553,35 @@ export default function WealthGenerationPage() {
           {/* Wealth Over Time Chart — Compare Locations */}
           {compareTimelines.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold text-[#4A90D9] mb-3">Wealth Growth Over Time</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-[#4A90D9]">Wealth Growth Over Time</h3>
+                {/* Legend — positioned above chart */}
+                <div className="flex items-center gap-4 flex-wrap">
+                  {compareTimelines.map((ct) => (
+                    <div key={`legend-loc-${ct.name}`} className="flex items-center gap-1.5">
+                      <div className="w-3 h-[3px] rounded-full" style={{ backgroundColor: ct.color }} />
+                      <span className="text-[11px] text-[#2C3E50] font-medium">
+                        {ct.name.length > 16 ? ct.name.slice(0, 15) + '...' : ct.name}
+                      </span>
+                    </div>
+                  ))}
+                  {compareTimelines.length > 0 && (
+                    <>
+                      <div className="w-px h-3 bg-gray-200" />
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-3 h-[3px] rounded-full opacity-40" style={{ backgroundColor: compareTimelines[0].color }} />
+                        <span className="text-[11px] text-[#6B7280]">Home Value</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-3 h-[3px] rounded-full" style={{ backgroundColor: compareTimelines[0].color, opacity: 1 }}>
+                          <div className="w-full h-full" style={{ backgroundImage: `repeating-linear-gradient(90deg, ${compareTimelines[0].color} 0 3px, transparent 3px 6px)` }} />
+                        </div>
+                        <span className="text-[11px] text-[#6B7280]">Equity</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
               <svg viewBox={`0 0 ${chartW} ${chartH + 40}`} className="w-full h-auto">
                 {/* Axes */}
                 <line x1={chartPad} y1={chartH} x2={chartW - chartRight} y2={chartH} stroke="#E5E7EB" strokeWidth={1} />
@@ -523,7 +589,10 @@ export default function WealthGenerationPage() {
 
                 {/* Y-axis labels */}
                 {(() => {
-                  const allMax = Math.max(...compareTimelines.flatMap(ct => ct.timeline.map(t => t.totalWealth)), 1);
+                  const allMax = Math.max(
+                    ...compareTimelines.flatMap(ct => ct.timeline.map(t => Math.max(t.totalWealth, t.homeValue))),
+                    1
+                  );
                   return [0, 0.25, 0.5, 0.75, 1].map(pct => {
                     const val = allMax * pct;
                     const y = chartH - (pct * (chartH - 20));
@@ -560,39 +629,51 @@ export default function WealthGenerationPage() {
                   );
                 })()}
 
-                {/* Location lines */}
+                {/* Location lines — Total Wealth (solid), Home Value (lighter), Equity (dashed) */}
                 {(() => {
-                  const allMax = Math.max(...compareTimelines.flatMap(ct => ct.timeline.map(t => t.totalWealth)), 1);
-                  return compareTimelines.map((ct) => {
-                    const points = ct.timeline.map((t) => {
-                      const x = chartPad + ((t.year / 50) * (chartW - chartPad - chartRight));
-                      const y = chartH - ((t.totalWealth / allMax) * (chartH - 20));
-                      return `${x},${y}`;
-                    }).join(' ');
-                    return (
+                  const allMax = Math.max(
+                    ...compareTimelines.flatMap(ct => ct.timeline.map(t => Math.max(t.totalWealth, t.homeValue))),
+                    1
+                  );
+                  return compareTimelines.flatMap((ct) => {
+                    const toPoints = (accessor: (t: WealthProjection) => number) =>
+                      ct.timeline.map((t) => {
+                        const x = chartPad + ((t.year / 50) * (chartW - chartPad - chartRight));
+                        const y = chartH - ((accessor(t) / allMax) * (chartH - 20));
+                        return `${x},${y}`;
+                      }).join(' ');
+
+                    return [
+                      // Home Value — lighter/thinner
                       <polyline
-                        key={ct.name}
-                        points={points}
+                        key={`${ct.name}-homeValue`}
+                        points={toPoints(t => t.homeValue)}
                         fill="none"
                         stroke={ct.color}
-                        strokeWidth={2}
-                      />
-                    );
+                        strokeWidth={1.5}
+                        strokeOpacity={0.35}
+                      />,
+                      // Equity — dashed
+                      <polyline
+                        key={`${ct.name}-equity`}
+                        points={toPoints(t => t.equity)}
+                        fill="none"
+                        stroke={ct.color}
+                        strokeWidth={1.5}
+                        strokeDasharray="5,3"
+                        strokeOpacity={0.7}
+                      />,
+                      // Total Wealth — solid bold
+                      <polyline
+                        key={`${ct.name}-totalWealth`}
+                        points={toPoints(t => t.totalWealth)}
+                        fill="none"
+                        stroke={ct.color}
+                        strokeWidth={2.5}
+                      />,
+                    ];
                   });
                 })()}
-
-                {/* Legend */}
-                {compareTimelines.map((ct, i) => {
-                  const xOff = chartPad + 10 + i * 120;
-                  return (
-                    <g key={ct.name}>
-                      <rect x={xOff} y={15} width={12} height={3} fill={ct.color} />
-                      <text x={xOff + 16} y={19} fontSize={8} fill="#2C3E50">
-                        {ct.name.length > 14 ? ct.name.slice(0, 13) + '...' : ct.name}
-                      </text>
-                    </g>
-                  );
-                })}
               </svg>
 
               {/* Compare Locations picker */}
