@@ -52,6 +52,7 @@ export interface LocationData {
     downPaymentPercent: number;
     downPaymentValue: number;
     annualMortgagePayment: number;
+    appreciationRate: number; // Annual home value appreciation rate (derived from 5-year % change)
   };
   
   // Cost of Living (Adjusted - non-housing)
@@ -242,8 +243,16 @@ function buildLocationData(
                           housingData['Median Mortgage Down Payment %'] || 0.1,
       downPaymentValue: affordabilityData['Median Mortgage Down Payment Total Value'] || 
                         housingData['Median Mortgage Down Payment Total Value'] || 0,
-      annualMortgagePayment: affordabilityData['Median Annual Overall Payment'] || 
+      annualMortgagePayment: affordabilityData['Median Annual Overall Payment'] ||
                              housingData['Median Annual Overall Payment'] || 0,
+      appreciationRate: (() => {
+        // Convert 5-year % change to annual rate: (1 + pct)^(1/5) - 1
+        const fiveYearPct = parseFloat(affordabilityData['% Change in Median Home Value by State (5 Years)']) || 0;
+        if (fiveYearPct > 0 && fiveYearPct < 5) {
+          return Math.pow(1 + fiveYearPct, 1 / 5) - 1;
+        }
+        return 0.038; // National average fallback
+      })(),
     },
     
     adjustedCOL: {

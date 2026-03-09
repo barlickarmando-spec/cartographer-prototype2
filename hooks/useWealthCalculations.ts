@@ -64,7 +64,7 @@ export function useWealthCalculations(initialSellYear: number = 30): WealthData 
     let completed = 0;
     const newStateData = new Map<string, LocationWealth>();
 
-    // Compute states
+    // Compute states — run simulation for 50 years with early exit disabled for wealth tracking
     for (let i = 0; i < ALL_STATES.length; i += BATCH_SIZE_STATES) {
       if (cancelledRef.current) return;
       const batch = ALL_STATES.slice(i, i + BATCH_SIZE_STATES);
@@ -72,20 +72,9 @@ export function useWealthCalculations(initialSellYear: number = 30): WealthData 
 
       for (const stateName of batch) {
         try {
-          const result = calculateAutoApproach(userProfile, stateName, 30);
+          const result = calculateAutoApproach(userProfile, stateName, 50, true);
           if (result) {
-            const maxPrice = result.houseProjections.maxAffordable?.maxSustainableHousePrice ?? 0;
-            const annualSavings = result.yearByYear.length > 0
-              ? result.yearByYear[0].savingsContribution
-              : 0;
-            const wealth = calculateLocationWealth(
-              stateName,
-              maxPrice,
-              result.yearsToMortgage,
-              result.isViable,
-              annualSavings,
-              sellYear,
-            );
+            const wealth = calculateLocationWealth(result, sellYear);
             newStateData.set(stateName, wealth);
           }
         } catch { /* skip */ }
@@ -107,20 +96,9 @@ export function useWealthCalculations(initialSellYear: number = 30): WealthData 
 
       for (const cityName of batch) {
         try {
-          const result = calculateAutoApproach(userProfile, cityName, 30);
+          const result = calculateAutoApproach(userProfile, cityName, 50, true);
           if (result) {
-            const maxPrice = result.houseProjections.maxAffordable?.maxSustainableHousePrice ?? 0;
-            const annualSavings = result.yearByYear.length > 0
-              ? result.yearByYear[0].savingsContribution
-              : 0;
-            const wealth = calculateLocationWealth(
-              cityName,
-              maxPrice,
-              result.yearsToMortgage,
-              result.isViable,
-              annualSavings,
-              sellYear,
-            );
+            const wealth = calculateLocationWealth(result, sellYear);
             newCityData.set(cityName, wealth);
           }
         } catch { /* skip */ }

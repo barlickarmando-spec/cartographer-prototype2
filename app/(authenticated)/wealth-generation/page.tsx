@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, type MouseEvent as ReactMouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWealthCalculations } from '@/hooks/useWealthCalculations';
-import { calculateAutoApproach } from '@/lib/calculation-engine';
+import { calculateAutoApproach, CalculationResult } from '@/lib/calculation-engine';
 import { normalizeOnboardingAnswers } from '@/lib/onboarding/normalize';
 import { getOnboardingAnswers } from '@/lib/storage';
 import {
@@ -12,7 +12,6 @@ import {
   getHistoricalTrend,
   LocationWealth,
   WealthProjection,
-  SellAnalysis,
 } from '@/lib/wealth-calculations';
 import { formatCurrency } from '@/lib/utils';
 import { createRatingColorScale } from '@/lib/color-scale';
@@ -91,7 +90,7 @@ export default function WealthGenerationPage() {
       );
       if (!answers) return null;
       const prof = normalizeOnboardingAnswers(answers);
-      return calculateAutoApproach(prof, activeLocation, 30);
+      return calculateAutoApproach(prof, activeLocation, 50, true);
     } catch {
       return null;
     }
@@ -101,15 +100,14 @@ export default function WealthGenerationPage() {
   const yearsToOwn = locationCalcResult?.yearsToMortgage ?? 0;
 
   const timeline = useMemo(() => {
-    if (maxPrice <= 0) return [];
-    const annualSavings = locationCalcResult?.yearByYear?.[0]?.savingsContribution ?? 0;
-    return generateWealthTimeline(maxPrice, yearsToOwn, 50, 0.038, annualSavings);
-  }, [maxPrice, yearsToOwn, locationCalcResult]);
+    if (!locationCalcResult || maxPrice <= 0) return [];
+    return generateWealthTimeline(locationCalcResult, 50);
+  }, [locationCalcResult, maxPrice]);
 
   const saleAnalysis = useMemo(() => {
-    if (maxPrice <= 0) return null;
-    return analyzeSale(maxPrice, sellYear);
-  }, [maxPrice, sellYear]);
+    if (!locationCalcResult || maxPrice <= 0) return null;
+    return analyzeSale(locationCalcResult, sellYear);
+  }, [locationCalcResult, maxPrice, sellYear]);
 
   const historicalTrend = useMemo(() => getHistoricalTrend(30), []);
 
@@ -132,12 +130,11 @@ export default function WealthGenerationPage() {
 
     unique.forEach((loc, i) => {
       try {
-        const result = calculateAutoApproach(prof, loc, 30);
+        const result = calculateAutoApproach(prof, loc, 50, true);
         if (!result) return;
         const mp = result.houseProjections.maxAffordable?.maxSustainableHousePrice ?? 0;
         if (mp <= 0) return;
-        const savings = result.yearByYear?.[0]?.savingsContribution ?? 0;
-        const tl = generateWealthTimeline(mp, result.yearsToMortgage, 50, 0.038, savings);
+        const tl = generateWealthTimeline(result, 50);
         results.push({ name: loc, timeline: tl, color: COMPARE_COLORS[i % COMPARE_COLORS.length] });
       } catch { /* skip */ }
     });
@@ -535,7 +532,7 @@ export default function WealthGenerationPage() {
             Projected Wealth — {activeLocation}
           </h2>
           <p className="text-sm text-[#6B7280] mb-6">
-            Based on {formatCurrency(maxPrice)} home with 3.8% annual appreciation
+            Based on {formatCurrency(maxPrice)} home with {((locationCalcResult?.locationData.housing.appreciationRate ?? 0.038) * 100).toFixed(1)}% annual appreciation
           </p>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
