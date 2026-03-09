@@ -33,6 +33,7 @@ const HEIGHT = 600;
 interface TooltipState {
   name: string;
   data: LocationWealth;
+  rating: number;
   position: { x: number; y: number };
 }
 
@@ -46,13 +47,6 @@ export default function WealthGenerationPage() {
 
   // Tooltip state
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
-
-  const handleMouseEnter = useCallback(
-    (name: string, data: LocationWealth, e: ReactMouseEvent) => {
-      setTooltip({ name, data, position: { x: e.clientX, y: e.clientY } });
-    },
-    []
-  );
 
   const handleMouseMove = useCallback((e: ReactMouseEvent) => {
     setTooltip((prev) =>
@@ -134,6 +128,22 @@ export default function WealthGenerationPage() {
     const t = range > 0 ? ((v - minVal) / range) * 10 : 5;
     return ratingScale(t);
   }, [getHeatValue, minVal, maxVal, ratingScale]);
+
+  // Compute star rating (0-5) from heat value position in range
+  const getStarRating = useCallback((loc: LocationWealth): number => {
+    if (!loc.isViable) return 0;
+    const v = getHeatValue(loc);
+    const range = maxVal - minVal;
+    const normalized = range > 0 ? (v - minVal) / range : 0.5;
+    return Math.round(normalized * 5 * 2) / 2; // half-star increments
+  }, [getHeatValue, minVal, maxVal]);
+
+  const handleMouseEnter = useCallback(
+    (name: string, data: LocationWealth, e: ReactMouseEvent) => {
+      setTooltip({ name, data, rating: getStarRating(data), position: { x: e.clientX, y: e.clientY } });
+    },
+    [getStarRating]
+  );
 
   // Top locations for sidebar
   const topStates = useMemo(() => {
@@ -318,6 +328,7 @@ export default function WealthGenerationPage() {
                   locationName={tooltip.name}
                   data={tooltip.data}
                   mode={mapMode}
+                  rating={tooltip.rating}
                   position={tooltip.position}
                 />
               )}

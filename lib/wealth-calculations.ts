@@ -40,6 +40,7 @@ export interface LocationWealth {
   currentHomeValue: number;
   maxAffordableValue: number;
   wealthAt15: number;
+  wealthAt20: number;
   wealthAt25: number;
   wealthAt30: number;
   wealthAt50: number;
@@ -193,6 +194,7 @@ export function calculateLocationWealth(
       currentHomeValue,
       maxAffordableValue: maxAffordablePrice,
       wealthAt15: 0,
+      wealthAt20: 0,
       wealthAt25: 0,
       wealthAt30: 0,
       wealthAt50: 0,
@@ -212,6 +214,7 @@ export function calculateLocationWealth(
   );
 
   const at15 = timeline.find(t => t.year === 15);
+  const at20 = timeline.find(t => t.year === 20);
   const at25 = timeline.find(t => t.year === 25);
   const at30 = timeline.find(t => t.year === 30);
   const at50 = timeline.find(t => t.year === 50);
@@ -221,6 +224,7 @@ export function calculateLocationWealth(
     currentHomeValue,
     maxAffordableValue: maxAffordablePrice,
     wealthAt15: at15?.totalWealth ?? 0,
+    wealthAt20: at20?.totalWealth ?? 0,
     wealthAt25: at25?.totalWealth ?? 0,
     wealthAt30: at30?.totalWealth ?? 0,
     wealthAt50: at50?.totalWealth ?? 0,
