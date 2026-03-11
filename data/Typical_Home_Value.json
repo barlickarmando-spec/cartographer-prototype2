@@ -119,5 +119,7 @@
   "Tucson": { "pricePerSqft": 228, "avgHomePrice": 501600 },
   "Tulsa": { "pricePerSqft": 163, "avgHomePrice": 358600 },
   "Virginia Beach": { "pricePerSqft": 218, "avgHomePrice": 479600 },
-  "Wichita": { "pricePerSqft": 144, "avgHomePrice": 316800 }
+  "Wichita": { "pricePerSqft": 144, "avgHomePrice": 316800 },
+  "Orange County": { "pricePerSqft": 655, "avgHomePrice": 1441000 },
+  "Broward/Palm Beach": { "pricePerSqft": 362, "avgHomePrice": 796400 }
 }

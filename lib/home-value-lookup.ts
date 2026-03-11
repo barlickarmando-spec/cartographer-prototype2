@@ -9,6 +9,16 @@ interface HomeValueEntry {
 
 const data = homeValueData as Record<string, HomeValueEntry>;
 
+// City name aliases for cross-sheet lookup (lowercase → lowercase)
+const HOME_VALUE_ALIASES: Record<string, string> = {
+  'orange county': 'anaheim',
+  'broward/palm beach': 'fort lauderdale',
+  'new york': 'new york city',
+  'anaheim': 'orange county',
+  'fort lauderdale': 'broward/palm beach',
+  'new york city': 'new york',
+};
+
 // Pre-build a lowercase lookup map for fast case-insensitive matching
 const lowerCaseMap = new Map<string, HomeValueEntry>();
 for (const [key, value] of Object.entries(data)) {
@@ -27,6 +37,7 @@ export function getPricePerSqft(locationName: string): number {
 
 /**
  * Look up the full entry for a location. Returns null if not found.
+ * Tries direct match, city-only (strip state suffix), and alias names.
  */
 function lookupEntry(locationName: string): HomeValueEntry | null {
   if (data[locationName]) return data[locationName];
@@ -37,7 +48,7 @@ function lookupEntry(locationName: string): HomeValueEntry | null {
     if (data[cityOnly]) return data[cityOnly];
   }
 
-  const lowerName = locationName.toLowerCase();
+  const lowerName = locationName.toLowerCase().trim();
   const match = lowerCaseMap.get(lowerName);
   if (match) return match;
 
@@ -45,6 +56,20 @@ function lookupEntry(locationName: string): HomeValueEntry | null {
     const lowerCity = locationName.substring(0, commaIdx).trim().toLowerCase();
     const cityMatch = lowerCaseMap.get(lowerCity);
     if (cityMatch) return cityMatch;
+
+    // Try alias for the city portion
+    const aliasCity = HOME_VALUE_ALIASES[lowerCity];
+    if (aliasCity) {
+      const aliasMatch = lowerCaseMap.get(aliasCity);
+      if (aliasMatch) return aliasMatch;
+    }
+  }
+
+  // Try alias for the full name
+  const aliasName = HOME_VALUE_ALIASES[lowerName];
+  if (aliasName) {
+    const aliasMatch = lowerCaseMap.get(aliasName);
+    if (aliasMatch) return aliasMatch;
   }
 
   return null;
