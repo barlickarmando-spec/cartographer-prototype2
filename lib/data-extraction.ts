@@ -8,6 +8,25 @@
 
 import stateData from '@/data/State_City_Data_Final.json';
 
+// ===== CITY NAME ALIAS MAP =====
+// Sheet B (salary) and Sheet C (housing) use different names for the same cities.
+// Maps Sheet B name (lowercase) → Sheet C canonical name (lowercase).
+const CITY_ALIASES: Record<string, string> = {
+  'orange county': 'anaheim',
+  'broward/palm beach': 'fort lauderdale',
+  'new york': 'new york city',
+};
+
+// Reverse: Sheet C name (lowercase) → Sheet B name (lowercase).
+const CITY_ALIASES_REVERSE: Record<string, string> = {
+  'anaheim': 'orange county',
+  'fort lauderdale': 'broward/palm beach',
+  'new york city': 'new york',
+};
+
+// Junk entries in Sheet B that should be excluded from all lookups
+const EXCLUDED_CITY_NAMES = new Set(['national average:', 'median:']);
+
 // Types for extracted data
 export interface LocationData {
   name: string; // "Utah" or "Austin"
@@ -113,66 +132,99 @@ export function getLocationData(locationName: string): LocationData | null {
  */
 function findStateData(stateName: string): LocationData | null {
   const data = stateData as any;
-  
+  const nameLower = stateName.toLowerCase().trim();
+
   // Tab A: State affordability/salary data
-  const affordabilityData = data.rough_affordability_model?.find((item: any) => 
-    item.State?.toLowerCase() === stateName.toLowerCase()
+  const affordabilityData = data.rough_affordability_model?.find((item: any) =>
+    item.State?.trim()?.toLowerCase() === nameLower
   );
-  
+
   // Tab C: State housing/COL data
   const housingData = data.rough_housing_model?.find((item: any) =>
     item.Classification === 'State' &&
-    (item['City/State']?.toLowerCase() === stateName.toLowerCase() ||
-     item.State?.toLowerCase() === stateName.toLowerCase())
+    (item['City/State']?.trim()?.toLowerCase() === nameLower ||
+     item.State?.trim()?.toLowerCase() === nameLower)
   );
-  
+
   if (!affordabilityData || !housingData) {
     return null;
   }
-  
+
   return buildLocationData(affordabilityData, housingData, 'state', stateName);
 }
 
 /**
- * Find city data from Tab B (city affordability) + Tab C (city housing)
+ * Find city data from Tab B (city affordability) + Tab C (city housing).
+ * Uses alias mapping to bridge naming differences between sheets and
+ * trims whitespace from raw data fields.
  */
 function findCityData(cityName: string): LocationData | null {
   const data = stateData as any;
-  
+
   // Handle "City, ST" format
   let searchCity = cityName;
   let parentState: string | undefined;
-  
+
   if (cityName.includes(',')) {
     const parts = cityName.split(',').map(p => p.trim());
     searchCity = parts[0];
     parentState = parts[1];
   }
-  
-  // Tab B: City affordability/salary data
-  const affordabilityData = data.rough_affordability_model_citie?.find((item: any) => {
-    const cityMatch = item['City/County']?.toLowerCase() === searchCity.toLowerCase();
-    if (!parentState) return cityMatch;
-    const stateMatch = item.State?.toLowerCase() === parentState.toLowerCase() ||
-                       item.State === parentState;
-    return cityMatch && stateMatch;
-  });
-  
-  // Tab C: City housing/COL data
-  const housingData = data.rough_housing_model?.find((item: any) => {
-    if (item.Classification !== 'City') return false;
-    const cityMatch = item['City/State']?.toLowerCase() === searchCity.toLowerCase();
-    if (!parentState) return cityMatch;
-    const stateMatch = item.State?.toLowerCase() === parentState.toLowerCase() ||
-                       item.State === parentState;
-    return cityMatch && stateMatch;
-  });
-  
+
+  const searchLower = searchCity.toLowerCase().trim();
+
+  // Skip junk entries
+  if (EXCLUDED_CITY_NAMES.has(searchLower)) return null;
+
+  // Determine alias names to also try
+  const aliasForSheetC = CITY_ALIASES[searchLower];       // If input is Sheet B name, get Sheet C name
+  const aliasForSheetB = CITY_ALIASES_REVERSE[searchLower]; // If input is Sheet C name, get Sheet B name
+
+  // Tab B: City affordability/salary data (trim whitespace on comparisons)
+  const findInSheetB = (name: string) => {
+    const nameLower = name.toLowerCase().trim();
+    return data.rough_affordability_model_citie?.find((item: any) => {
+      const itemCity = item['City/County']?.trim()?.toLowerCase();
+      if (EXCLUDED_CITY_NAMES.has(itemCity)) return false;
+      const cityMatch = itemCity === nameLower;
+      if (!parentState) return cityMatch;
+      const itemState = item.State?.trim()?.toLowerCase();
+      const stateMatch = itemState === parentState.toLowerCase().trim();
+      return cityMatch && stateMatch;
+    });
+  };
+
+  let affordabilityData = findInSheetB(searchCity);
+  if (!affordabilityData && aliasForSheetB) {
+    affordabilityData = findInSheetB(aliasForSheetB);
+  }
+
+  // Tab C: City housing/COL data (trim whitespace on comparisons)
+  const findInSheetC = (name: string) => {
+    const nameLower = name.toLowerCase().trim();
+    return data.rough_housing_model?.find((item: any) => {
+      if (item.Classification !== 'City') return false;
+      const itemCity = item['City/State']?.trim()?.toLowerCase();
+      const cityMatch = itemCity === nameLower;
+      if (!parentState) return cityMatch;
+      const itemState = item.State?.trim()?.toLowerCase();
+      const stateMatch = itemState === parentState.toLowerCase().trim();
+      return cityMatch && stateMatch;
+    });
+  };
+
+  let housingData = findInSheetC(searchCity);
+  if (!housingData && aliasForSheetC) {
+    housingData = findInSheetC(aliasForSheetC);
+  }
+
   if (!affordabilityData || !housingData) {
     return null;
   }
-  
-  return buildLocationData(affordabilityData, housingData, 'city', searchCity, housingData.State);
+
+  // Use the Sheet C canonical name for display
+  const canonicalName = housingData['City/State']?.trim() || searchCity;
+  return buildLocationData(affordabilityData, housingData, 'city', canonicalName, housingData.State?.trim());
 }
 
 /**
@@ -336,27 +388,26 @@ export function getSalary(locationName: string, occupation: string, manualOverri
 export function getAllLocations(): { name: string; displayName: string; type: 'state' | 'city' }[] {
   const data = stateData as any;
   const locations: { name: string; displayName: string; type: 'state' | 'city' }[] = [];
-  
+
   // Get all states from Tab C housing model
   const states = data.rough_housing_model
     ?.filter((item: any) => item.Classification === 'State')
-    .map((item: any) => ({
-      name: item['City/State'] || item.State,
-      displayName: item['City/State'] || item.State,
-      type: 'state' as const,
-    }))
-    .filter((item: any) => item.name) || [];
-  
+    .map((item: any) => {
+      const name = (item['City/State'] || item.State || '').trim();
+      return { name, displayName: name, type: 'state' as const };
+    })
+    .filter((item: any) => item.name && !EXCLUDED_CITY_NAMES.has(item.name.toLowerCase())) || [];
+
   // Get all cities from Tab C housing model
   const cities = data.rough_housing_model
     ?.filter((item: any) => item.Classification === 'City')
-    .map((item: any) => ({
-      name: item['City/State'],
-      displayName: `${item['City/State']}, ${item.State}`,
-      type: 'city' as const,
-    }))
-    .filter((item: any) => item.name) || [];
-  
+    .map((item: any) => {
+      const name = (item['City/State'] || '').trim();
+      const state = (item.State || '').trim();
+      return { name, displayName: `${name}, ${state}`, type: 'city' as const };
+    })
+    .filter((item: any) => item.name && !EXCLUDED_CITY_NAMES.has(item.name.toLowerCase())) || [];
+
   // Combine and sort
   locations.push(...states, ...cities);
   locations.sort((a, b) => {
@@ -366,7 +417,7 @@ export function getAllLocations(): { name: string; displayName: string; type: 's
     }
     return a.displayName.localeCompare(b.displayName);
   });
-  
+
   return locations;
 }
 
@@ -377,8 +428,8 @@ export function getAllStates(): string[] {
   const data = stateData as any;
   return data.rough_housing_model
     ?.filter((item: any) => item.Classification === 'State')
-    .map((item: any) => item['City/State'] || item.State)
-    .filter((name: string) => name && name.length > 0)
+    .map((item: any) => (item['City/State'] || item.State || '').trim())
+    .filter((name: string) => name && name.length > 0 && !EXCLUDED_CITY_NAMES.has(name.toLowerCase()))
     .sort() || [];
 }
 
@@ -389,12 +440,12 @@ export function getAllCities(): { name: string; displayName: string; state: stri
   const data = stateData as any;
   return data.rough_housing_model
     ?.filter((item: any) => item.Classification === 'City')
-    .map((item: any) => ({
-      name: item['City/State'],
-      displayName: `${item['City/State']}, ${item.State}`,
-      state: item.State,
-    }))
-    .filter((item: any) => item.name)
+    .map((item: any) => {
+      const name = (item['City/State'] || '').trim();
+      const state = (item.State || '').trim();
+      return { name, displayName: `${name}, ${state}`, state };
+    })
+    .filter((item: any) => item.name && !EXCLUDED_CITY_NAMES.has(item.name.toLowerCase()))
     .sort((a: any, b: any) => a.displayName.localeCompare(b.displayName)) || [];
 }
 

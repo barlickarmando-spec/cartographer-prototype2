@@ -57,10 +57,13 @@ function getString(row: Row, candidates: string[]): string {
 export function getAllLocationOptions(): LocationOption[] {
   const byIdLower = new Map<string, LocationOption>();
 
+  // Junk entries in the raw data that should be excluded
+  const EXCLUDED_NAMES = new Set(["national average:", "median:"]);
+
   const stateRows = getStatesRows();
   for (const row of stateRows) {
     const rawName = getString(row, STATE_NAME_KEYS);
-    if (!rawName) continue;
+    if (!rawName || EXCLUDED_NAMES.has(rawName.toLowerCase())) continue;
     const id = `state:${rawName}`;
     const idLower = id.toLowerCase();
     if (byIdLower.has(idLower)) continue;
@@ -75,7 +78,7 @@ export function getAllLocationOptions(): LocationOption[] {
   const cityRows = getCitiesRows();
   for (const row of cityRows) {
     const cityRaw = getString(row, CITY_NAME_KEYS);
-    if (!cityRaw) continue;
+    if (!cityRaw || EXCLUDED_NAMES.has(cityRaw.toLowerCase())) continue;
     const stateRaw = getString(row, CITY_STATE_KEYS);
     const label = stateRaw ? `${cityRaw}, ${stateRaw}` : cityRaw;
     const id = stateRaw ? `city:${cityRaw},${stateRaw}` : `city:${cityRaw}`;
