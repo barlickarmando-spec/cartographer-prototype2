@@ -16,7 +16,7 @@ import {
 import { formatCurrency } from '@/lib/utils';
 import { createRatingColorScale } from '@/lib/color-scale';
 import LocationPicker from '@/components/shared/LocationPicker';
-import statePathsData from '@/lib/us-state-paths.json';
+import statePathsData from '@/lib/us-atlas-state-paths.json';
 import countyPathsData from '@/lib/us-county-paths.json';
 import WealthMapTooltip from '@/components/wealth/WealthMapTooltip';
 import type { MapMode } from '@/components/wealth/types';
@@ -37,14 +37,8 @@ const STATE_NAME_TO_ABBREV: Record<string, string> = {
   'District of Columbia': 'DC',
 };
 
-const statePaths = statePathsData as { name: string; d: string }[];
-const countyPaths = countyPathsData as { fips: string; stateAbbrev: string; d: string; cityName?: string }[];
-
-// Reverse: abbreviation → full state name
-const ABBREV_TO_STATE_NAME: Record<string, string> = {};
-for (const [name, abbrev] of Object.entries(STATE_NAME_TO_ABBREV)) {
-  ABBREV_TO_STATE_NAME[abbrev] = name;
-}
+const statePaths = statePathsData as { fips: string; name: string; d: string }[];
+const countyPaths = countyPathsData as { fips: string; stateAbbrev: string; cityName: string; d: string }[];
 
 const GRAY = '#E5E7EB';
 const WIDTH = 960;
@@ -473,42 +467,59 @@ export default function WealthGenerationPage() {
                 </div>
               )}
               <svg viewBox={wealthViewBox} className="w-full h-auto transition-all duration-500 ease-in-out" style={{ maxHeight: '75vh' }}>
-                {countyPaths.map((county) => {
-                  const cityLoc = county.cityName ? cityData.get(county.cityName) : undefined;
-                  const stateName = ABBREV_TO_STATE_NAME[county.stateAbbrev];
-                  const stateLoc = stateName ? stateData.get(stateName) : undefined;
-                  const loc = cityLoc || stateLoc;
-                  const name = county.cityName || stateName || county.stateAbbrev;
+                {/* State fills as background */}
+                {statePaths.map((state, i) => {
+                  const loc = stateData.get(state.name);
                   return (
                     <path
-                      key={county.fips}
-                      d={county.d}
+                      key={`state-fill-${i}`}
+                      d={state.d}
                       fill={getColor(loc)}
-                      stroke="#000000"
-                      strokeWidth={0.15}
+                      stroke="#FFFFFF"
+                      strokeWidth={0.75}
                       strokeLinejoin="round"
                       cursor="pointer"
-                      onClick={() => { if (county.cityName) { setPendingCalcLocation(county.cityName); setCalcLocation(county.cityName); } }}
-                      onMouseEnter={(e) => { if (loc) handleMouseEnter(name, loc, e); }}
+                      onClick={(e) => handleWealthStateClick(state.name, e)}
+                      onMouseEnter={(e) => { if (loc) handleMouseEnter(state.name, loc, e); }}
                       onMouseMove={handleMouseMove}
                       onMouseLeave={handleMouseLeave}
                       className="transition-opacity hover:opacity-80"
                     />
                   );
                 })}
+                {/* City-county overlays with black borders */}
+                {countyPaths.map((county) => {
+                  const cityLoc = cityData.get(county.cityName);
+                  return (
+                    <path
+                      key={county.fips}
+                      d={county.d}
+                      fill={getColor(cityLoc)}
+                      stroke="#000000"
+                      strokeWidth={1}
+                      strokeLinejoin="round"
+                      cursor="pointer"
+                      onClick={() => { setPendingCalcLocation(county.cityName); setCalcLocation(county.cityName); }}
+                      onMouseEnter={(e) => { if (cityLoc) handleMouseEnter(county.cityName, cityLoc, e); }}
+                      onMouseMove={handleMouseMove}
+                      onMouseLeave={handleMouseLeave}
+                      className="transition-opacity hover:opacity-80"
+                    />
+                  );
+                })}
+                {/* State outlines for zoom click */}
                 {statePaths.map((state, i) => {
                   const isZoomed = wealthZoomedState === state.name;
                   return (
                     <path
-                      key={`state-${i}`}
+                      key={`state-outline-${i}`}
                       d={state.d}
                       fill="transparent"
-                      stroke={isZoomed ? '#4A90D9' : '#000000'}
-                      strokeWidth={isZoomed ? 2.5 : 1}
+                      stroke={isZoomed ? '#4A90D9' : 'transparent'}
+                      strokeWidth={isZoomed ? 2.5 : 0}
                       strokeLinejoin="round"
-                      strokeLinecap="round"
                       cursor="pointer"
-                      pointerEvents="visibleStroke"
+                      pointerEvents="all"
                       onClick={(e) => handleWealthStateClick(state.name, e)}
                     />
                   );

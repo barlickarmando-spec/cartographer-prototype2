@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { createRatingColorScale } from '@/lib/color-scale';
-import statePathsData from '@/lib/us-state-paths.json';
+import statePathsData from '@/lib/us-atlas-state-paths.json';
 import countyPathsData from '@/lib/us-county-paths.json';
 import HeatMapTooltip from './HeatMapTooltip';
 import type { LocationCalculation } from '@/hooks/useAffordabilityCalculations';
@@ -13,8 +13,8 @@ const WIDTH = 960;
 const HEIGHT = 600;
 const DEFAULT_VIEWBOX = `0 0 ${WIDTH} ${HEIGHT}`;
 
-const statePaths = statePathsData as { name: string; d: string }[];
-const countyPaths = countyPathsData as { fips: string; stateAbbrev: string; d: string; cityName?: string }[];
+const statePaths = statePathsData as { fips: string; name: string; d: string }[];
+const countyPaths = countyPathsData as { fips: string; stateAbbrev: string; cityName: string; d: string }[];
 
 const STATE_NAME_TO_ABBREV: Record<string, string> = {
   'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA',
@@ -30,11 +30,6 @@ const STATE_NAME_TO_ABBREV: Record<string, string> = {
   'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY',
   'District of Columbia': 'DC',
 };
-
-const ABBREV_TO_STATE_NAME: Record<string, string> = {};
-for (const [name, abbrev] of Object.entries(STATE_NAME_TO_ABBREV)) {
-  ABBREV_TO_STATE_NAME[abbrev] = name;
-}
 
 interface USHeatMapProps {
   stateData: Map<string, LocationCalculation>;
@@ -70,19 +65,6 @@ export default function USHeatMap({
       return ratingScale(calc.numericScore);
     },
     [ratingScale]
-  );
-
-  const getCountyInfo = useCallback(
-    (county: typeof countyPaths[0]): { fill: string; calc: LocationCalculation | undefined; name: string } => {
-      if (county.cityName) {
-        const cityCalc = cityData.get(county.cityName);
-        if (cityCalc) return { fill: getFillColor(cityCalc), calc: cityCalc, name: county.cityName };
-      }
-      const stateName = ABBREV_TO_STATE_NAME[county.stateAbbrev];
-      const stateCalc = stateName ? stateData.get(stateName) : undefined;
-      return { fill: getFillColor(stateCalc), calc: stateCalc, name: stateName || county.stateAbbrev };
-    },
-    [stateData, cityData, getFillColor]
   );
 
   const handleMouseEnter = useCallback(
@@ -179,10 +161,6 @@ export default function USHeatMap({
   const legendSteps = [10, 7.5, 5, 2.5, 0];
   const legendLabels = ['Excellent', 'Good', 'Fair', 'Poor', 'Not viable'];
 
-  // Parse viewBox to position the state label
-  const vbParts = viewBox.split(' ').map(Number);
-  const vbX = vbParts[0], vbY = vbParts[1], vbW = vbParts[2], vbH = vbParts[3];
-
   return (
     <div className="relative">
       {isLoading && (
@@ -225,21 +203,21 @@ export default function USHeatMap({
             className="w-full h-auto transition-all duration-500 ease-in-out"
             style={{ maxHeight: '85vh' }}
           >
-            {/* County fills */}
-            {countyPaths.map((county) => {
-              const { fill, calc, name } = getCountyInfo(county);
+            {/* State fills as background */}
+            {statePaths.map((state, i) => {
+              const calc = stateData.get(state.name);
               return (
                 <path
-                  key={county.fips}
-                  d={county.d}
-                  fill={fill}
-                  stroke="#000000"
-                  strokeWidth={0.15}
+                  key={`state-fill-${i}`}
+                  d={state.d}
+                  fill={getFillColor(calc)}
+                  stroke="#FFFFFF"
+                  strokeWidth={0.75}
                   strokeLinejoin="round"
                   cursor="pointer"
-                  onClick={() => onLocationClick(county.cityName || name)}
+                  onClick={(e) => handleStateClick(state.name, e)}
                   onMouseEnter={(e) => {
-                    if (calc) handleMouseEnter(county.cityName || name, calc, e);
+                    if (calc) handleMouseEnter(state.name, calc, e);
                   }}
                   onMouseMove={handleMouseMove}
                   onMouseLeave={handleMouseLeave}
@@ -248,38 +226,47 @@ export default function USHeatMap({
               );
             })}
 
-            {/* State outlines */}
-            {statePaths.map((state, i) => {
-              const isZoomed = zoomedState === state.name;
+            {/* City-county overlays with black borders */}
+            {countyPaths.map((county) => {
+              const cityCalc = cityData.get(county.cityName);
+              const fill = getFillColor(cityCalc);
               return (
                 <path
-                  key={`state-${i}`}
-                  d={state.d}
-                  fill="transparent"
-                  stroke={isZoomed ? '#4A90D9' : '#000000'}
-                  strokeWidth={isZoomed ? 2.5 : 1}
+                  key={county.fips}
+                  d={county.d}
+                  fill={fill}
+                  stroke="#000000"
+                  strokeWidth={1}
                   strokeLinejoin="round"
-                  strokeLinecap="round"
                   cursor="pointer"
-                  pointerEvents="visibleStroke"
-                  onClick={(e) => handleStateClick(state.name, e)}
+                  onClick={() => onLocationClick(county.cityName)}
+                  onMouseEnter={(e) => {
+                    if (cityCalc) handleMouseEnter(county.cityName, cityCalc, e);
+                  }}
+                  onMouseMove={handleMouseMove}
+                  onMouseLeave={handleMouseLeave}
+                  className="transition-opacity hover:opacity-80"
                 />
               );
             })}
 
-            {/* State name label inside SVG when zoomed */}
-            {zoomedState && (
-              <text
-                x={vbX + vbW * 0.01}
-                y={vbY + vbH * 0.06}
-                fontSize={vbW * 0.03}
-                fontWeight="bold"
-                fill="#2C3E50"
-                opacity={0.7}
-              >
-                {zoomedState}
-              </text>
-            )}
+            {/* State outlines on top for zoom click target */}
+            {statePaths.map((state, i) => {
+              const isZoomed = zoomedState === state.name;
+              return (
+                <path
+                  key={`state-outline-${i}`}
+                  d={state.d}
+                  fill="transparent"
+                  stroke={isZoomed ? '#4A90D9' : 'transparent'}
+                  strokeWidth={isZoomed ? 2.5 : 0}
+                  strokeLinejoin="round"
+                  cursor="pointer"
+                  pointerEvents="all"
+                  onClick={(e) => handleStateClick(state.name, e)}
+                />
+              );
+            })}
           </svg>
         </div>
 
