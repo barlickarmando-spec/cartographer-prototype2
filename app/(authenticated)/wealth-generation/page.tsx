@@ -17,7 +17,7 @@ import { formatCurrency } from '@/lib/utils';
 import { createRatingColorScale } from '@/lib/color-scale';
 import LocationPicker from '@/components/shared/LocationPicker';
 import statePathsData from '@/lib/us-state-paths.json';
-import cityAreasData from '@/lib/us-city-areas.json';
+import countyPathsData from '@/lib/us-county-paths.json';
 import WealthMapTooltip from '@/components/wealth/WealthMapTooltip';
 import { CITY_TO_STATE_ABBREV } from '@/lib/us-city-coordinates';
 import type { MapMode } from '@/components/wealth/types';
@@ -39,7 +39,13 @@ const STATE_NAME_TO_ABBREV: Record<string, string> = {
 };
 
 const statePaths = statePathsData as { name: string; d: string }[];
-const cityAreas = cityAreasData as unknown as Record<string, { center: [number, number]; d: string }>;
+const countyPaths = countyPathsData as { fips: string; stateAbbrev: string; d: string; cityName?: string }[];
+
+// Reverse: abbreviation → full state name
+const ABBREV_TO_STATE_NAME: Record<string, string> = {};
+for (const [name, abbrev] of Object.entries(STATE_NAME_TO_ABBREV)) {
+  ABBREV_TO_STATE_NAME[abbrev] = name;
+}
 
 const GRAY = '#E5E7EB';
 const WIDTH = 960;
@@ -477,55 +483,43 @@ export default function WealthGenerationPage() {
                 </div>
               )}
               <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-auto" style={{ maxHeight: '75vh' }}>
-                <defs>
-                  <clipPath id="us-wealth-clip">
-                    {statePaths.map((state, i) => <path key={i} d={state.d} />)}
-                  </clipPath>
-                </defs>
-                {statePaths.map((state, i) => {
-                  const loc = stateData.get(state.name);
+                {countyPaths.map((county) => {
+                  const cityLoc = county.cityName ? cityData.get(county.cityName) : undefined;
+                  const stateName = ABBREV_TO_STATE_NAME[county.stateAbbrev];
+                  const stateLoc = stateName ? stateData.get(stateName) : undefined;
+                  const loc = cityLoc || stateLoc;
+                  const name = county.cityName || stateName || county.stateAbbrev;
                   return (
                     <path
-                      key={i}
-                      d={state.d}
-                      data-state={state.name}
+                      key={county.fips}
+                      d={county.d}
                       fill={getColor(loc)}
-                      stroke="#FFFFFF"
-                      strokeWidth={0.75}
+                      stroke="#000000"
+                      strokeWidth={0.15}
                       strokeLinejoin="round"
-                      strokeLinecap="round"
                       cursor="pointer"
-                      onClick={(e) => handleWealthStateClick(state.name, e)}
-                      onMouseEnter={(e) => { if (loc) handleMouseEnter(state.name, loc, e); }}
+                      onClick={() => { if (county.cityName) { setPendingCalcLocation(county.cityName); setCalcLocation(county.cityName); } }}
+                      onMouseEnter={(e) => { if (loc) handleMouseEnter(name, loc, e); }}
                       onMouseMove={handleMouseMove}
                       onMouseLeave={handleMouseLeave}
                       className="transition-opacity hover:opacity-80"
                     />
                   );
                 })}
-                <g clipPath="url(#us-wealth-clip)">
-                  {Object.entries(cityAreas).map(([cityName, area]) => {
-                    const loc = cityData.get(cityName);
-                    if (!loc) return null;
-                    return (
-                      <path
-                        key={cityName}
-                        d={area.d}
-                        fill={getColor(loc)}
-                        stroke="#666"
-                        strokeWidth={0.5}
-                        strokeLinejoin="round"
-                        fillOpacity={0.92}
-                        cursor="pointer"
-                        onClick={() => { setPendingCalcLocation(cityName); setCalcLocation(cityName); }}
-                        onMouseEnter={(e) => handleMouseEnter(cityName, loc, e)}
-                        onMouseMove={handleMouseMove}
-                        onMouseLeave={handleMouseLeave}
-                        className="transition-opacity hover:opacity-75"
-                      />
-                    );
-                  })}
-                </g>
+                {statePaths.map((state, i) => (
+                  <path
+                    key={`state-${i}`}
+                    d={state.d}
+                    fill="transparent"
+                    stroke="#000000"
+                    strokeWidth={1}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    cursor="pointer"
+                    pointerEvents="visibleStroke"
+                    onClick={(e) => handleWealthStateClick(state.name, e)}
+                  />
+                ))}
               </svg>
 
               {tooltip && !wealthFullscreen && (
@@ -652,55 +646,43 @@ export default function WealthGenerationPage() {
               </div>
               <div className="flex-1 min-h-0">
                 <svg viewBox={wealthZoomedViewBox} className="w-full h-auto" style={{ maxHeight: '100%' }}>
-                  <defs>
-                    <clipPath id="us-wealth-clip-fs">
-                      {statePaths.map((state, i) => <path key={i} d={state.d} />)}
-                    </clipPath>
-                  </defs>
-                  {statePaths.map((state, i) => {
-                    const loc = stateData.get(state.name);
+                  {countyPaths.map((county) => {
+                    const cityLoc = county.cityName ? cityData.get(county.cityName) : undefined;
+                    const stateName = ABBREV_TO_STATE_NAME[county.stateAbbrev];
+                    const stateLoc = stateName ? stateData.get(stateName) : undefined;
+                    const loc = cityLoc || stateLoc;
+                    const name = county.cityName || stateName || county.stateAbbrev;
                     return (
                       <path
-                        key={i}
-                        d={state.d}
-                        data-state={state.name}
+                        key={county.fips}
+                        d={county.d}
                         fill={getColor(loc)}
-                        stroke={wealthZoomedState === state.name ? '#4A90D9' : '#FFFFFF'}
-                        strokeWidth={wealthZoomedState === state.name ? 2 : 0.75}
+                        stroke="#000000"
+                        strokeWidth={0.15}
                         strokeLinejoin="round"
-                        strokeLinecap="round"
                         cursor="pointer"
-                        onClick={(e) => handleWealthStateClick(state.name, e)}
-                        onMouseEnter={(e) => { if (loc) handleMouseEnter(state.name, loc, e); }}
+                        onClick={() => { if (county.cityName) { setPendingCalcLocation(county.cityName); setCalcLocation(county.cityName); handleCloseWealthFullscreen(); } }}
+                        onMouseEnter={(e) => { if (loc) handleMouseEnter(name, loc, e); }}
                         onMouseMove={handleMouseMove}
                         onMouseLeave={handleMouseLeave}
                         className="transition-opacity hover:opacity-80"
                       />
                     );
                   })}
-                  <g clipPath="url(#us-wealth-clip-fs)">
-                    {Object.entries(cityAreas).map(([cityName, area]) => {
-                      const loc = cityData.get(cityName);
-                      if (!loc) return null;
-                      return (
-                        <path
-                          key={cityName}
-                          d={area.d}
-                          fill={getColor(loc)}
-                          stroke="#666"
-                          strokeWidth={0.5}
-                          strokeLinejoin="round"
-                          fillOpacity={0.92}
-                          cursor="pointer"
-                          onClick={() => { setPendingCalcLocation(cityName); setCalcLocation(cityName); handleCloseWealthFullscreen(); }}
-                          onMouseEnter={(e) => handleMouseEnter(cityName, loc, e)}
-                          onMouseMove={handleMouseMove}
-                          onMouseLeave={handleMouseLeave}
-                          className="transition-opacity hover:opacity-75"
-                        />
-                      );
-                    })}
-                  </g>
+                  {statePaths.map((state, i) => (
+                    <path
+                      key={`state-${i}`}
+                      d={state.d}
+                      fill="transparent"
+                      stroke={wealthZoomedState === state.name ? '#4A90D9' : '#000000'}
+                      strokeWidth={wealthZoomedState === state.name ? 2.5 : 1}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      cursor="pointer"
+                      pointerEvents="visibleStroke"
+                      onClick={(e) => handleWealthStateClick(state.name, e)}
+                    />
+                  ))}
                 </svg>
               </div>
             </div>

@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { createRatingColorScale } from '@/lib/color-scale';
 import statePathsData from '@/lib/us-state-paths.json';
-import cityAreasData from '@/lib/us-city-areas.json';
+import countyPathsData from '@/lib/us-county-paths.json';
 import HeatMapTooltip from './HeatMapTooltip';
 import { CITY_TO_STATE_ABBREV } from '@/lib/us-city-coordinates';
 import type { LocationCalculation } from '@/hooks/useAffordabilityCalculations';
@@ -15,10 +15,7 @@ const HEIGHT = 600;
 const DEFAULT_VIEWBOX = `0 0 ${WIDTH} ${HEIGHT}`;
 
 const statePaths = statePathsData as { name: string; d: string }[];
-const cityAreas = cityAreasData as unknown as Record<
-  string,
-  { center: [number, number]; d: string }
->;
+const countyPaths = countyPathsData as { fips: string; stateAbbrev: string; d: string; cityName?: string }[];
 
 // State name to abbreviation for matching cities
 const STATE_NAME_TO_ABBREV: Record<string, string> = {
@@ -35,6 +32,12 @@ const STATE_NAME_TO_ABBREV: Record<string, string> = {
   'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY',
   'District of Columbia': 'DC',
 };
+
+// Reverse: abbreviation → full state name
+const ABBREV_TO_STATE_NAME: Record<string, string> = {};
+for (const [name, abbrev] of Object.entries(STATE_NAME_TO_ABBREV)) {
+  ABBREV_TO_STATE_NAME[abbrev] = name;
+}
 
 interface USHeatMapProps {
   stateData: Map<string, LocationCalculation>;
@@ -73,6 +76,20 @@ export default function USHeatMap({
     [ratingScale]
   );
 
+  // Get color and data for a county: use city data if available, otherwise state data
+  const getCountyInfo = useCallback(
+    (county: typeof countyPaths[0]): { fill: string; calc: LocationCalculation | undefined; name: string } => {
+      if (county.cityName) {
+        const cityCalc = cityData.get(county.cityName);
+        if (cityCalc) return { fill: getFillColor(cityCalc), calc: cityCalc, name: county.cityName };
+      }
+      const stateName = ABBREV_TO_STATE_NAME[county.stateAbbrev];
+      const stateCalc = stateName ? stateData.get(stateName) : undefined;
+      return { fill: getFillColor(stateCalc), calc: stateCalc, name: stateName || county.stateAbbrev };
+    },
+    [stateData, cityData, getFillColor]
+  );
+
   const handleMouseEnter = useCallback(
     (name: string, data: LocationCalculation, e: React.MouseEvent) => {
       setTooltip({ name, data, position: { x: e.clientX, y: e.clientY } });
@@ -94,11 +111,9 @@ export default function USHeatMap({
     (stateName: string, e: React.MouseEvent<SVGPathElement>) => {
       e.stopPropagation();
       if (isFullscreen && zoomedState === stateName) {
-        // Already zoomed into this state in fullscreen - clicking state again navigates
         onLocationClick(stateName);
         return;
       }
-      // Compute viewBox from the clicked path
       const pathEl = e.currentTarget;
       const bbox = pathEl.getBBox();
       const padding = 30;
@@ -138,28 +153,12 @@ export default function USHeatMap({
       if (e.key === 'Escape') handleCloseFullscreen();
     };
     document.addEventListener('keydown', handleKey);
-    // Prevent background scrolling
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', handleKey);
       document.body.style.overflow = '';
     };
   }, [isFullscreen, handleCloseFullscreen]);
-
-  const cityShapes = useMemo(() => {
-    const shapes: {
-      name: string;
-      d: string;
-      calc: LocationCalculation;
-    }[] = [];
-    cityData.forEach((calc, cityName) => {
-      const area = cityAreas[cityName];
-      if (area) {
-        shapes.push({ name: cityName, d: area.d, calc });
-      }
-    });
-    return shapes;
-  }, [cityData]);
 
   // Cities in the currently zoomed state
   const zoomedStateCities = useMemo(() => {
@@ -190,7 +189,6 @@ export default function USHeatMap({
 
     const viable = allLocations.filter((l) => l.isViable);
 
-    // Separate top states and top cities
     const stateNames = new Set<string>();
     stateData.forEach((_calc, name) => stateNames.add(name));
 
@@ -224,38 +222,28 @@ export default function USHeatMap({
   const legendSteps = [10, 7.5, 5, 2.5, 0];
   const legendLabels = ['Excellent', 'Good', 'Fair', 'Poor', 'Not viable'];
 
-  // Shared SVG map content renderer
-  const renderMapSvg = (vb: string, maxH: string, clipId: string) => (
+  // Shared SVG map content renderer with county-based fill
+  const renderMapSvg = (vb: string, maxH: string) => (
     <svg
       viewBox={vb}
       className="w-full h-auto"
       style={{ maxHeight: maxH }}
     >
-      <defs>
-        <clipPath id={clipId}>
-          {statePaths.map((state, i) => (
-            <path key={i} d={state.d} />
-          ))}
-        </clipPath>
-      </defs>
-      {statePaths.map((state, i) => {
-        const calc = stateData.get(state.name);
-        const fill = getFillColor(calc);
-        const isZoomed = zoomedState === state.name;
+      {/* County fills */}
+      {countyPaths.map((county) => {
+        const { fill, calc, name } = getCountyInfo(county);
         return (
           <path
-            key={i}
-            d={state.d}
-            data-state={state.name}
+            key={county.fips}
+            d={county.d}
             fill={fill}
-            stroke={isZoomed ? '#4A90D9' : '#FFFFFF'}
-            strokeWidth={isZoomed ? 2 : 0.75}
+            stroke="#000000"
+            strokeWidth={0.15}
             strokeLinejoin="round"
-            strokeLinecap="round"
             cursor="pointer"
-            onClick={(e) => handleStateClick(state.name, e)}
+            onClick={() => onLocationClick(county.cityName || name)}
             onMouseEnter={(e) => {
-              if (calc) handleMouseEnter(state.name, calc, e);
+              if (calc) handleMouseEnter(county.cityName || name, calc, e);
             }}
             onMouseMove={handleMouseMove}
             onMouseLeave={handleMouseLeave}
@@ -264,29 +252,24 @@ export default function USHeatMap({
         );
       })}
 
-      <g clipPath={`url(#${clipId})`}>
-        {cityShapes.map(({ name, d, calc }) => {
-          const fill = getFillColor(calc);
-          return (
-            <path
-              key={name}
-              d={d}
-              fill={fill}
-              stroke="#666"
-              strokeWidth={0.5}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              fillOpacity={0.92}
-              cursor="pointer"
-              onClick={() => onLocationClick(name)}
-              onMouseEnter={(e) => handleMouseEnter(name, calc, e)}
-              onMouseMove={handleMouseMove}
-              onMouseLeave={handleMouseLeave}
-              className="transition-opacity hover:opacity-75"
-            />
-          );
-        })}
-      </g>
+      {/* State outlines on top for click-to-zoom and visual separation */}
+      {statePaths.map((state, i) => {
+        const isZoomed = zoomedState === state.name;
+        return (
+          <path
+            key={`state-${i}`}
+            d={state.d}
+            fill="transparent"
+            stroke={isZoomed ? '#4A90D9' : '#000000'}
+            strokeWidth={isZoomed ? 2.5 : 1}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            cursor="pointer"
+            pointerEvents="visibleStroke"
+            onClick={(e) => handleStateClick(state.name, e)}
+          />
+        );
+      })}
     </svg>
   );
 
@@ -309,7 +292,7 @@ export default function USHeatMap({
       <div className="flex items-start gap-3">
         {/* Map */}
         <div className="flex-1 min-w-0 relative">
-          {renderMapSvg(DEFAULT_VIEWBOX, '85vh', 'us-boundary-clip')}
+          {renderMapSvg(DEFAULT_VIEWBOX, '85vh')}
         </div>
 
         {/* Legend + Insights */}
@@ -337,15 +320,8 @@ export default function USHeatMap({
             </div>
             <div className="mt-3 pt-2 border-t border-gray-100">
               <div className="flex items-center gap-2">
-                <svg width="16" height="16" viewBox="0 0 20 20">
-                  <path
-                    d="M10,2 Q15,3 17,10 Q15,17 10,18 Q5,17 3,10 Q5,3 10,2Z"
-                    fill="none"
-                    stroke="#444"
-                    strokeWidth="1.2"
-                  />
-                </svg>
-                <span className="text-sm text-[#6B7280]">Metro area</span>
+                <div className="w-4 h-4 rounded border-2 border-black bg-transparent" />
+                <span className="text-sm text-[#6B7280]">County borders</span>
               </div>
             </div>
           </div>
@@ -496,7 +472,7 @@ export default function USHeatMap({
                 )}
               </div>
               <div className="flex-1 min-h-0">
-                {renderMapSvg(zoomedViewBox, '100%', 'us-boundary-clip-fs')}
+                {renderMapSvg(zoomedViewBox, '100%')}
               </div>
             </div>
 
