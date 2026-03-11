@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { createRatingColorScale } from '@/lib/color-scale';
 import statePathsData from '@/lib/us-state-paths.json';
 import countyPathsData from '@/lib/us-county-paths.json';
 import HeatMapTooltip from './HeatMapTooltip';
-import { CITY_TO_STATE_ABBREV } from '@/lib/us-city-coordinates';
 import type { LocationCalculation } from '@/hooks/useAffordabilityCalculations';
 import { formatCurrency } from '@/lib/utils';
 
@@ -17,7 +16,6 @@ const DEFAULT_VIEWBOX = `0 0 ${WIDTH} ${HEIGHT}`;
 const statePaths = statePathsData as { name: string; d: string }[];
 const countyPaths = countyPathsData as { fips: string; stateAbbrev: string; d: string; cityName?: string }[];
 
-// State name to abbreviation for matching cities
 const STATE_NAME_TO_ABBREV: Record<string, string> = {
   'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA',
   'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE', 'Florida': 'FL', 'Georgia': 'GA',
@@ -33,7 +31,6 @@ const STATE_NAME_TO_ABBREV: Record<string, string> = {
   'District of Columbia': 'DC',
 };
 
-// Reverse: abbreviation → full state name
 const ABBREV_TO_STATE_NAME: Record<string, string> = {};
 for (const [name, abbrev] of Object.entries(STATE_NAME_TO_ABBREV)) {
   ABBREV_TO_STATE_NAME[abbrev] = name;
@@ -64,8 +61,7 @@ export default function USHeatMap({
 }: USHeatMapProps) {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [zoomedState, setZoomedState] = useState<string | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [zoomedViewBox, setZoomedViewBox] = useState(DEFAULT_VIEWBOX);
+  const [viewBox, setViewBox] = useState(DEFAULT_VIEWBOX);
   const ratingScale = useMemo(() => createRatingColorScale(), []);
 
   const getFillColor = useCallback(
@@ -76,7 +72,6 @@ export default function USHeatMap({
     [ratingScale]
   );
 
-  // Get color and data for a county: use city data if available, otherwise state data
   const getCountyInfo = useCallback(
     (county: typeof countyPaths[0]): { fill: string; calc: LocationCalculation | undefined; name: string } => {
       if (county.cityName) {
@@ -110,13 +105,14 @@ export default function USHeatMap({
   const handleStateClick = useCallback(
     (stateName: string, e: React.MouseEvent<SVGPathElement>) => {
       e.stopPropagation();
-      if (isFullscreen && zoomedState === stateName) {
+      if (zoomedState) {
+        // Already zoomed — clicking navigates to location
         onLocationClick(stateName);
         return;
       }
       const pathEl = e.currentTarget;
       const bbox = pathEl.getBBox();
-      const padding = 30;
+      const padding = 20;
       const x = bbox.x - padding;
       const y = bbox.y - padding;
       const w = bbox.width + padding * 2;
@@ -131,54 +127,18 @@ export default function USHeatMap({
         vw = vh * aspect;
         vx = x - (vw - w) / 2;
       }
-      setZoomedViewBox(`${vx} ${vy} ${vw} ${vh}`);
+      setViewBox(`${vx} ${vy} ${vw} ${vh}`);
       setZoomedState(stateName);
-      setIsFullscreen(true);
       setTooltip(null);
     },
-    [zoomedState, isFullscreen, onLocationClick]
+    [zoomedState, onLocationClick]
   );
 
-  const handleCloseFullscreen = useCallback(() => {
-    setIsFullscreen(false);
+  const handleZoomOut = useCallback(() => {
+    setViewBox(DEFAULT_VIEWBOX);
     setZoomedState(null);
-    setZoomedViewBox(DEFAULT_VIEWBOX);
     setTooltip(null);
   }, []);
-
-  // Escape key to close fullscreen
-  useEffect(() => {
-    if (!isFullscreen) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handleCloseFullscreen();
-    };
-    document.addEventListener('keydown', handleKey);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', handleKey);
-      document.body.style.overflow = '';
-    };
-  }, [isFullscreen, handleCloseFullscreen]);
-
-  // Cities in the currently zoomed state
-  const zoomedStateCities = useMemo(() => {
-    if (!zoomedState) return [];
-    const stateAbbrev = STATE_NAME_TO_ABBREV[zoomedState];
-    if (!stateAbbrev) return [];
-    const cities: { name: string; calc: LocationCalculation }[] = [];
-    cityData.forEach((calc, cityName) => {
-      if (CITY_TO_STATE_ABBREV[cityName] === stateAbbrev) {
-        cities.push({ name: cityName, calc });
-      }
-    });
-    return cities.sort((a, b) => b.calc.numericScore - a.calc.numericScore);
-  }, [zoomedState, cityData]);
-
-  // State-level calc for zoomed state
-  const zoomedStateCalc = useMemo(() => {
-    if (!zoomedState) return null;
-    return stateData.get(zoomedState) ?? null;
-  }, [zoomedState, stateData]);
 
   const insights = useMemo(() => {
     const allLocations: LocationCalculation[] = [];
@@ -197,7 +157,6 @@ export default function USHeatMap({
     const bestStates = [...viableStates].sort((a, b) => b.numericScore - a.numericScore).slice(0, 3);
     const bestCities = [...viableCities].sort((a, b) => b.numericScore - a.numericScore).slice(0, 3);
 
-    const unviableCount = allLocations.filter((l) => !l.isViable).length;
     const avgScore =
       viable.length > 0
         ? viable.reduce((s, l) => s + l.numericScore, 0) / viable.length
@@ -210,7 +169,6 @@ export default function USHeatMap({
     return {
       bestStates,
       bestCities,
-      unviableCount,
       totalLocations: allLocations.length,
       viableCount: viable.length,
       avgScore,
@@ -218,60 +176,12 @@ export default function USHeatMap({
     };
   }, [stateData, cityData]);
 
-  // Build 5 legend swatches
   const legendSteps = [10, 7.5, 5, 2.5, 0];
   const legendLabels = ['Excellent', 'Good', 'Fair', 'Poor', 'Not viable'];
 
-  // Shared SVG map content renderer with county-based fill
-  const renderMapSvg = (vb: string, maxH: string) => (
-    <svg
-      viewBox={vb}
-      className="w-full h-auto"
-      style={{ maxHeight: maxH }}
-    >
-      {/* County fills */}
-      {countyPaths.map((county) => {
-        const { fill, calc, name } = getCountyInfo(county);
-        return (
-          <path
-            key={county.fips}
-            d={county.d}
-            fill={fill}
-            stroke="#000000"
-            strokeWidth={0.15}
-            strokeLinejoin="round"
-            cursor="pointer"
-            onClick={() => onLocationClick(county.cityName || name)}
-            onMouseEnter={(e) => {
-              if (calc) handleMouseEnter(county.cityName || name, calc, e);
-            }}
-            onMouseMove={handleMouseMove}
-            onMouseLeave={handleMouseLeave}
-            className="transition-opacity hover:opacity-80"
-          />
-        );
-      })}
-
-      {/* State outlines on top for click-to-zoom and visual separation */}
-      {statePaths.map((state, i) => {
-        const isZoomed = zoomedState === state.name;
-        return (
-          <path
-            key={`state-${i}`}
-            d={state.d}
-            fill="transparent"
-            stroke={isZoomed ? '#4A90D9' : '#000000'}
-            strokeWidth={isZoomed ? 2.5 : 1}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            cursor="pointer"
-            pointerEvents="visibleStroke"
-            onClick={(e) => handleStateClick(state.name, e)}
-          />
-        );
-      })}
-    </svg>
-  );
+  // Parse viewBox to position the state label
+  const vbParts = viewBox.split(' ').map(Number);
+  const vbX = vbParts[0], vbY = vbParts[1], vbW = vbParts[2], vbH = vbParts[3];
 
   return (
     <div className="relative">
@@ -292,12 +202,89 @@ export default function USHeatMap({
       <div className="flex items-start gap-3">
         {/* Map */}
         <div className="flex-1 min-w-0 relative">
-          {renderMapSvg(DEFAULT_VIEWBOX, '85vh')}
+          {/* Back button overlay when zoomed */}
+          {zoomedState && (
+            <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
+              <button
+                onClick={handleZoomOut}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white/95 border border-gray-200 rounded-lg shadow-sm hover:bg-gray-50 transition-colors text-sm font-medium text-[#4A90D9]"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Back
+              </button>
+              <span className="px-3 py-1.5 bg-white/95 border border-gray-200 rounded-lg shadow-sm text-sm font-bold text-[#2C3E50]">
+                {zoomedState}
+              </span>
+            </div>
+          )}
+
+          <svg
+            viewBox={viewBox}
+            className="w-full h-auto transition-all duration-500 ease-in-out"
+            style={{ maxHeight: '85vh' }}
+          >
+            {/* County fills */}
+            {countyPaths.map((county) => {
+              const { fill, calc, name } = getCountyInfo(county);
+              return (
+                <path
+                  key={county.fips}
+                  d={county.d}
+                  fill={fill}
+                  stroke="#000000"
+                  strokeWidth={0.15}
+                  strokeLinejoin="round"
+                  cursor="pointer"
+                  onClick={() => onLocationClick(county.cityName || name)}
+                  onMouseEnter={(e) => {
+                    if (calc) handleMouseEnter(county.cityName || name, calc, e);
+                  }}
+                  onMouseMove={handleMouseMove}
+                  onMouseLeave={handleMouseLeave}
+                  className="transition-opacity hover:opacity-80"
+                />
+              );
+            })}
+
+            {/* State outlines */}
+            {statePaths.map((state, i) => {
+              const isZoomed = zoomedState === state.name;
+              return (
+                <path
+                  key={`state-${i}`}
+                  d={state.d}
+                  fill="transparent"
+                  stroke={isZoomed ? '#4A90D9' : '#000000'}
+                  strokeWidth={isZoomed ? 2.5 : 1}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  cursor="pointer"
+                  pointerEvents="visibleStroke"
+                  onClick={(e) => handleStateClick(state.name, e)}
+                />
+              );
+            })}
+
+            {/* State name label inside SVG when zoomed */}
+            {zoomedState && (
+              <text
+                x={vbX + vbW * 0.01}
+                y={vbY + vbH * 0.06}
+                fontSize={vbW * 0.03}
+                fontWeight="bold"
+                fill="#2C3E50"
+                opacity={0.7}
+              >
+                {zoomedState}
+              </text>
+            )}
+          </svg>
         </div>
 
         {/* Legend + Insights */}
         <div className="w-56 flex-shrink-0 pt-4 space-y-5">
-          {/* Legend */}
           <div>
             <p className="text-sm font-semibold text-[#2C3E50] mb-3">
               Affordability Rating
@@ -318,18 +305,10 @@ export default function USHeatMap({
                 </div>
               ))}
             </div>
-            <div className="mt-3 pt-2 border-t border-gray-100">
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded border-2 border-black bg-transparent" />
-                <span className="text-sm text-[#6B7280]">County borders</span>
-              </div>
-            </div>
           </div>
 
-          {/* Compact Insights */}
           {insights && !isLoading && (
             <>
-              {/* Top States */}
               {insights.bestStates.length > 0 && (
                 <div>
                   <p className="text-xs font-semibold text-[#4A90D9] mb-2">Top States</p>
@@ -358,7 +337,6 @@ export default function USHeatMap({
                 </div>
               )}
 
-              {/* Top Cities */}
               {insights.bestCities.length > 0 && (
                 <div>
                   <p className="text-xs font-semibold text-[#4A90D9] mb-2">Top Cities</p>
@@ -387,7 +365,6 @@ export default function USHeatMap({
                 </div>
               )}
 
-              {/* Quick Stats */}
               <div>
                 <p className="text-xs font-semibold text-[#4A90D9] mb-2">Overview</p>
                 <div className="space-y-1.5 text-xs">
@@ -416,189 +393,14 @@ export default function USHeatMap({
         </div>
       </div>
 
-      {/* Regular tooltip */}
-      {tooltip && !isFullscreen && (
+      {/* Tooltip */}
+      {tooltip && (
         <HeatMapTooltip
           locationName={tooltip.name}
           data={tooltip.data}
           mode={mode}
           position={tooltip.position}
         />
-      )}
-
-      {/* Fullscreen State Zoom Overlay */}
-      {isFullscreen && zoomedState && (
-        <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center"
-          onClick={handleCloseFullscreen}
-        >
-          <div
-            className="relative bg-white rounded-2xl shadow-2xl w-[95vw] h-[90vh] max-w-[1600px] flex overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Close button */}
-            <button
-              onClick={handleCloseFullscreen}
-              className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center bg-white/90 border border-gray-200 rounded-full shadow-md hover:bg-gray-100 transition-colors"
-            >
-              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-
-            {/* Zoomed Map */}
-            <div className="flex-1 min-w-0 p-6 flex flex-col">
-              <div className="flex items-center gap-3 mb-4">
-                <button
-                  onClick={handleCloseFullscreen}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-[#4A90D9] hover:bg-[#F0F7FF] rounded-lg transition-colors text-sm font-medium"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                  Back to US
-                </button>
-                <h2 className="text-xl font-bold text-[#2C3E50]">{zoomedState}</h2>
-                {zoomedStateCalc && (
-                  <span
-                    className="text-sm font-semibold px-2.5 py-1 rounded-full"
-                    style={{
-                      backgroundColor: ratingScale(zoomedStateCalc.numericScore) + '22',
-                      color: ratingScale(zoomedStateCalc.numericScore),
-                    }}
-                  >
-                    Score: {zoomedStateCalc.numericScore.toFixed(1)}/10
-                  </span>
-                )}
-              </div>
-              <div className="flex-1 min-h-0">
-                {renderMapSvg(zoomedViewBox, '100%')}
-              </div>
-            </div>
-
-            {/* State Detail Sidebar */}
-            <div className="w-80 border-l border-gray-200 bg-gray-50 overflow-y-auto p-5 space-y-5">
-              {/* State Summary */}
-              {zoomedStateCalc && (
-                <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                  <h3 className="text-sm font-semibold text-[#2C3E50] mb-3">State Overview</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-[#6B7280]">Max Home Value</span>
-                      <span className="font-semibold text-[#2C3E50]">{formatCurrency(zoomedStateCalc.maxHomeValue)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[#6B7280]">Home Size</span>
-                      <span className="font-semibold text-[#2C3E50]">{zoomedStateCalc.sqft.toLocaleString()} sqft</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[#6B7280]">Monthly Payment</span>
-                      <span className="font-semibold text-[#2C3E50]">{formatCurrency(zoomedStateCalc.monthlyPayment)}/mo</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[#6B7280]">Years to Own</span>
-                      <span className="font-semibold text-[#2C3E50]">
-                        {zoomedStateCalc.yearsToOwn > 0 ? `${zoomedStateCalc.yearsToOwn} yrs` : 'N/A'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[#6B7280]">Price/sqft</span>
-                      <span className="font-semibold text-[#2C3E50]">${zoomedStateCalc.pricePerSqft.toFixed(0)}</span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => onLocationClick(zoomedState)}
-                    className="mt-3 w-full py-2 bg-[#4A90D9] text-white text-sm font-medium rounded-lg hover:bg-[#3A7BC8] transition-colors"
-                  >
-                    View Full Profile
-                  </button>
-                </div>
-              )}
-
-              {/* Cities in State */}
-              <div>
-                <h3 className="text-sm font-semibold text-[#2C3E50] mb-3">
-                  Cities in {zoomedState}
-                  {zoomedStateCities.length > 0 && (
-                    <span className="text-[#6B7280] font-normal ml-1">({zoomedStateCities.length})</span>
-                  )}
-                </h3>
-                {zoomedStateCities.length === 0 ? (
-                  <p className="text-sm text-[#6B7280]">No city data available for this state.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {zoomedStateCities.map(({ name, calc }) => (
-                      <div
-                        key={name}
-                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-100 cursor-pointer hover:border-[#4A90D9] hover:shadow-md transition-all"
-                        onClick={() => onLocationClick(name)}
-                      >
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-sm font-semibold text-[#2C3E50]">{name}</span>
-                          <span
-                            className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                            style={{
-                              backgroundColor: ratingScale(calc.numericScore) + '22',
-                              color: ratingScale(calc.numericScore),
-                            }}
-                          >
-                            {calc.numericScore.toFixed(1)}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                          <div className="flex justify-between">
-                            <span className="text-[#6B7280]">Home</span>
-                            <span className="text-[#2C3E50] font-medium">{formatCurrency(calc.maxHomeValue)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-[#6B7280]">Size</span>
-                            <span className="text-[#2C3E50] font-medium">{calc.sqft.toLocaleString()} sqft</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-[#6B7280]">Monthly</span>
-                            <span className="text-[#2C3E50] font-medium">{formatCurrency(calc.monthlyPayment)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-[#6B7280]">$/sqft</span>
-                            <span className="text-[#2C3E50] font-medium">${calc.pricePerSqft.toFixed(0)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Legend in fullscreen */}
-              <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                <p className="text-sm font-semibold text-[#2C3E50] mb-3">Rating Scale</p>
-                <div className="space-y-2">
-                  {legendSteps.map((score, i) => (
-                    <div key={score} className="flex items-center gap-2.5">
-                      <div
-                        className="w-4 h-4 rounded"
-                        style={{
-                          backgroundColor: score === 0 ? GRAY : ratingScale(score),
-                        }}
-                      />
-                      <span className="text-sm text-[#6B7280]">{legendLabels[i]}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Fullscreen tooltip */}
-          {tooltip && (
-            <HeatMapTooltip
-              locationName={tooltip.name}
-              data={tooltip.data}
-              mode={mode}
-              position={tooltip.position}
-            />
-          )}
-        </div>
       )}
     </div>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect, type MouseEvent as ReactMouseEvent } from 'react';
+import { useState, useMemo, useCallback, type MouseEvent as ReactMouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWealthCalculations } from '@/hooks/useWealthCalculations';
 import { calculateAutoApproach, CalculationResult } from '@/lib/calculation-engine';
@@ -19,7 +19,6 @@ import LocationPicker from '@/components/shared/LocationPicker';
 import statePathsData from '@/lib/us-state-paths.json';
 import countyPathsData from '@/lib/us-county-paths.json';
 import WealthMapTooltip from '@/components/wealth/WealthMapTooltip';
-import { CITY_TO_STATE_ABBREV } from '@/lib/us-city-coordinates';
 import type { MapMode } from '@/components/wealth/types';
 import type { OnboardingAnswers } from '@/lib/onboarding/types';
 
@@ -89,21 +88,21 @@ export default function WealthGenerationPage() {
   // Tooltip state
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
 
-  // Fullscreen state zoom
+  // In-place state zoom
   const [wealthZoomedState, setWealthZoomedState] = useState<string | null>(null);
-  const [wealthFullscreen, setWealthFullscreen] = useState(false);
-  const [wealthZoomedViewBox, setWealthZoomedViewBox] = useState(`0 0 ${WIDTH} ${HEIGHT}`);
+  const [wealthViewBox, setWealthViewBox] = useState(`0 0 ${WIDTH} ${HEIGHT}`);
 
   const handleWealthStateClick = useCallback((stateName: string, e: ReactMouseEvent<SVGPathElement>) => {
     e.stopPropagation();
-    if (wealthFullscreen && wealthZoomedState === stateName) {
+    if (wealthZoomedState) {
+      // Already zoomed — clicking navigates
       setPendingCalcLocation(stateName);
       setCalcLocation(stateName);
       return;
     }
     const pathEl = e.currentTarget;
     const bbox = pathEl.getBBox();
-    const padding = 30;
+    const padding = 20;
     const x = bbox.x - padding;
     const y = bbox.y - padding;
     const w = bbox.width + padding * 2;
@@ -113,25 +112,16 @@ export default function WealthGenerationPage() {
     let vx = x, vy = y, vw = w, vh = h;
     if (boxAspect > aspect) { vh = vw / aspect; vy = y - (vh - h) / 2; }
     else { vw = vh * aspect; vx = x - (vw - w) / 2; }
-    setWealthZoomedViewBox(`${vx} ${vy} ${vw} ${vh}`);
+    setWealthViewBox(`${vx} ${vy} ${vw} ${vh}`);
     setWealthZoomedState(stateName);
-    setWealthFullscreen(true);
     setTooltip(null);
-  }, [wealthFullscreen, wealthZoomedState]);
+  }, [wealthZoomedState]);
 
-  const handleCloseWealthFullscreen = useCallback(() => {
-    setWealthFullscreen(false);
+  const handleWealthZoomOut = useCallback(() => {
+    setWealthViewBox(`0 0 ${WIDTH} ${HEIGHT}`);
     setWealthZoomedState(null);
     setTooltip(null);
   }, []);
-
-  useEffect(() => {
-    if (!wealthFullscreen) return;
-    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') handleCloseWealthFullscreen(); };
-    document.addEventListener('keydown', handleKey);
-    document.body.style.overflow = 'hidden';
-    return () => { document.removeEventListener('keydown', handleKey); document.body.style.overflow = ''; };
-  }, [wealthFullscreen, handleCloseWealthFullscreen]);
 
   const handleMouseMove = useCallback((e: ReactMouseEvent) => {
     setTooltip((prev) =>
@@ -242,23 +232,6 @@ export default function WealthGenerationPage() {
       default: return 0;
     }
   }, [mapMode]);
-
-  // Cities in zoomed state (wealth)
-  const wealthZoomedCities = useMemo(() => {
-    if (!wealthZoomedState) return [];
-    const abbrev = STATE_NAME_TO_ABBREV[wealthZoomedState];
-    if (!abbrev) return [];
-    const cities: { name: string; data: LocationWealth }[] = [];
-    cityData.forEach((data, name) => {
-      if (CITY_TO_STATE_ABBREV[name] === abbrev) cities.push({ name, data });
-    });
-    return cities.sort((a, b) => getHeatValue(b.data) - getHeatValue(a.data));
-  }, [wealthZoomedState, cityData, getHeatValue]);
-
-  const wealthZoomedStateData = useMemo(() => {
-    if (!wealthZoomedState) return null;
-    return stateData.get(wealthZoomedState) ?? null;
-  }, [wealthZoomedState, stateData]);
 
   // Compute min/max for color scaling
   const { minVal, maxVal } = useMemo(() => {
@@ -482,7 +455,24 @@ export default function WealthGenerationPage() {
                   <span className="text-xs text-gray-600 font-medium">Computing {progress}%</span>
                 </div>
               )}
-              <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-auto" style={{ maxHeight: '75vh' }}>
+              {/* Back button when zoomed */}
+              {wealthZoomedState && (
+                <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
+                  <button
+                    onClick={handleWealthZoomOut}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white/95 border border-gray-200 rounded-lg shadow-sm hover:bg-gray-50 transition-colors text-sm font-medium text-[#4A90D9]"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    Back
+                  </button>
+                  <span className="px-3 py-1.5 bg-white/95 border border-gray-200 rounded-lg shadow-sm text-sm font-bold text-[#2C3E50]">
+                    {wealthZoomedState}
+                  </span>
+                </div>
+              )}
+              <svg viewBox={wealthViewBox} className="w-full h-auto transition-all duration-500 ease-in-out" style={{ maxHeight: '75vh' }}>
                 {countyPaths.map((county) => {
                   const cityLoc = county.cityName ? cityData.get(county.cityName) : undefined;
                   const stateName = ABBREV_TO_STATE_NAME[county.stateAbbrev];
@@ -506,23 +496,26 @@ export default function WealthGenerationPage() {
                     />
                   );
                 })}
-                {statePaths.map((state, i) => (
-                  <path
-                    key={`state-${i}`}
-                    d={state.d}
-                    fill="transparent"
-                    stroke="#000000"
-                    strokeWidth={1}
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                    cursor="pointer"
-                    pointerEvents="visibleStroke"
-                    onClick={(e) => handleWealthStateClick(state.name, e)}
-                  />
-                ))}
+                {statePaths.map((state, i) => {
+                  const isZoomed = wealthZoomedState === state.name;
+                  return (
+                    <path
+                      key={`state-${i}`}
+                      d={state.d}
+                      fill="transparent"
+                      stroke={isZoomed ? '#4A90D9' : '#000000'}
+                      strokeWidth={isZoomed ? 2.5 : 1}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      cursor="pointer"
+                      pointerEvents="visibleStroke"
+                      onClick={(e) => handleWealthStateClick(state.name, e)}
+                    />
+                  );
+                })}
               </svg>
 
-              {tooltip && !wealthFullscreen && (
+              {tooltip && (
                 <WealthMapTooltip
                   locationName={tooltip.name}
                   data={tooltip.data}
@@ -601,189 +594,6 @@ export default function WealthGenerationPage() {
           </div>
         </div>
       </div>
-
-      {/* Fullscreen State Zoom Overlay (Wealth) */}
-      {wealthFullscreen && wealthZoomedState && (
-        <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center"
-          onClick={handleCloseWealthFullscreen}
-        >
-          <div
-            className="relative bg-white rounded-2xl shadow-2xl w-[95vw] h-[90vh] max-w-[1600px] flex overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={handleCloseWealthFullscreen}
-              className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center bg-white/90 border border-gray-200 rounded-full shadow-md hover:bg-gray-100 transition-colors"
-            >
-              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-
-            <div className="flex-1 min-w-0 p-6 flex flex-col">
-              <div className="flex items-center gap-3 mb-4">
-                <button
-                  onClick={handleCloseWealthFullscreen}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-[#4A90D9] hover:bg-[#F0F7FF] rounded-lg transition-colors text-sm font-medium"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                  Back to US
-                </button>
-                <h2 className="text-xl font-bold text-[#2C3E50]">{wealthZoomedState}</h2>
-                {wealthZoomedStateData && (
-                  <span className="text-sm font-semibold px-2.5 py-1 rounded-full" style={{
-                    backgroundColor: getColor(wealthZoomedStateData) + '22',
-                    color: getColor(wealthZoomedStateData),
-                  }}>
-                    {mapMode === 'pct-increase'
-                      ? `${Math.round(getHeatValue(wealthZoomedStateData))}%`
-                      : formatCurrency(getHeatValue(wealthZoomedStateData))}
-                  </span>
-                )}
-              </div>
-              <div className="flex-1 min-h-0">
-                <svg viewBox={wealthZoomedViewBox} className="w-full h-auto" style={{ maxHeight: '100%' }}>
-                  {countyPaths.map((county) => {
-                    const cityLoc = county.cityName ? cityData.get(county.cityName) : undefined;
-                    const stateName = ABBREV_TO_STATE_NAME[county.stateAbbrev];
-                    const stateLoc = stateName ? stateData.get(stateName) : undefined;
-                    const loc = cityLoc || stateLoc;
-                    const name = county.cityName || stateName || county.stateAbbrev;
-                    return (
-                      <path
-                        key={county.fips}
-                        d={county.d}
-                        fill={getColor(loc)}
-                        stroke="#000000"
-                        strokeWidth={0.15}
-                        strokeLinejoin="round"
-                        cursor="pointer"
-                        onClick={() => { if (county.cityName) { setPendingCalcLocation(county.cityName); setCalcLocation(county.cityName); handleCloseWealthFullscreen(); } }}
-                        onMouseEnter={(e) => { if (loc) handleMouseEnter(name, loc, e); }}
-                        onMouseMove={handleMouseMove}
-                        onMouseLeave={handleMouseLeave}
-                        className="transition-opacity hover:opacity-80"
-                      />
-                    );
-                  })}
-                  {statePaths.map((state, i) => (
-                    <path
-                      key={`state-${i}`}
-                      d={state.d}
-                      fill="transparent"
-                      stroke={wealthZoomedState === state.name ? '#4A90D9' : '#000000'}
-                      strokeWidth={wealthZoomedState === state.name ? 2.5 : 1}
-                      strokeLinejoin="round"
-                      strokeLinecap="round"
-                      cursor="pointer"
-                      pointerEvents="visibleStroke"
-                      onClick={(e) => handleWealthStateClick(state.name, e)}
-                    />
-                  ))}
-                </svg>
-              </div>
-            </div>
-
-            <div className="w-80 border-l border-gray-200 bg-gray-50 overflow-y-auto p-5 space-y-5">
-              {wealthZoomedStateData && (
-                <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                  <h3 className="text-sm font-semibold text-[#2C3E50] mb-3">State Overview</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-[#6B7280]">Wealth Gain</span>
-                      <span className="font-semibold text-[#2C3E50]">{formatCurrency(wealthZoomedStateData.wealthAtSell > 0 ? wealthZoomedStateData.wealthAtSell : wealthZoomedStateData.wealthAt30)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[#6B7280]">Appreciation</span>
-                      <span className="font-semibold text-[#2C3E50]">{Math.round(wealthZoomedStateData.appreciationPctAt30)}%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[#6B7280]">Total Wealth</span>
-                      <span className="font-semibold text-[#2C3E50]">{formatCurrency(wealthZoomedStateData.totalWealth)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[#6B7280]">Effective Wealth</span>
-                      <span className="font-semibold text-[#2C3E50]">{formatCurrency(wealthZoomedStateData.totalEffectiveWealth)}</span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => { setPendingCalcLocation(wealthZoomedState); setCalcLocation(wealthZoomedState); handleCloseWealthFullscreen(); }}
-                    className="mt-3 w-full py-2 bg-[#4A90D9] text-white text-sm font-medium rounded-lg hover:bg-[#3A7BC8] transition-colors"
-                  >
-                    View Projections
-                  </button>
-                </div>
-              )}
-
-              <div>
-                <h3 className="text-sm font-semibold text-[#2C3E50] mb-3">
-                  Cities in {wealthZoomedState}
-                  {wealthZoomedCities.length > 0 && (
-                    <span className="text-[#6B7280] font-normal ml-1">({wealthZoomedCities.length})</span>
-                  )}
-                </h3>
-                {wealthZoomedCities.length === 0 ? (
-                  <p className="text-sm text-[#6B7280]">No city data available for this state.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {wealthZoomedCities.map(({ name, data }) => (
-                      <div
-                        key={name}
-                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-100 cursor-pointer hover:border-[#4A90D9] hover:shadow-md transition-all"
-                        onClick={() => { setPendingCalcLocation(name); setCalcLocation(name); handleCloseWealthFullscreen(); }}
-                      >
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-sm font-semibold text-[#2C3E50]">{name}</span>
-                          <span className="text-xs font-semibold text-[#4A90D9]">
-                            {mapMode === 'pct-increase'
-                              ? `${Math.round(getHeatValue(data))}%`
-                              : formatCurrency(getHeatValue(data))}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                          <div className="flex justify-between">
-                            <span className="text-[#6B7280]">Wealth</span>
-                            <span className="text-[#2C3E50] font-medium">{formatCurrency(data.totalWealth)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-[#6B7280]">Apprec.</span>
-                            <span className="text-[#2C3E50] font-medium">{Math.round(data.appreciationPctAt30)}%</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                <p className="text-sm font-semibold text-[#2C3E50] mb-3">Scale</p>
-                <div className="space-y-2">
-                  {[10, 7.5, 5, 2.5, 0].map((score, i) => (
-                    <div key={score} className="flex items-center gap-2.5">
-                      <div className="w-4 h-4 rounded" style={{ backgroundColor: score === 0 ? GRAY : ratingScale(score) }} />
-                      <span className="text-sm text-[#6B7280]">{['Highest', 'High', 'Medium', 'Low', 'Not viable'][i]}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {tooltip && (
-            <WealthMapTooltip
-              locationName={tooltip.name}
-              data={tooltip.data}
-              mode={mapMode}
-              rating={tooltip.rating}
-              position={tooltip.position}
-            />
-          )}
-        </div>
-      )}
 
       {/* Wealth Projections */}
       {activeLocation && maxPrice > 0 && (
