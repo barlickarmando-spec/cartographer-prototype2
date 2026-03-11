@@ -19,6 +19,7 @@ type MapMode = 'value' | 'sqft';
 export default function HomeAffordabilityPage() {
   const router = useRouter();
   const [mapMode, setMapMode] = useState<MapMode>('sqft');
+  const [affordZoomedState, setAffordZoomedState] = useState<string | null>(null);
   const {
     stateData,
     cityData,
@@ -140,7 +141,7 @@ export default function HomeAffordabilityPage() {
         <div className="p-6 pb-0">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-[#4A90D9]">
-              Your Housing Affordability Map
+              Your Housing Affordability Map{affordZoomedState ? ` — ${affordZoomedState}` : ''}
             </h2>
             <div className="flex bg-gray-100 rounded-full p-1">
               <button
@@ -175,6 +176,7 @@ export default function HomeAffordabilityPage() {
             isLoading={isLoading}
             progress={progress}
             onLocationClick={handleLocationClick}
+            onZoomedStateChange={setAffordZoomedState}
           />
         </div>
       </div>

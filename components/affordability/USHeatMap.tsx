@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { createRatingColorScale } from '@/lib/color-scale';
 import statePathsData from '@/lib/us-atlas-state-paths.json';
 import countyPathsData from '@/lib/us-county-paths.json';
+import nationPathData from '@/lib/us-nation-path.json';
 import HeatMapTooltip from './HeatMapTooltip';
 import type { LocationCalculation } from '@/hooks/useAffordabilityCalculations';
 import { formatCurrency } from '@/lib/utils';
@@ -15,6 +16,7 @@ const DEFAULT_VIEWBOX = `0 0 ${WIDTH} ${HEIGHT}`;
 
 const statePaths = statePathsData as { fips: string; name: string; d: string }[];
 const countyPaths = countyPathsData as { fips: string; stateAbbrev: string; cityName: string; d: string }[];
+const nationPath = nationPathData as { d: string };
 
 const STATE_NAME_TO_ABBREV: Record<string, string> = {
   'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA',
@@ -38,6 +40,7 @@ interface USHeatMapProps {
   isLoading: boolean;
   progress: number;
   onLocationClick: (locationName: string) => void;
+  onZoomedStateChange?: (stateName: string | null) => void;
 }
 
 interface TooltipState {
@@ -53,6 +56,7 @@ export default function USHeatMap({
   isLoading,
   progress,
   onLocationClick,
+  onZoomedStateChange,
 }: USHeatMapProps) {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [zoomedState, setZoomedState] = useState<string | null>(null);
@@ -111,16 +115,18 @@ export default function USHeatMap({
       }
       setViewBox(`${vx} ${vy} ${vw} ${vh}`);
       setZoomedState(stateName);
+      onZoomedStateChange?.(stateName);
       setTooltip(null);
     },
-    [zoomedState, onLocationClick]
+    [zoomedState, onLocationClick, onZoomedStateChange]
   );
 
   const handleZoomOut = useCallback(() => {
     setViewBox(DEFAULT_VIEWBOX);
     setZoomedState(null);
+    onZoomedStateChange?.(null);
     setTooltip(null);
-  }, []);
+  }, [onZoomedStateChange]);
 
   const insights = useMemo(() => {
     const allLocations: LocationCalculation[] = [];
@@ -250,23 +256,28 @@ export default function USHeatMap({
               );
             })}
 
-            {/* State outlines on top for zoom click target */}
-            {statePaths.map((state, i) => {
-              const isZoomed = zoomedState === state.name;
-              return (
-                <path
-                  key={`state-outline-${i}`}
-                  d={state.d}
-                  fill="transparent"
-                  stroke={isZoomed ? '#4A90D9' : 'transparent'}
-                  strokeWidth={isZoomed ? 2.5 : 0}
-                  strokeLinejoin="round"
-                  cursor="pointer"
-                  pointerEvents="all"
-                  onClick={(e) => handleStateClick(state.name, e)}
-                />
-              );
-            })}
+            {/* Nation outline — black border around entire country */}
+            <path
+              d={nationPath.d}
+              fill="none"
+              stroke="#000000"
+              strokeWidth={1.5}
+              strokeLinejoin="round"
+              pointerEvents="none"
+            />
+
+            {/* Zoomed state highlight */}
+            {zoomedState && statePaths.filter(s => s.name === zoomedState).map((state, i) => (
+              <path
+                key={`zoom-highlight-${i}`}
+                d={state.d}
+                fill="none"
+                stroke="#4A90D9"
+                strokeWidth={2.5}
+                strokeLinejoin="round"
+                pointerEvents="none"
+              />
+            ))}
           </svg>
         </div>
 

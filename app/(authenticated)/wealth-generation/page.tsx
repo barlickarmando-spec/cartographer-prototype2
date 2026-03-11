@@ -18,6 +18,7 @@ import { createRatingColorScale } from '@/lib/color-scale';
 import LocationPicker from '@/components/shared/LocationPicker';
 import statePathsData from '@/lib/us-atlas-state-paths.json';
 import countyPathsData from '@/lib/us-county-paths.json';
+import nationPathData from '@/lib/us-nation-path.json';
 import WealthMapTooltip from '@/components/wealth/WealthMapTooltip';
 import type { MapMode } from '@/components/wealth/types';
 import type { OnboardingAnswers } from '@/lib/onboarding/types';
@@ -39,6 +40,7 @@ const STATE_NAME_TO_ABBREV: Record<string, string> = {
 
 const statePaths = statePathsData as { fips: string; name: string; d: string }[];
 const countyPaths = countyPathsData as { fips: string; stateAbbrev: string; cityName: string; d: string }[];
+const nationPath = nationPathData as { d: string };
 
 const GRAY = '#E5E7EB';
 const WIDTH = 960;
@@ -414,7 +416,7 @@ export default function WealthGenerationPage() {
       <div className="bg-white rounded-2xl border border-carto-blue-pale/30 overflow-hidden">
         <div className="p-6 pb-0">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <h2 className="text-xl font-bold text-[#4A90D9]">Wealth Generation Map</h2>
+            <h2 className="text-xl font-bold text-[#4A90D9]">Wealth Generation Map{wealthZoomedState ? ` — ${wealthZoomedState}` : ''}</h2>
             <div className="flex bg-gray-100 rounded-full p-1">
               {([
                 { key: 'wealth-gain', label: 'Wealth Gain' },
@@ -507,23 +509,27 @@ export default function WealthGenerationPage() {
                     />
                   );
                 })}
-                {/* State outlines for zoom click */}
-                {statePaths.map((state, i) => {
-                  const isZoomed = wealthZoomedState === state.name;
-                  return (
-                    <path
-                      key={`state-outline-${i}`}
-                      d={state.d}
-                      fill="transparent"
-                      stroke={isZoomed ? '#4A90D9' : 'transparent'}
-                      strokeWidth={isZoomed ? 2.5 : 0}
-                      strokeLinejoin="round"
-                      cursor="pointer"
-                      pointerEvents="all"
-                      onClick={(e) => handleWealthStateClick(state.name, e)}
-                    />
-                  );
-                })}
+                {/* Nation outline — black border around entire country */}
+                <path
+                  d={nationPath.d}
+                  fill="none"
+                  stroke="#000000"
+                  strokeWidth={1.5}
+                  strokeLinejoin="round"
+                  pointerEvents="none"
+                />
+                {/* Zoomed state highlight */}
+                {wealthZoomedState && statePaths.filter(s => s.name === wealthZoomedState).map((state, i) => (
+                  <path
+                    key={`zoom-highlight-${i}`}
+                    d={state.d}
+                    fill="none"
+                    stroke="#4A90D9"
+                    strokeWidth={2.5}
+                    strokeLinejoin="round"
+                    pointerEvents="none"
+                  />
+                ))}
               </svg>
 
               {tooltip && (
