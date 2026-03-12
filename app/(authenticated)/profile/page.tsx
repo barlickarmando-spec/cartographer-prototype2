@@ -515,6 +515,16 @@ export default function ProfilePage() {
               <p className="text-2xl font-bold">{result.minimumAllocationRequired}%</p>
               <p className="text-white/60 text-xs mt-1">of discretionary income</p>
             </div>
+          {/* View Full Location Page */}
+          <button
+            onClick={() => router.push(`/location/${encodeURIComponent(result.location.replace(/ /g, '-'))}`)}
+            className="mt-4 w-full flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 text-white py-2.5 rounded-xl transition-colors text-sm font-semibold border border-white/30"
+          >
+            View Full Location Page
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+            </svg>
+          </button>
           </div>
         </div>
 

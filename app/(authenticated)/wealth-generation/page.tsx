@@ -627,9 +627,20 @@ export default function WealthGenerationPage() {
       {/* Wealth Projections */}
       {activeLocation && maxPrice > 0 && (
         <div className="bg-white rounded-2xl border border-carto-blue-pale/30 p-6">
-          <h2 className="text-xl font-bold text-[#4A90D9] mb-1">
-            Projected Wealth — {activeLocation}
-          </h2>
+          <div className="flex items-start justify-between mb-1">
+            <h2 className="text-xl font-bold text-[#4A90D9]">
+              Projected Wealth — {activeLocation}
+            </h2>
+            <button
+              onClick={() => router.push(`/location/${encodeURIComponent(activeLocation.replace(/ /g, '-'))}`)}
+              className="shrink-0 ml-4 px-4 py-1.5 text-sm font-semibold text-[#4A90D9] border border-[#4A90D9] rounded-full hover:bg-[#4A90D9] hover:text-white transition-colors flex items-center gap-1.5"
+            >
+              View Full Page
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+              </svg>
+            </button>
+          </div>
           <p className="text-sm text-[#6B7280] mb-6">
             Based on {formatCurrency(maxPrice)} home with {((locationCalcResult?.locationData.housing.appreciationRate ?? 0.038) * 100).toFixed(1)}% annual appreciation
           </p>
