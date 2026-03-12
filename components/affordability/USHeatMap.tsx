@@ -209,7 +209,23 @@ export default function USHeatMap({
             className="w-full h-auto transition-all duration-500 ease-in-out"
             style={{ maxHeight: '85vh' }}
           >
-            {/* All counties — full coverage for hover. City counties use city data; others fall back to state data. */}
+            {/* State fills — visual background with no gaps */}
+            {statePaths.map((state, i) => {
+              const calc = stateData.get(state.name);
+              return (
+                <path
+                  key={`state-fill-${i}`}
+                  d={state.d}
+                  fill={getFillColor(calc)}
+                  stroke="#FFFFFF"
+                  strokeWidth={0.75}
+                  strokeLinejoin="round"
+                  pointerEvents="none"
+                />
+              );
+            })}
+
+            {/* All counties — invisible hover layer for full mouse coverage */}
             {countyPaths.map((county) => {
               const isCity = !!county.cityName;
               const stateName = ABBREV_TO_STATE_NAME[county.stateAbbrev] || '';
@@ -217,15 +233,15 @@ export default function USHeatMap({
               const calc = isCity
                 ? cityData.get(county.cityName)
                 : stateData.get(stateName);
-              const fill = getFillColor(calc);
               return (
                 <path
                   key={county.fips}
                   d={county.d}
-                  fill={fill}
+                  fill={isCity ? getFillColor(calc) : 'transparent'}
                   stroke={isCity ? '#000000' : 'none'}
                   strokeWidth={isCity ? 1 : 0}
                   strokeLinejoin="round"
+                  pointerEvents="all"
                   cursor="pointer"
                   onClick={(e) => {
                     if (isCity) {
@@ -241,19 +257,6 @@ export default function USHeatMap({
                 />
               );
             })}
-
-            {/* State borders — white outlines, non-interactive */}
-            {statePaths.map((state, i) => (
-              <path
-                key={`state-border-${i}`}
-                d={state.d}
-                fill="none"
-                stroke="#FFFFFF"
-                strokeWidth={0.75}
-                strokeLinejoin="round"
-                pointerEvents="none"
-              />
-            ))}
 
             {/* Nation outline — black border around entire country */}
             <path
