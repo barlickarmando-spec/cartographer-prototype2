@@ -1,6 +1,5 @@
 'use client';
 
-import { createPortal } from 'react-dom';
 import { formatCurrency } from '@/lib/utils';
 import type { LocationWealth } from '@/lib/wealth-calculations';
 import type { MapMode } from './types';
@@ -39,9 +38,9 @@ export default function WealthMapTooltip({ locationName, data, mode, rating, pos
     ? 'bg-red-400/30'
     : rating >= 4 ? 'bg-green-400/30' : rating >= 3 ? 'bg-blue-400/30' : rating >= 2 ? 'bg-yellow-400/30' : 'bg-red-400/30';
 
-  return createPortal(
+  return (
     <div
-      className="fixed z-[9999] pointer-events-none shadow-2xl min-w-[320px] bg-[#4A90D9] rounded-lg"
+      className="fixed z-50 pointer-events-none shadow-2xl min-w-[320px] bg-[#4A90D9]"
       style={{
         left: position.x + 16,
         top: position.y - 12,
@@ -89,7 +88,6 @@ export default function WealthMapTooltip({ locationName, data, mode, rating, pos
           <p className="text-base text-white/80">Loading data...</p>
         )}
       </div>
-    </div>,
-    document.body
+    </div>
   );
 }

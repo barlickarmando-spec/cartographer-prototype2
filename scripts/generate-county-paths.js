@@ -198,13 +198,11 @@ for (const [cityName, [lng, lat]] of Object.entries(CITY_COORDINATES)) {
 
 console.log(`\nMatched ${Object.keys(countyToCity).length}/${Object.keys(CITY_COORDINATES).length} cities`);
 
-// Only output counties that have cities
+// Output ALL counties — cityName is set for city counties, empty for others
 const countyOutput = [];
 for (const feature of counties.features) {
   const fips = feature.id;
-  const cityName = countyToCity[fips];
-  if (!cityName) continue; // Skip non-city counties
-
+  const cityName = countyToCity[fips] || '';
   const stateAbbrev = FIPS_TO_STATE[fips.substring(0, 2)] || '??';
   const d = coordsToPath(feature.geometry);
   if (!d) continue;
@@ -212,7 +210,8 @@ for (const feature of counties.features) {
   countyOutput.push({ fips, stateAbbrev, cityName, d });
 }
 
-console.log(`Generated ${countyOutput.length} city-county paths (out of ${counties.features.length} total)`);
+const cityCount = countyOutput.filter(c => c.cityName).length;
+console.log(`Generated ${countyOutput.length} county paths (${cityCount} with cities)`);
 
 const countyOutPath = path.join(__dirname, '..', 'lib', 'us-county-paths.json');
 fs.writeFileSync(countyOutPath, JSON.stringify(countyOutput));

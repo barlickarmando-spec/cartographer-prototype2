@@ -23,19 +23,19 @@ import WealthMapTooltip from '@/components/wealth/WealthMapTooltip';
 import type { MapMode } from '@/components/wealth/types';
 import type { OnboardingAnswers } from '@/lib/onboarding/types';
 
-const STATE_NAME_TO_ABBREV: Record<string, string> = {
-  'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA',
-  'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE', 'Florida': 'FL', 'Georgia': 'GA',
-  'Hawaii': 'HI', 'Idaho': 'ID', 'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA',
-  'Kansas': 'KS', 'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
-  'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS',
-  'Missouri': 'MO', 'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV',
-  'New Hampshire': 'NH', 'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY',
-  'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH', 'Oklahoma': 'OK',
-  'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
-  'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT', 'Vermont': 'VT',
-  'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY',
-  'District of Columbia': 'DC',
+const ABBREV_TO_STATE_NAME: Record<string, string> = {
+  'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas', 'CA': 'California',
+  'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware', 'FL': 'Florida', 'GA': 'Georgia',
+  'HI': 'Hawaii', 'ID': 'Idaho', 'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa',
+  'KS': 'Kansas', 'KY': 'Kentucky', 'LA': 'Louisiana', 'ME': 'Maine', 'MD': 'Maryland',
+  'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota', 'MS': 'Mississippi',
+  'MO': 'Missouri', 'MT': 'Montana', 'NE': 'Nebraska', 'NV': 'Nevada',
+  'NH': 'New Hampshire', 'NJ': 'New Jersey', 'NM': 'New Mexico', 'NY': 'New York',
+  'NC': 'North Carolina', 'ND': 'North Dakota', 'OH': 'Ohio', 'OK': 'Oklahoma',
+  'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'Rhode Island', 'SC': 'South Carolina',
+  'SD': 'South Dakota', 'TN': 'Tennessee', 'TX': 'Texas', 'UT': 'Utah', 'VT': 'Vermont',
+  'VA': 'Virginia', 'WA': 'Washington', 'WV': 'West Virginia', 'WI': 'Wisconsin', 'WY': 'Wyoming',
+  'DC': 'District of Columbia',
 };
 
 const statePaths = statePathsData as { fips: string; name: string; d: string }[];
@@ -469,46 +469,50 @@ export default function WealthGenerationPage() {
                 </div>
               )}
               <svg viewBox={wealthViewBox} className="w-full h-auto transition-all duration-500 ease-in-out" style={{ maxHeight: '75vh' }}>
-                {/* State fills as background */}
-                {statePaths.map((state, i) => {
-                  const loc = stateData.get(state.name);
-                  return (
-                    <path
-                      key={`state-fill-${i}`}
-                      d={state.d}
-                      fill={getColor(loc)}
-                      stroke="#FFFFFF"
-                      strokeWidth={0.75}
-                      strokeLinejoin="round"
-                      cursor="pointer"
-                      onClick={(e) => handleWealthStateClick(state.name, e)}
-                      onMouseEnter={(e) => handleMouseEnter(state.name, loc ?? null, e)}
-                      onMouseMove={handleMouseMove}
-                      onMouseLeave={handleMouseLeave}
-                      className="transition-opacity hover:opacity-80"
-                    />
-                  );
-                })}
-                {/* City-county overlays with black borders */}
+                {/* All counties — full coverage for hover. City counties use city data; others fall back to state data. */}
                 {countyPaths.map((county) => {
-                  const cityLoc = cityData.get(county.cityName);
+                  const isCity = !!county.cityName;
+                  const stateName = ABBREV_TO_STATE_NAME[county.stateAbbrev] || '';
+                  const displayName = isCity ? county.cityName : stateName;
+                  const loc = isCity
+                    ? cityData.get(county.cityName)
+                    : stateData.get(stateName);
                   return (
                     <path
                       key={county.fips}
                       d={county.d}
-                      fill={getColor(cityLoc)}
-                      stroke="#000000"
-                      strokeWidth={1}
+                      fill={getColor(loc)}
+                      stroke={isCity ? '#000000' : 'none'}
+                      strokeWidth={isCity ? 1 : 0}
                       strokeLinejoin="round"
                       cursor="pointer"
-                      onClick={() => { setPendingCalcLocation(county.cityName); setCalcLocation(county.cityName); }}
-                      onMouseEnter={(e) => handleMouseEnter(county.cityName, cityLoc ?? null, e)}
+                      onClick={(e) => {
+                        if (isCity) {
+                          setPendingCalcLocation(county.cityName);
+                          setCalcLocation(county.cityName);
+                        } else {
+                          handleWealthStateClick(stateName, e as ReactMouseEvent<SVGPathElement>);
+                        }
+                      }}
+                      onMouseEnter={(e) => handleMouseEnter(displayName, loc ?? null, e)}
                       onMouseMove={handleMouseMove}
                       onMouseLeave={handleMouseLeave}
                       className="transition-opacity hover:opacity-80"
                     />
                   );
                 })}
+                {/* State borders — white outlines, non-interactive */}
+                {statePaths.map((state, i) => (
+                  <path
+                    key={`state-border-${i}`}
+                    d={state.d}
+                    fill="none"
+                    stroke="#FFFFFF"
+                    strokeWidth={0.75}
+                    strokeLinejoin="round"
+                    pointerEvents="none"
+                  />
+                ))}
                 {/* Nation outline — black border around entire country */}
                 <path
                   d={nationPath.d}

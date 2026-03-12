@@ -18,19 +18,19 @@ const statePaths = statePathsData as { fips: string; name: string; d: string }[]
 const countyPaths = countyPathsData as { fips: string; stateAbbrev: string; cityName: string; d: string }[];
 const nationPath = nationPathData as { d: string };
 
-const STATE_NAME_TO_ABBREV: Record<string, string> = {
-  'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA',
-  'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE', 'Florida': 'FL', 'Georgia': 'GA',
-  'Hawaii': 'HI', 'Idaho': 'ID', 'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA',
-  'Kansas': 'KS', 'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
-  'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS',
-  'Missouri': 'MO', 'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV',
-  'New Hampshire': 'NH', 'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY',
-  'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH', 'Oklahoma': 'OK',
-  'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
-  'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT', 'Vermont': 'VT',
-  'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY',
-  'District of Columbia': 'DC',
+const ABBREV_TO_STATE_NAME: Record<string, string> = {
+  'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas', 'CA': 'California',
+  'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware', 'FL': 'Florida', 'GA': 'Georgia',
+  'HI': 'Hawaii', 'ID': 'Idaho', 'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa',
+  'KS': 'Kansas', 'KY': 'Kentucky', 'LA': 'Louisiana', 'ME': 'Maine', 'MD': 'Maryland',
+  'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota', 'MS': 'Mississippi',
+  'MO': 'Missouri', 'MT': 'Montana', 'NE': 'Nebraska', 'NV': 'Nevada',
+  'NH': 'New Hampshire', 'NJ': 'New Jersey', 'NM': 'New Mexico', 'NY': 'New York',
+  'NC': 'North Carolina', 'ND': 'North Dakota', 'OH': 'Ohio', 'OK': 'Oklahoma',
+  'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'Rhode Island', 'SC': 'South Carolina',
+  'SD': 'South Dakota', 'TN': 'Tennessee', 'TX': 'Texas', 'UT': 'Utah', 'VT': 'Vermont',
+  'VA': 'Virginia', 'WA': 'Washington', 'WV': 'West Virginia', 'WI': 'Wisconsin', 'WY': 'Wyoming',
+  'DC': 'District of Columbia',
 };
 
 interface USHeatMapProps {
@@ -209,20 +209,32 @@ export default function USHeatMap({
             className="w-full h-auto transition-all duration-500 ease-in-out"
             style={{ maxHeight: '85vh' }}
           >
-            {/* State fills as background */}
-            {statePaths.map((state, i) => {
-              const calc = stateData.get(state.name);
+            {/* All counties — full coverage for hover. City counties use city data; others fall back to state data. */}
+            {countyPaths.map((county) => {
+              const isCity = !!county.cityName;
+              const stateName = ABBREV_TO_STATE_NAME[county.stateAbbrev] || '';
+              const displayName = isCity ? county.cityName : stateName;
+              const calc = isCity
+                ? cityData.get(county.cityName)
+                : stateData.get(stateName);
+              const fill = getFillColor(calc);
               return (
                 <path
-                  key={`state-fill-${i}`}
-                  d={state.d}
-                  fill={getFillColor(calc)}
-                  stroke="#FFFFFF"
-                  strokeWidth={0.75}
+                  key={county.fips}
+                  d={county.d}
+                  fill={fill}
+                  stroke={isCity ? '#000000' : 'none'}
+                  strokeWidth={isCity ? 1 : 0}
                   strokeLinejoin="round"
                   cursor="pointer"
-                  onClick={(e) => handleStateClick(state.name, e)}
-                  onMouseEnter={(e) => handleMouseEnter(state.name, calc ?? null, e)}
+                  onClick={(e) => {
+                    if (isCity) {
+                      onLocationClick(county.cityName);
+                    } else {
+                      handleStateClick(stateName, e as React.MouseEvent<SVGPathElement>);
+                    }
+                  }}
+                  onMouseEnter={(e) => handleMouseEnter(displayName, calc ?? null, e)}
                   onMouseMove={handleMouseMove}
                   onMouseLeave={handleMouseLeave}
                   className="transition-opacity hover:opacity-80"
@@ -230,27 +242,18 @@ export default function USHeatMap({
               );
             })}
 
-            {/* City-county overlays with black borders */}
-            {countyPaths.map((county) => {
-              const cityCalc = cityData.get(county.cityName);
-              const fill = getFillColor(cityCalc);
-              return (
-                <path
-                  key={county.fips}
-                  d={county.d}
-                  fill={fill}
-                  stroke="#000000"
-                  strokeWidth={1}
-                  strokeLinejoin="round"
-                  cursor="pointer"
-                  onClick={() => onLocationClick(county.cityName)}
-                  onMouseEnter={(e) => handleMouseEnter(county.cityName, cityCalc ?? null, e)}
-                  onMouseMove={handleMouseMove}
-                  onMouseLeave={handleMouseLeave}
-                  className="transition-opacity hover:opacity-80"
-                />
-              );
-            })}
+            {/* State borders — white outlines, non-interactive */}
+            {statePaths.map((state, i) => (
+              <path
+                key={`state-border-${i}`}
+                d={state.d}
+                fill="none"
+                stroke="#FFFFFF"
+                strokeWidth={0.75}
+                strokeLinejoin="round"
+                pointerEvents="none"
+              />
+            ))}
 
             {/* Nation outline — black border around entire country */}
             <path
