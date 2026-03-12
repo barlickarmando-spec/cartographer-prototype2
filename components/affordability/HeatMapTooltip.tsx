@@ -1,5 +1,6 @@
 'use client';
 
+import { createPortal } from 'react-dom';
 import { formatCurrency } from '@/lib/utils';
 import { createRatingColorScale } from '@/lib/color-scale';
 import type { LocationCalculation } from '@/hooks/useAffordabilityCalculations';
@@ -16,7 +17,7 @@ const ratingScale = createRatingColorScale();
 export default function HeatMapTooltip({ locationName, data, mode, position }: HeatMapTooltipProps) {
   const ratingColor = ratingScale(data.numericScore);
 
-  return (
+  return createPortal(
     <div
       className="fixed z-50 pointer-events-none shadow-2xl min-w-[340px] bg-[#4A90D9]"
       style={{
@@ -77,6 +78,7 @@ export default function HeatMapTooltip({ locationName, data, mode, position }: H
           <p className="text-base text-white/90 mt-4 pt-3 border-t border-white/30 font-medium">Not viable for homeownership</p>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
