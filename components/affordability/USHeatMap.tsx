@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { createRatingColorScale } from '@/lib/color-scale';
 import statePathsData from '@/lib/us-atlas-state-paths.json';
 import countyPathsData from '@/lib/us-county-paths.json';
@@ -61,6 +61,7 @@ export default function USHeatMap({
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [zoomedState, setZoomedState] = useState<string | null>(null);
   const [viewBox, setViewBox] = useState(DEFAULT_VIEWBOX);
+  const svgRef = useRef<SVGSVGElement>(null);
   const ratingScale = useMemo(() => createRatingColorScale(), []);
 
   const getFillColor = useCallback(
@@ -92,12 +93,13 @@ export default function USHeatMap({
     (stateName: string, e: React.MouseEvent<SVGPathElement>) => {
       e.stopPropagation();
       if (zoomedState) {
-        // Already zoomed — clicking navigates to location
         onLocationClick(stateName);
         return;
       }
-      const pathEl = e.currentTarget;
-      const bbox = pathEl.getBBox();
+      // Find the state fill path (not the clicked county) to get full state bounds
+      const stateEl = svgRef.current?.querySelector(`[data-state="${stateName}"]`) as SVGPathElement | null;
+      if (!stateEl) return;
+      const bbox = stateEl.getBBox();
       const padding = 20;
       const x = bbox.x - padding;
       const y = bbox.y - padding;
@@ -205,6 +207,7 @@ export default function USHeatMap({
           )}
 
           <svg
+            ref={svgRef}
             viewBox={viewBox}
             className="w-full h-auto transition-all duration-500 ease-in-out"
             style={{ maxHeight: '85vh' }}
@@ -215,6 +218,7 @@ export default function USHeatMap({
               return (
                 <path
                   key={`state-fill-${i}`}
+                  data-state={state.name}
                   d={state.d}
                   fill={getFillColor(calc)}
                   stroke="#FFFFFF"

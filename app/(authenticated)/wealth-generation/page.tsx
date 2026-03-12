@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, type MouseEvent as ReactMouseEvent } from 'react';
+import { useState, useMemo, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWealthCalculations } from '@/hooks/useWealthCalculations';
 import { calculateAutoApproach, CalculationResult } from '@/lib/calculation-engine';
@@ -87,17 +87,19 @@ export default function WealthGenerationPage() {
   // In-place state zoom
   const [wealthZoomedState, setWealthZoomedState] = useState<string | null>(null);
   const [wealthViewBox, setWealthViewBox] = useState(`0 0 ${WIDTH} ${HEIGHT}`);
+  const wealthSvgRef = useRef<SVGSVGElement>(null);
 
   const handleWealthStateClick = useCallback((stateName: string, e: ReactMouseEvent<SVGPathElement>) => {
     e.stopPropagation();
     if (wealthZoomedState) {
-      // Already zoomed — clicking navigates
       setPendingCalcLocation(stateName);
       setCalcLocation(stateName);
       return;
     }
-    const pathEl = e.currentTarget;
-    const bbox = pathEl.getBBox();
+    // Find the state fill path (not the clicked county) to get full state bounds
+    const stateEl = wealthSvgRef.current?.querySelector(`[data-state="${stateName}"]`) as SVGPathElement | null;
+    if (!stateEl) return;
+    const bbox = stateEl.getBBox();
     const padding = 20;
     const x = bbox.x - padding;
     const y = bbox.y - padding;
@@ -468,13 +470,14 @@ export default function WealthGenerationPage() {
                   </span>
                 </div>
               )}
-              <svg viewBox={wealthViewBox} className="w-full h-auto transition-all duration-500 ease-in-out" style={{ maxHeight: '75vh' }}>
+              <svg ref={wealthSvgRef} viewBox={wealthViewBox} className="w-full h-auto transition-all duration-500 ease-in-out" style={{ maxHeight: '75vh' }}>
                 {/* State fills — visual background with no gaps */}
                 {statePaths.map((state, i) => {
                   const loc = stateData.get(state.name);
                   return (
                     <path
                       key={`state-fill-${i}`}
+                      data-state={state.name}
                       d={state.d}
                       fill={getColor(loc)}
                       stroke="#FFFFFF"
