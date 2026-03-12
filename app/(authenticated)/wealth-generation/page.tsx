@@ -53,7 +53,7 @@ const COMPARE_COLORS = [
 
 interface TooltipState {
   name: string;
-  data: LocationWealth;
+  data: LocationWealth | null;
   rating: number;
   position: { x: number; y: number };
 }
@@ -262,8 +262,8 @@ export default function WealthGenerationPage() {
   }, [getHeatValue, minVal, maxVal]);
 
   const handleMouseEnter = useCallback(
-    (name: string, data: LocationWealth, e: ReactMouseEvent) => {
-      setTooltip({ name, data, rating: getStarRating(data), position: { x: e.clientX, y: e.clientY } });
+    (name: string, data: LocationWealth | null, e: ReactMouseEvent) => {
+      setTooltip({ name, data, rating: data ? getStarRating(data) : 0, position: { x: e.clientX, y: e.clientY } });
     },
     [getStarRating]
   );
@@ -482,7 +482,7 @@ export default function WealthGenerationPage() {
                       strokeLinejoin="round"
                       cursor="pointer"
                       onClick={(e) => handleWealthStateClick(state.name, e)}
-                      onMouseEnter={(e) => { if (loc) handleMouseEnter(state.name, loc, e); }}
+                      onMouseEnter={(e) => handleMouseEnter(state.name, loc ?? null, e)}
                       onMouseMove={handleMouseMove}
                       onMouseLeave={handleMouseLeave}
                       className="transition-opacity hover:opacity-80"
@@ -502,7 +502,7 @@ export default function WealthGenerationPage() {
                       strokeLinejoin="round"
                       cursor="pointer"
                       onClick={() => { setPendingCalcLocation(county.cityName); setCalcLocation(county.cityName); }}
-                      onMouseEnter={(e) => { if (cityLoc) handleMouseEnter(county.cityName, cityLoc, e); }}
+                      onMouseEnter={(e) => handleMouseEnter(county.cityName, cityLoc ?? null, e)}
                       onMouseMove={handleMouseMove}
                       onMouseLeave={handleMouseLeave}
                       className="transition-opacity hover:opacity-80"

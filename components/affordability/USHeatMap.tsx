@@ -45,7 +45,7 @@ interface USHeatMapProps {
 
 interface TooltipState {
   name: string;
-  data: LocationCalculation;
+  data: LocationCalculation | null;
   position: { x: number; y: number };
 }
 
@@ -72,7 +72,7 @@ export default function USHeatMap({
   );
 
   const handleMouseEnter = useCallback(
-    (name: string, data: LocationCalculation, e: React.MouseEvent) => {
+    (name: string, data: LocationCalculation | null, e: React.MouseEvent) => {
       setTooltip({ name, data, position: { x: e.clientX, y: e.clientY } });
     },
     []
@@ -222,9 +222,7 @@ export default function USHeatMap({
                   strokeLinejoin="round"
                   cursor="pointer"
                   onClick={(e) => handleStateClick(state.name, e)}
-                  onMouseEnter={(e) => {
-                    if (calc) handleMouseEnter(state.name, calc, e);
-                  }}
+                  onMouseEnter={(e) => handleMouseEnter(state.name, calc ?? null, e)}
                   onMouseMove={handleMouseMove}
                   onMouseLeave={handleMouseLeave}
                   className="transition-opacity hover:opacity-80"
@@ -246,9 +244,7 @@ export default function USHeatMap({
                   strokeLinejoin="round"
                   cursor="pointer"
                   onClick={() => onLocationClick(county.cityName)}
-                  onMouseEnter={(e) => {
-                    if (cityCalc) handleMouseEnter(county.cityName, cityCalc, e);
-                  }}
+                  onMouseEnter={(e) => handleMouseEnter(county.cityName, cityCalc ?? null, e)}
                   onMouseMove={handleMouseMove}
                   onMouseLeave={handleMouseLeave}
                   className="transition-opacity hover:opacity-80"

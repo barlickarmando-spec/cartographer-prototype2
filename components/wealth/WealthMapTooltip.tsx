@@ -7,7 +7,7 @@ import type { MapMode } from './types';
 
 interface WealthMapTooltipProps {
   locationName: string;
-  data: LocationWealth;
+  data: LocationWealth | null;
   mode: MapMode;
   rating: number; // 0-5 star rating
   position: { x: number; y: number };
@@ -32,16 +32,16 @@ function StarRow({ rating }: { rating: number }) {
 }
 
 export default function WealthMapTooltip({ locationName, data, mode, rating, position }: WealthMapTooltipProps) {
-  const viabilityLabel = !data.isViable
+  const viabilityLabel = !data || !data.isViable
     ? 'Not Viable'
     : rating >= 4 ? 'Excellent' : rating >= 3 ? 'Strong' : rating >= 2 ? 'Fair' : 'Low';
-  const viabilityBg = !data.isViable
+  const viabilityBg = !data || !data.isViable
     ? 'bg-red-400/30'
     : rating >= 4 ? 'bg-green-400/30' : rating >= 3 ? 'bg-blue-400/30' : rating >= 2 ? 'bg-yellow-400/30' : 'bg-red-400/30';
 
   return createPortal(
     <div
-      className="fixed z-50 pointer-events-none shadow-2xl min-w-[320px] bg-[#4A90D9]"
+      className="fixed z-[9999] pointer-events-none shadow-2xl min-w-[320px] bg-[#4A90D9] rounded-lg"
       style={{
         left: position.x + 16,
         top: position.y - 12,
@@ -56,7 +56,7 @@ export default function WealthMapTooltip({ locationName, data, mode, rating, pos
           </span>
         </div>
 
-        {data.isViable ? (
+        {data && data.isViable ? (
           <div className="space-y-3 text-base">
             <div className="flex justify-between items-center gap-8">
               <span className="text-white/80">Rating</span>
@@ -83,8 +83,10 @@ export default function WealthMapTooltip({ locationName, data, mode, rating, pos
               <span className="font-semibold text-white">{formatCurrency(data.totalEffectiveWealth)}</span>
             </div>
           </div>
-        ) : (
+        ) : data ? (
           <p className="text-base text-white/90 font-medium">Not viable for homeownership</p>
+        ) : (
+          <p className="text-base text-white/80">Loading data...</p>
         )}
       </div>
     </div>,
