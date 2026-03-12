@@ -38,12 +38,7 @@ export default function HomeAffordabilityPage() {
       if (!saved.includes(locationName)) {
         setSavedLocations([...saved, locationName]);
       }
-      try {
-        localStorage.setItem('active-profile-location', locationName);
-      } catch {
-        /* ignore */
-      }
-      router.push('/profile');
+      router.push(`/location/${encodeURIComponent(locationName.replace(/ /g, '-'))}`);
     },
     [router]
   );

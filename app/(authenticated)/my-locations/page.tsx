@@ -568,7 +568,7 @@ function LocationCard({
         {/* View Detailed Analysis Button */}
         <div className="px-6 pb-5 pt-2 bg-[#FAFBFC]">
           <Link
-            href="/profile"
+            href={`/location/${encodeURIComponent(result.location.replace(/ /g, '-'))}`}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#7C3AED] text-white rounded-xl hover:bg-[#6D28D9] transition-colors text-sm font-semibold"
           >
             View Detailed Analysis
