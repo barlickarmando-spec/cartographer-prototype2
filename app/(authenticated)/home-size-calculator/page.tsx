@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { CalculationResult, calculateAutoApproach } from '@/lib/calculation-engine';
+import { CalculationResult, calculateAutoApproach, calculateProjectionForYear } from '@/lib/calculation-engine';
 import { formatCurrency } from '@/lib/utils';
 import { normalizeOnboardingAnswers } from '@/lib/onboarding/normalize';
 import { getOnboardingAnswers, getSavedLocations } from '@/lib/storage';
@@ -228,35 +228,18 @@ export default function HomeSizeCalculatorPage() {
             return;
           }
 
-          const proj = result.houseProjections;
-          // Find the closest projection or interpolate
+          // Use the same calculateProjectionForYear as the profile page
+          // for consistent results across the app
+          const projection = calculateProjectionForYear(
+            years,
+            profile,
+            result.locationData,
+            result.yearByYear
+          );
+
           let baseHomeValue = 0;
-          if (years <= 3 && proj.threeYears?.canAfford) {
-            baseHomeValue = proj.threeYears.maxSustainableHousePrice * (years / 3);
-          } else if (years <= 5 && proj.fiveYears?.canAfford) {
-            baseHomeValue = proj.fiveYears.maxSustainableHousePrice * (years / 5);
-          } else if (years <= 10 && proj.tenYears?.canAfford) {
-            baseHomeValue = proj.tenYears.maxSustainableHousePrice * (years / 10);
-          } else if (years <= 15 && proj.fifteenYears?.canAfford) {
-            baseHomeValue = proj.fifteenYears.maxSustainableHousePrice * (years / 15);
-          } else if (proj.maxAffordable?.canAfford) {
-            const maxYears = proj.maxAffordable.year;
-            baseHomeValue = proj.maxAffordable.maxSustainableHousePrice * Math.min(1, years / maxYears);
-          }
-
-          // More accurate: recalculate using simulation year
-          const simulation = result.yearByYear;
-          const targetYear = Math.min(Math.ceil(years), simulation.length);
-          const snapshot = simulation[targetYear - 1] || simulation[simulation.length - 1];
-          if (snapshot) {
-            const savings = snapshot.savingsNoMortgage;
-            const roughHomeValue = savings / 0.15;
-            if (roughHomeValue > baseHomeValue) baseHomeValue = roughHomeValue;
-          }
-
-          // Use the actual projection if available
-          if (proj.maxAffordable?.canAfford && years >= proj.maxAffordable.year) {
-            baseHomeValue = proj.maxAffordable.maxSustainableHousePrice;
+          if (projection) {
+            baseHomeValue = projection.maxSustainableHousePrice;
           }
 
           // Generate per-quality results
@@ -295,16 +278,18 @@ export default function HomeSizeCalculatorPage() {
             const multiplier = getQualityMultiplier(quality);
             const targetPrice = targetSqft * pricePerSqft * multiplier;
 
-            // Find the year where savings reach enough for this price
+            // Use calculateProjectionForYear to find the year where you can
+            // afford the target price — same formula as profile page
             let foundYear = -1;
-            for (const snap of result.yearByYear) {
-              const savings = snap.savingsNoMortgage;
-              const downPayment = targetPrice * 0.107; // typical down payment
-              const annualMortgage = (targetPrice - downPayment) * 0.08; // rough annual cost
-              const annualDI = snap.disposableIncome * (profile.disposableIncomeAllocation / 100);
-
-              if (savings >= downPayment && annualDI >= annualMortgage * 0.8) {
-                foundYear = snap.year;
+            for (let y = 1; y <= result.yearByYear.length; y++) {
+              const projection = calculateProjectionForYear(
+                y,
+                profile,
+                result.locationData,
+                result.yearByYear
+              );
+              if (projection && projection.maxSustainableHousePrice >= targetPrice) {
+                foundYear = y;
                 break;
               }
             }
