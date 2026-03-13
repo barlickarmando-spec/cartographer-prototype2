@@ -9,11 +9,9 @@ import { getStateNameFromLocation } from '@/lib/state-flags';
 
 function getLabelColor(label: string): { text: string; bg: string; ring: string } {
   switch (label) {
-    case 'Exceptional': return { text: 'text-emerald-700', bg: 'bg-emerald-50', ring: 'ring-emerald-200' };
-    case 'Strong': return { text: 'text-green-700', bg: 'bg-green-50', ring: 'ring-green-200' };
+    case 'Great': return { text: 'text-emerald-700', bg: 'bg-emerald-50', ring: 'ring-emerald-200' };
     case 'Good': return { text: 'text-blue-700', bg: 'bg-blue-50', ring: 'ring-blue-200' };
     case 'Mixed': return { text: 'text-amber-700', bg: 'bg-amber-50', ring: 'ring-amber-200' };
-    case 'Challenged': return { text: 'text-orange-700', bg: 'bg-orange-50', ring: 'ring-orange-200' };
     default: return { text: 'text-red-700', bg: 'bg-red-50', ring: 'ring-red-200' };
   }
 }

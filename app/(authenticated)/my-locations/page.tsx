@@ -502,14 +502,13 @@ function LocationCard({
               </div>
               <span className="text-xs font-medium text-gray-500">Quality of Life</span>
             </div>
-            <p className="pl-9 flex items-center gap-2">
+            <p className="pl-9">
               <span
                 className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold"
                 style={{ backgroundColor: qol.bgColor, color: qol.color }}
               >
                 {qol.label}
               </span>
-              {qol.score > 0 && <span className="text-xs font-bold" style={{ color: qol.color }}>{qol.score.toFixed(0)}/100</span>}
             </p>
           </div>
 

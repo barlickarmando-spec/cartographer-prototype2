@@ -308,12 +308,10 @@ function personalizeCategory(
 // ---------------------------------------------------------------------------
 
 export function getQoLLabel(score: number): string {
-  if (score >= 90) return 'Exceptional';
-  if (score >= 80) return 'Strong';
-  if (score >= 70) return 'Good';
-  if (score >= 60) return 'Mixed';
-  if (score >= 50) return 'Challenged';
-  return 'Severe constraints';
+  if (score >= 80) return 'Great';
+  if (score >= 65) return 'Good';
+  if (score >= 50) return 'Mixed';
+  return 'Low';
 }
 
 function generateSummary(
