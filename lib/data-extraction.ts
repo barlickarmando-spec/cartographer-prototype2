@@ -89,21 +89,77 @@ export interface LocationData {
 }
 
 /**
+ * Maps city names to their state codes for fallback to state-level data
+ * when the city isn't in our city-level dataset.
+ */
+const CITY_STATE_FALLBACK: Record<string, string> = {
+  'el paso': 'Texas',
+};
+
+/**
  * Get location data for a specific state or city
  * @param locationName - Can be "Utah", "Austin", "Austin, TX", etc.
  */
 export function getLocationData(locationName: string): LocationData | null {
   // Clean up input
   const cleanName = locationName.trim();
-  
-  // Try to find as state first (Tab A + Tab C)
-  const stateDataResult = findStateData(cleanName);
-  if (stateDataResult) return stateDataResult;
-  
-  // Try to find as city (Tab B + Tab C)
-  const cityDataResult = findCityData(cleanName);
-  if (cityDataResult) return cityDataResult;
-  
+
+  // If input has a comma (e.g. "New York, NY") or matches a known city alias,
+  // try city first to avoid confusing city with same-named state
+  const searchCity = cleanName.includes(',') ? cleanName.split(',')[0].trim() : cleanName;
+  const isKnownCityAlias = !!CITY_ALIASES[searchCity.toLowerCase()];
+  const hasComma = cleanName.includes(',');
+
+  if (hasComma || isKnownCityAlias) {
+    const cityDataResult = findCityData(cleanName);
+    if (cityDataResult) return cityDataResult;
+
+    const stateDataResult = findStateData(cleanName);
+    if (stateDataResult) return stateDataResult;
+  } else {
+    // Try state first, then city (original order)
+    const stateDataResult = findStateData(cleanName);
+    if (stateDataResult) return stateDataResult;
+
+    const cityDataResult = findCityData(cleanName);
+    if (cityDataResult) return cityDataResult;
+  }
+
+  // Fallback: if a city has no city-level data, use its parent state data
+  let fallbackState = CITY_STATE_FALLBACK[cleanName.toLowerCase()];
+  if (!fallbackState && cleanName.includes(',')) {
+    // Try "City, ST" format — resolve state abbreviation to full name
+    const stateAbbrev = cleanName.split(',').pop()?.trim();
+    if (stateAbbrev) {
+      const stateNames: Record<string, string> = {
+        'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas',
+        'CA': 'California', 'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware',
+        'FL': 'Florida', 'GA': 'Georgia', 'HI': 'Hawaii', 'ID': 'Idaho',
+        'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa', 'KS': 'Kansas',
+        'KY': 'Kentucky', 'LA': 'Louisiana', 'ME': 'Maine', 'MD': 'Maryland',
+        'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota', 'MS': 'Mississippi',
+        'MO': 'Missouri', 'MT': 'Montana', 'NE': 'Nebraska', 'NV': 'Nevada',
+        'NH': 'New Hampshire', 'NJ': 'New Jersey', 'NM': 'New Mexico', 'NY': 'New York',
+        'NC': 'North Carolina', 'ND': 'North Dakota', 'OH': 'Ohio', 'OK': 'Oklahoma',
+        'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'Rhode Island', 'SC': 'South Carolina',
+        'SD': 'South Dakota', 'TN': 'Tennessee', 'TX': 'Texas', 'UT': 'Utah',
+        'VT': 'Vermont', 'VA': 'Virginia', 'WA': 'Washington', 'WV': 'West Virginia',
+        'WI': 'Wisconsin', 'WY': 'Wyoming', 'DC': 'District of Columbia',
+      };
+      fallbackState = stateNames[stateAbbrev.toUpperCase()] || stateAbbrev;
+    }
+  }
+  if (fallbackState) {
+    const fallback = findStateData(fallbackState);
+    if (fallback) {
+      // Override name/displayName to show the city, not the state
+      fallback.name = cleanName.includes(',') ? cleanName.split(',')[0].trim() : cleanName;
+      fallback.displayName = cleanName;
+      fallback.type = 'city';
+      return fallback;
+    }
+  }
+
   console.error(`Could not find data for location: ${locationName}`);
   return null;
 }
@@ -115,15 +171,15 @@ function findStateData(stateName: string): LocationData | null {
   const data = stateData as any;
   
   // Tab A: State affordability/salary data
-  const affordabilityData = data.rough_affordability_model?.find((item: any) => 
-    item.State?.toLowerCase() === stateName.toLowerCase()
+  const affordabilityData = data.rough_affordability_model?.find((item: any) =>
+    item.State?.trim().toLowerCase() === stateName.toLowerCase()
   );
-  
+
   // Tab C: State housing/COL data
   const housingData = data.rough_housing_model?.find((item: any) =>
     item.Classification === 'State' &&
-    (item['City/State']?.toLowerCase() === stateName.toLowerCase() ||
-     item.State?.toLowerCase() === stateName.toLowerCase())
+    (item['City/State']?.trim().toLowerCase() === stateName.toLowerCase() ||
+     item.State?.trim().toLowerCase() === stateName.toLowerCase())
   );
   
   if (!affordabilityData || !housingData) {
@@ -134,45 +190,86 @@ function findStateData(stateName: string): LocationData | null {
 }
 
 /**
+ * City name aliases: maps display/search names to the actual names used in each data tab.
+ * Some cities use different names in Tab B (affordability) vs Tab C (housing).
+ * Format: { displayName: { tabB: 'Tab B name', tabC: 'Tab C name' } }
+ */
+const CITY_ALIASES: Record<string, { tabB?: string; tabC?: string; state?: string }> = {
+  'anaheim':        { tabB: 'Orange County',      tabC: 'Anaheim',        state: 'CA' },
+  'orange county':  { tabB: 'Orange County',      tabC: 'Anaheim',        state: 'CA' },
+  'fort lauderdale':{ tabB: 'Broward/Palm Beach',  tabC: 'Fort Lauderdale', state: 'FL' },
+  'broward':        { tabB: 'Broward/Palm Beach',  tabC: 'Fort Lauderdale', state: 'FL' },
+  'broward/palm beach': { tabB: 'Broward/Palm Beach', tabC: 'Fort Lauderdale', state: 'FL' },
+  'miami-dade':     { tabB: 'Miami',              tabC: 'Miami',           state: 'FL' },
+  'miami dade':     { tabB: 'Miami',              tabC: 'Miami',           state: 'FL' },
+  'new york city':  { tabB: 'New York',           tabC: 'New York City',   state: 'NY' },
+  'nyc':            { tabB: 'New York',           tabC: 'New York City',   state: 'NY' },
+};
+
+/**
  * Find city data from Tab B (city affordability) + Tab C (city housing)
  */
 function findCityData(cityName: string): LocationData | null {
   const data = stateData as any;
-  
+
   // Handle "City, ST" format
   let searchCity = cityName;
   let parentState: string | undefined;
-  
+
   if (cityName.includes(',')) {
     const parts = cityName.split(',').map(p => p.trim());
     searchCity = parts[0];
     parentState = parts[1];
   }
-  
-  // Tab B: City affordability/salary data
+
+  // Check aliases for cross-tab name mismatches
+  const alias = CITY_ALIASES[searchCity.toLowerCase()];
+  const tabBName = alias?.tabB || searchCity;
+  const tabCName = alias?.tabC || searchCity;
+  if (alias?.state && !parentState) {
+    parentState = alias.state;
+  }
+
+  // Tab B: City affordability/salary data (try alias name, then original)
   const affordabilityData = data.rough_affordability_model_citie?.find((item: any) => {
-    const cityMatch = item['City/County']?.toLowerCase() === searchCity.toLowerCase();
+    const itemCity = item['City/County']?.trim()?.toLowerCase();
+    const cityMatch = itemCity === tabBName.toLowerCase() || itemCity === searchCity.toLowerCase();
     if (!parentState) return cityMatch;
     const stateMatch = item.State?.toLowerCase() === parentState.toLowerCase() ||
                        item.State === parentState;
     return cityMatch && stateMatch;
   });
-  
-  // Tab C: City housing/COL data
+
+  // Tab C: City housing/COL data (try alias name, then original)
   const housingData = data.rough_housing_model?.find((item: any) => {
     if (item.Classification !== 'City') return false;
-    const cityMatch = item['City/State']?.toLowerCase() === searchCity.toLowerCase();
+    const itemCity = item['City/State']?.trim()?.toLowerCase();
+    const cityMatch = itemCity === tabCName.toLowerCase() || itemCity === searchCity.toLowerCase();
     if (!parentState) return cityMatch;
     const stateMatch = item.State?.toLowerCase() === parentState.toLowerCase() ||
                        item.State === parentState;
     return cityMatch && stateMatch;
   });
-  
-  if (!affordabilityData || !housingData) {
+
+  // If Tab B matched but Tab C didn't, try Tab C with "{city} City" variant
+  // (handles "New York" in Tab B → "New York City" in Tab C)
+  let resolvedHousing = housingData;
+  if (affordabilityData && !housingData) {
+    resolvedHousing = data.rough_housing_model?.find((item: any) => {
+      if (item.Classification !== 'City') return false;
+      const itemCity = item['City/State']?.trim()?.toLowerCase();
+      const cityWithSuffix = searchCity.toLowerCase() + ' city';
+      if (itemCity !== cityWithSuffix) return false;
+      if (!parentState) return true;
+      return item.State?.toLowerCase() === parentState.toLowerCase() || item.State === parentState;
+    });
+  }
+
+  if (!affordabilityData || !resolvedHousing) {
     return null;
   }
-  
-  return buildLocationData(affordabilityData, housingData, 'city', searchCity, housingData.State);
+
+  return buildLocationData(affordabilityData, resolvedHousing, 'city', searchCity, resolvedHousing.State?.trim());
 }
 
 /**

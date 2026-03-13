@@ -144,7 +144,11 @@ export default function SimpleHomeCarousel({
     async function fetchHomes() {
       setLoading(true);
       setError(false);
+      setHomes([]);
       setGoogleImages([]);
+      setCurrentPage(0);
+      setSource('');
+      setTotalAvailable(0);
 
       try {
         const res = await fetch('/api/homes/search', {
@@ -158,11 +162,18 @@ export default function SimpleHomeCarousel({
 
         if (!cancelled) {
           if (data.success && data.homes && data.homes.length > 0) {
+            // Deduplicate by id
+            const seen = new Set<string>();
+            const unique = (data.homes as Home[]).filter((h) => {
+              if (seen.has(h.id)) return false;
+              seen.add(h.id);
+              return true;
+            });
             // Prefer homes with photos, but keep all real listings
-            const withPhotos = data.homes.filter(
+            const withPhotos = unique.filter(
               (h: Home) => h.photoUrl && h.photoUrl.startsWith('http')
             );
-            const allHomes = withPhotos.length > 0 ? withPhotos : data.homes;
+            const allHomes = withPhotos.length > 0 ? withPhotos : unique;
             setHomes(allHomes.slice(0, MAX_HOMES));
             setSource(data.source || '');
             setTotalAvailable(data.totalAvailable || allHomes.length);
@@ -587,8 +598,6 @@ function CompactHomeCard({ home, index, onClick }: { home: Home; index: number; 
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={home.photoUrl}
-            srcSet={home.fullResPhotoUrl ? `${home.photoUrl} 1280w, ${home.fullResPhotoUrl} 1920w` : undefined}
-            sizes="(max-width: 640px) 100vw, 50vw"
             alt={`Home at ${home.address}`}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             decoding="async"
@@ -672,8 +681,6 @@ function FullScreenCarouselModal({
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
               src={home.fullResPhotoUrl || home.photoUrl}
-              srcSet={home.fullResPhotoUrl ? `${home.photoUrl} 1280w, ${home.fullResPhotoUrl} 1920w` : undefined}
-              sizes="(max-width: 768px) 100vw, 60vw"
               alt={`Home at ${home.address}`}
               className="w-full h-full object-cover"
               decoding="async"

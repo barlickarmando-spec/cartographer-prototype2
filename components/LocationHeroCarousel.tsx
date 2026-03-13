@@ -12,6 +12,7 @@ export default function LocationHeroCarousel({ images: localImages, locationName
   const [current, setCurrent] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
   const [hiResImages, setHiResImages] = useState<LocationImage[] | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [failedSrcs, setFailedSrcs] = useState<Set<string>>(new Set());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -25,9 +26,12 @@ export default function LocationHeroCarousel({ images: localImages, locationName
         const data = await res.json();
         if (!cancelled && data.success && data.images && data.images.length > 0) {
           setHiResImages(data.images);
+          setCurrent(0);
         }
       } catch {
         // Keep using local images
+      } finally {
+        if (!cancelled) setIsLoading(false);
       }
     }
     fetchHiRes();
@@ -104,6 +108,11 @@ export default function LocationHeroCarousel({ images: localImages, locationName
           </div>
         ))}
       </div>
+
+      {/* Loading shimmer while fetching Google images */}
+      {isLoading && !hiResImages && (
+        <div className="absolute inset-0 z-[2] bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-pulse" />
+      )}
 
       {/* Arrow buttons */}
       {count > 1 && (

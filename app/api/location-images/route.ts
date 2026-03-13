@@ -12,50 +12,68 @@ export async function GET(request: NextRequest) {
   const cx = process.env.GOOGLE_SEARCH_ENGINE_ID;
 
   if (!apiKey || !cx) {
+    console.log('[location-images] Missing GOOGLE_API_KEY or GOOGLE_SEARCH_ENGINE_ID');
     return NextResponse.json({ success: true, images: [] });
   }
 
-  const query = `${location} city skyline landscape`;
+  // Try multiple queries in order of specificity for best results
+  const queries = [
+    `${location} city skyline aerial view`,
+    `${location} downtown cityscape`,
+  ];
 
-  const url = new URL('https://www.googleapis.com/customsearch/v1');
-  url.searchParams.set('q', query);
-  url.searchParams.set('searchType', 'image');
-  url.searchParams.set('num', '8');
-  url.searchParams.set('imgSize', 'xlarge');
-  url.searchParams.set('imgType', 'photo');
-  url.searchParams.set('safe', 'active');
-  url.searchParams.set('key', apiKey);
-  url.searchParams.set('cx', cx);
+  for (const query of queries) {
+    const url = new URL('https://www.googleapis.com/customsearch/v1');
+    url.searchParams.set('q', query);
+    url.searchParams.set('searchType', 'image');
+    url.searchParams.set('num', '10');
+    url.searchParams.set('imgSize', 'xlarge');
+    url.searchParams.set('imgType', 'photo');
+    url.searchParams.set('safe', 'active');
+    url.searchParams.set('key', apiKey);
+    url.searchParams.set('cx', cx);
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
 
-  try {
-    const response = await fetch(url.toString(), { signal: controller.signal });
-    clearTimeout(timeout);
+    try {
+      console.log(`[location-images] Fetching: ${query}`);
+      const response = await fetch(url.toString(), { signal: controller.signal });
+      clearTimeout(timeout);
 
-    if (!response.ok) {
-      return NextResponse.json({ success: true, images: [] });
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        console.log(`[location-images] Google API error ${response.status}: ${errText.slice(0, 300)}`);
+        continue;
+      }
+
+      const data = await response.json();
+      console.log(`[location-images] Got ${data.items?.length || 0} raw results for "${query}"`);
+
+      const images = (data.items || [])
+        .filter((item: any) => {
+          const w = item.image?.width || 0;
+          const h = item.image?.height || 0;
+          return w >= 600 && h >= 400;
+        })
+        .slice(0, 8)
+        .map((item: any) => ({
+          src: item.link,
+          alt: item.title || `${location} photo`,
+          width: item.image?.width || 0,
+          height: item.image?.height || 0,
+        }));
+
+      if (images.length > 0) {
+        console.log(`[location-images] Returning ${images.length} images for "${location}"`);
+        return NextResponse.json({ success: true, images });
+      }
+    } catch (e) {
+      clearTimeout(timeout);
+      console.log(`[location-images] Fetch error for "${query}":`, e instanceof Error ? e.message : e);
     }
-
-    const data = await response.json();
-    const images = (data.items || [])
-      .filter((item: any) => {
-        const w = item.image?.width || 0;
-        const h = item.image?.height || 0;
-        return w >= 800 && h >= 500;
-      })
-      .slice(0, 6)
-      .map((item: any) => ({
-        src: item.link,
-        alt: item.title || `${location} photo`,
-        width: item.image?.width || 0,
-        height: item.image?.height || 0,
-      }));
-
-    return NextResponse.json({ success: true, images });
-  } catch {
-    clearTimeout(timeout);
-    return NextResponse.json({ success: true, images: [] });
   }
+
+  console.log(`[location-images] No images found for "${location}"`);
+  return NextResponse.json({ success: true, images: [] });
 }

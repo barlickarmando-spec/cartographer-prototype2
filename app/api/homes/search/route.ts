@@ -4,6 +4,7 @@
 // (auto-complete → properties/v3/list)
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getCitiesRows } from '@/lib/data';
 
 // ── Config ──────────────────────────────────────────────────────────
 const API_KEY = process.env.RAPIDAPI_KEY || '';
@@ -54,6 +55,30 @@ const STATE_CAPITALS: Record<string, string> = {
   'WI': 'Milwaukee', 'WY': 'Cheyenne',
 };
 
+// ── City → State lookup from local database ─────────────────────────
+// Build a map of lowercase city name → state code(s) from the local 151-city DB.
+// This enables resolving cities that aren't state capitals.
+let _cityStateMap: Map<string, string> | null = null;
+
+function getCityStateMap(): Map<string, string> {
+  if (_cityStateMap) return _cityStateMap;
+  _cityStateMap = new Map();
+  try {
+    const rows = getCitiesRows();
+    for (const row of rows) {
+      const city = String(row['City/County'] || row['City'] || row['city'] || '').trim();
+      const state = String(row['State'] || row['state'] || '').trim();
+      if (city && state && state !== 'null') {
+        // Store the canonical city name with its state code
+        _cityStateMap.set(city.toLowerCase(), state.toUpperCase());
+      }
+    }
+  } catch (e) {
+    console.log('[homes/search] Could not load city database:', e instanceof Error ? e.message : e);
+  }
+  return _cityStateMap;
+}
+
 // ── Shared utilities ────────────────────────────────────────────────
 function parseLocation(location: string): { city: string; stateCode: string } {
   const trimmed = location.trim();
@@ -81,33 +106,46 @@ function buildSearchQuery(city: string, stateCode: string): string {
 }
 
 /**
- * Upgrade a photo URL to high resolution.
- * rdcpix CDN supports arbitrary width/height parameters.
- * We request 1280x960 for card display (sharp on 2x Retina).
+ * Upgrade rdcpix photo URL to large resolution for card display.
+ *
+ * rdcpix URL format: ...{hash}{sizeChar}-m{id}{sizeChar}.{ext}
+ * Size chars: s=small(~200px), m=medium, l=large(~1024px), od=original
+ *
+ * Example: ...a6eel-m3288469166s.jpg → ...a6eel-m3288469166od.jpg
  */
 function upgradePhotoUrl(url: string): string {
   if (!url) return url;
-  let upgraded = url.replace(/(-w)\d+/, '$11280');
-  upgraded = upgraded.replace(/(_h)\d+/, '$1960');
+  let upgraded = url;
+  // Remove /thumbs/ path segment (forces thumbnail)
   upgraded = upgraded.replace(/\/thumbs\//, '/');
-  upgraded = upgraded.replace(/([_-])s(\.\w+)$/, '$1l$2');
+  // Replace rdcpix size suffix before extension: "s.jpg" → "od.jpg"
+  // The size char (s/m/l) appears right before the file extension
+  if (upgraded.includes('rdcpix.com')) {
+    upgraded = upgraded.replace(/s(\.\w+)$/, 'od$1');
+  }
+  // Handle explicit width/height query params
   upgraded = upgraded.replace(/([?&])w=\d+/, '$1w=1280');
   upgraded = upgraded.replace(/([?&])h=\d+/, '$1h=960');
+  // Handle -w and _h in path
+  upgraded = upgraded.replace(/(-w)\d+/, '$11280');
+  upgraded = upgraded.replace(/(_h)\d+/, '$1960');
   return upgraded;
 }
 
 /**
- * Get an even higher resolution URL for full-screen / modal display.
- * Targets 1920x1440 for crisp rendering on large screens.
+ * Get highest resolution URL for full-screen / modal display.
  */
 function getFullResPhotoUrl(url: string): string {
   if (!url) return url;
-  let upgraded = url.replace(/(-w)\d+/, '$11920');
-  upgraded = upgraded.replace(/(_h)\d+/, '$11440');
+  let upgraded = url;
   upgraded = upgraded.replace(/\/thumbs\//, '/');
-  upgraded = upgraded.replace(/([_-])s(\.\w+)$/, '$1l$2');
+  if (upgraded.includes('rdcpix.com')) {
+    upgraded = upgraded.replace(/s(\.\w+)$/, 'od$1');
+  }
   upgraded = upgraded.replace(/([?&])w=\d+/, '$1w=1920');
   upgraded = upgraded.replace(/([?&])h=\d+/, '$1h=1440');
+  upgraded = upgraded.replace(/(-w)\d+/, '$11920');
+  upgraded = upgraded.replace(/(_h)\d+/, '$11440');
   return upgraded;
 }
 
@@ -220,15 +258,19 @@ async function autoComplete(query: string): Promise<ResolvedLocation | null> {
   });
 
   if (!res.ok) {
-    console.log(`[homes/search] Auto-complete failed: ${res.status}`);
+    const errText = await res.text().catch(() => '');
+    console.log(`[homes/search] Auto-complete failed: ${res.status} — ${errText.slice(0, 300)}`);
     return null;
   }
 
   const json = await res.json();
-  const autocomplete = json.autocomplete || [];
+  console.log('[homes/search] Auto-complete raw response keys:', Object.keys(json));
+
+  // Try multiple response formats — the API may have changed
+  const autocomplete = json.autocomplete || json.data?.autocomplete || json.results || json.data || [];
 
   if (!Array.isArray(autocomplete) || autocomplete.length === 0) {
-    console.log('[homes/search] Auto-complete returned no results');
+    console.log('[homes/search] Auto-complete returned no results. Raw:', JSON.stringify(json).slice(0, 500));
     return null;
   }
 
@@ -259,6 +301,56 @@ async function autoComplete(query: string): Promise<ResolvedLocation | null> {
   return null;
 }
 
+async function searchByPostalCode(
+  postalCode: string,
+  minPrice: number,
+  maxPrice: number,
+): Promise<{ listings: any[]; totalAvailable: number } | null> {
+  const body = {
+    limit: 200,
+    offset: 0,
+    postal_code: postalCode,
+    status: ['for_sale', 'ready_to_build'],
+    sort: { direction: 'desc', field: 'list_date' },
+    ...(minPrice > 0 || maxPrice < Infinity ? { list_price: { min: minPrice, max: maxPrice } } : {}),
+  };
+
+  try {
+    console.log(`[homes/search] POST /properties/v3/list (postal_code=${postalCode}):`, JSON.stringify(body).slice(0, 200));
+    const res = await fetch(`${API_URL}/properties/v3/list`, {
+      method: 'POST',
+      headers: API_HEADERS,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.log(`[homes/search] Postal code search failed: ${res.status} ${text.slice(0, 200)}`);
+      return null;
+    }
+
+    const json = await res.json();
+    const homeSearch = json.data?.home_search || json.data?.results || {};
+    let results = homeSearch.results || homeSearch || [];
+    if (!Array.isArray(results)) {
+      results = json.data?.properties || json.properties || json.results || json.data || [];
+    }
+    if (!Array.isArray(results)) results = [];
+
+    const total = homeSearch.total || json.data?.total || json.total || results.length;
+    console.log(`[homes/search] Postal code search got ${results.length} listings (${total} total)`);
+
+    if (results.length > 0) {
+      return { listings: results.slice(0, MAX_LISTINGS), totalAvailable: total };
+    }
+  } catch (e) {
+    console.log(`[homes/search] Postal code search error:`, e instanceof Error ? e.message : e);
+  }
+
+  return null;
+}
+
 async function searchListings(
   loc: ResolvedLocation,
   minPrice: number,
@@ -269,18 +361,18 @@ async function searchListings(
     {
       city: loc.city,
       state_code: loc.state_code,
-      status: ['for_sale'],
+      status: ['for_sale', 'ready_to_build'],
       sort: { direction: 'desc', field: 'list_date' },
       list_price: { min: minPrice, max: maxPrice },
-      limit: 42,
+      limit: 200,
       offset: 0,
     },
     {
       city: loc.city,
       state_code: loc.state_code,
-      status: ['for_sale'],
+      status: ['for_sale', 'ready_to_build'],
       sort: { direction: 'desc', field: 'list_date' },
-      limit: 42,
+      limit: 200,
       offset: 0,
     },
   ];
@@ -297,7 +389,8 @@ async function searchListings(
       });
 
       if (!res.ok) {
-        console.log(`[homes/search] List failed: ${res.status}`);
+        const errText = await res.text().catch(() => '');
+        console.log(`[homes/search] List failed: ${res.status} — ${errText.slice(0, 300)}`);
         continue;
       }
 
@@ -353,19 +446,97 @@ export async function POST(request: NextRequest) {
     let listings: any[] = [];
     let totalAvailable = 0;
 
+    // ── Try to detect if location looks like a zip code ──
+    const isZipCode = /^\d{5}$/.test(location.trim());
+    debug.isZipCode = isZipCode;
+
     // ── Resolve location and search ──
     try {
       console.log('[homes/search] Searching realty-in-us...');
-      const resolved = await autoComplete(searchQuery);
-      debug.resolved = resolved;
 
-      if (resolved) {
-        const result = await searchListings(resolved, minPrice, maxPrice);
+      // Strategy 1: If it's a zip code, try postal_code search directly first
+      if (isZipCode) {
+        console.log(`[homes/search] Detected zip code: ${location.trim()}, trying postal_code search...`);
+        const postalResult = await searchByPostalCode(location.trim(), minPrice, maxPrice);
+        if (postalResult && postalResult.listings.length > 0) {
+          listings = postalResult.listings;
+          totalAvailable = postalResult.totalAvailable;
+          debug.searchMethod = 'postal_code_direct';
+        }
+      }
+
+      // Strategy 2: Auto-complete → city/state search
+      if (listings.length === 0) {
+        const resolved = await autoComplete(searchQuery);
+        debug.resolved = resolved;
+
+        if (resolved) {
+          const result = await searchListings(resolved, minPrice, maxPrice);
+          if (result && result.listings.length > 0) {
+            listings = result.listings;
+            totalAvailable = result.totalAvailable;
+            debug.searchMethod = 'city_state';
+          }
+        }
+      }
+
+      // Strategy 3: Skip auto-complete, try direct city/state from parsed location
+      if (listings.length === 0 && city && stateCode) {
+        console.log(`[homes/search] Auto-complete failed, trying direct city/state: ${city}, ${stateCode}`);
+        const result = await searchListings({ city, state_code: stateCode }, minPrice, maxPrice);
         if (result && result.listings.length > 0) {
           listings = result.listings;
           totalAvailable = result.totalAvailable;
+          debug.searchMethod = 'city_state_direct';
         }
       }
+
+      // Strategy 4: Try with just the city name and guess state from capitals/common cities
+      if (listings.length === 0 && city && !stateCode) {
+        // Try looking up the city in state capitals to guess the state
+        for (const [code, capitalCity] of Object.entries(STATE_CAPITALS)) {
+          if (capitalCity.toLowerCase() === city.toLowerCase()) {
+            console.log(`[homes/search] Trying capital match: ${capitalCity}, ${code}`);
+            const result = await searchListings({ city: capitalCity, state_code: code }, minPrice, maxPrice);
+            if (result && result.listings.length > 0) {
+              listings = result.listings;
+              totalAvailable = result.totalAvailable;
+              debug.searchMethod = 'capital_match';
+              break;
+            }
+          }
+        }
+      }
+
+      // Strategy 4b: Look up city in local database (151 cities with state codes)
+      if (listings.length === 0 && city && !stateCode) {
+        const cityMap = getCityStateMap();
+        const lookupState = cityMap.get(city.toLowerCase());
+        if (lookupState) {
+          console.log(`[homes/search] Local DB match: ${city}, ${lookupState}`);
+          const result = await searchListings({ city, state_code: lookupState }, minPrice, maxPrice);
+          if (result && result.listings.length > 0) {
+            listings = result.listings;
+            totalAvailable = result.totalAvailable;
+            debug.searchMethod = 'local_db_match';
+          }
+        }
+      }
+
+      // Strategy 5: If auto-complete failed but we can extract a zip from the location, try postal_code
+      if (listings.length === 0 && !isZipCode) {
+        const zipMatch = location.match(/\b(\d{5})\b/);
+        if (zipMatch) {
+          console.log(`[homes/search] City/state search failed, trying extracted zip: ${zipMatch[1]}`);
+          const postalResult = await searchByPostalCode(zipMatch[1], minPrice, maxPrice);
+          if (postalResult && postalResult.listings.length > 0) {
+            listings = postalResult.listings;
+            totalAvailable = postalResult.totalAvailable;
+            debug.searchMethod = 'postal_code_extracted';
+          }
+        }
+      }
+
       debug.listingCount = listings.length;
     } catch (e) {
       console.log('[homes/search] API error:', e instanceof Error ? e.message : e);
@@ -458,22 +629,81 @@ export async function GET(request: NextRequest) {
   if (testLocation) {
     const { city, stateCode } = parseLocation(testLocation);
     const searchQuery = buildSearchQuery(city, stateCode);
+    const isZipCode = /^\d{5}$/.test(testLocation.trim());
     const steps: any[] = [];
+    let foundListings = false;
 
     try {
+      // Test 1: Auto-complete
       const resolved = await autoComplete(searchQuery);
-      steps.push({ step: 'auto-complete', resolved });
+      steps.push({ step: '1-auto-complete', resolved, status: resolved ? 'OK' : 'FAILED' });
 
+      // Test 2: City/state search (if auto-complete worked)
       if (resolved) {
         const result = await searchListings(resolved, 100000, 500000);
         const firstListing = result?.listings?.[0];
         steps.push({
-          step: 'properties-list',
+          step: '2-city-state-search',
+          status: result && result.listings.length > 0 ? 'OK' : 'NO_RESULTS',
           totalAvailable: result?.totalAvailable,
           listingCount: result?.listings?.length || 0,
           samplePhotoRaw: firstListing?.primary_photo?.href || 'none',
-          samplePhotoUpgraded: firstListing?.primary_photo?.href ? upgradePhotoUrl(firstListing.primary_photo.href) : 'none',
+          sampleKeys: firstListing ? Object.keys(firstListing).slice(0, 15) : [],
         });
+        if (result && result.listings.length > 0) foundListings = true;
+      }
+
+      // Test 3: Direct city/state (bypassing auto-complete)
+      if (!foundListings && city) {
+        const directState = stateCode || (STATE_CAPITALS[stateCode] ? stateCode : '');
+        // Try to find the state from capitals
+        let tryCity = city;
+        let tryState = stateCode;
+        if (!tryState) {
+          for (const [code, capitalCity] of Object.entries(STATE_CAPITALS)) {
+            if (capitalCity.toLowerCase() === city.toLowerCase()) {
+              tryState = code;
+              tryCity = capitalCity;
+              break;
+            }
+          }
+        }
+        // Also try local city database
+        if (!tryState) {
+          const cityMap = getCityStateMap();
+          const lookupState = cityMap.get(city.toLowerCase());
+          if (lookupState) {
+            tryState = lookupState;
+          }
+        }
+        if (tryState) {
+          const result = await searchListings({ city: tryCity, state_code: tryState }, 100000, 500000);
+          steps.push({
+            step: '3-direct-city-state',
+            city: tryCity,
+            state_code: tryState,
+            status: result && result.listings.length > 0 ? 'OK' : 'NO_RESULTS',
+            listingCount: result?.listings?.length || 0,
+          });
+          if (result && result.listings.length > 0) foundListings = true;
+        } else {
+          steps.push({ step: '3-direct-city-state', status: 'SKIPPED', reason: 'Could not determine state code' });
+        }
+      }
+
+      // Test 4: Postal code search
+      if (isZipCode) {
+        const result = await searchByPostalCode(testLocation.trim(), 100000, 500000);
+        const firstListing = result?.listings?.[0];
+        steps.push({
+          step: '4-postal-code',
+          postalCode: testLocation.trim(),
+          status: result && result.listings.length > 0 ? 'OK' : 'NO_RESULTS',
+          listingCount: result?.listings?.length || 0,
+          sampleKeys: firstListing ? Object.keys(firstListing).slice(0, 15) : [],
+          samplePhotoRaw: firstListing?.primary_photo?.href || 'none',
+        });
+        if (result && result.listings.length > 0) foundListings = true;
       }
     } catch (e) {
       steps.push({ step: 'error', error: e instanceof Error ? e.message : String(e) });
@@ -482,8 +712,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       apiHost: API_HOST,
       apiKeyConfigured: !!API_KEY,
+      apiKeyPrefix: API_KEY.slice(0, 8) + '...',
       locationInput: testLocation,
       searchQuery,
+      isZipCode,
+      parsedCity: city,
+      parsedStateCode: stateCode,
+      foundListings,
       steps,
     });
   }
