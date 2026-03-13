@@ -12,6 +12,7 @@ import { getStateFlagPath, STATE_CODES, getStateNameFromLocation } from '@/lib/s
 import { formatCurrency, formatYears, cn } from '@/lib/utils';
 import type { OnboardingAnswers, UserProfile } from '@/lib/onboarding/types';
 import QoLSection from '@/components/QoLSection';
+import QoLGradeCard from '@/components/QoLGradeCard';
 import { getPersonalizedQoL, getObjectiveQoL } from '@/lib/qol-engine';
 import LocationHeroCarousel from '@/components/LocationHeroCarousel';
 import { getLocationImages } from '@/lib/location-images';
@@ -85,6 +86,7 @@ const SECTIONS = [
   { id: 'job-overview', label: 'Job Overview' },
   { id: 'ai-summary', label: 'AI Summary' },
   { id: 'suggestions', label: 'Suggestions' },
+  { id: 'qol-details', label: 'QoL Details' },
 ];
 
 // ─── Main Page ──────────────────────────────────────────────────────
@@ -643,9 +645,9 @@ export default function LocationPage() {
             </div>
           </Section>
 
-          {/* ═══ QUALITY OF LIFE ═══ */}
-          <Section id="quality-of-life" title="Quality of Life Index">
-            <QoLSection locationName={locationName} annualIncome={userSalaryForQoL || undefined} />
+          {/* ═══ QUALITY OF LIFE (Grade Card) ═══ */}
+          <Section id="quality-of-life" title="Quality of Life">
+            <QoLGradeCard locationName={locationName} annualIncome={userSalaryForQoL || undefined} />
           </Section>
 
           {/* ═══ HOUSING ═══ */}
@@ -1028,6 +1030,11 @@ export default function LocationPage() {
                 </>
               )}
             </div>
+          </Section>
+
+          {/* ═══ QOL DETAILS (In-depth breakdown) ═══ */}
+          <Section id="qol-details" title="Quality of Life — In-Depth">
+            <QoLSection locationName={locationName} annualIncome={userSalaryForQoL || undefined} />
           </Section>
 
         </div>

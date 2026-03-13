@@ -20,6 +20,18 @@ const LOCATION_IMAGES: Record<string, LocationImage[]> = {
     { src: '/location-images/Florida/florida-4.jpg', alt: 'Florida cityscape' },
     { src: '/location-images/Florida/florida-5.jpg', alt: 'Florida sunset' },
   ],
+  'Miami': [
+    { src: '/location-images/Miami/miami-1.jpg', alt: 'Miami skyline' },
+    { src: '/location-images/Miami/miami-2.jpg', alt: 'Miami Beach' },
+    { src: '/location-images/Miami/miami-3.jpg', alt: 'Miami waterfront' },
+    { src: '/location-images/Miami/miami-4.jpg', alt: 'Miami cityscape' },
+    { src: '/location-images/Miami/miami-5.jpg', alt: 'Miami aerial view' },
+    { src: '/location-images/Miami/miami-6.jpg', alt: 'Miami downtown' },
+  ],
+  'Orlando': [
+    { src: '/location-images/Orlando/orlando-1.jpg', alt: 'Orlando skyline' },
+    { src: '/location-images/Orlando/orlando-2.jpg', alt: 'Orlando cityscape' },
+  ],
 };
 
 /**
@@ -32,9 +44,15 @@ export function getLocationImages(locationName: string): LocationImage[] | null 
     return LOCATION_IMAGES[locationName];
   }
 
-  // For cities like "Miami, FL" — try to match the state
+  // For cities like "Miami, FL" — try city name first, then state
   const parts = locationName.split(', ');
   if (parts.length >= 2) {
+    // Try city name match first (e.g., "Miami" from "Miami, FL")
+    const cityName = parts[0].trim();
+    if (LOCATION_IMAGES[cityName]) {
+      return LOCATION_IMAGES[cityName];
+    }
+
     const stateAbbrev = parts[parts.length - 1].trim();
     // Try matching by abbreviation using a reverse lookup
     const stateNames: Record<string, string> = {
