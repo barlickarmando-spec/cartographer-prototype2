@@ -587,8 +587,6 @@ function CompactHomeCard({ home, index, onClick }: { home: Home; index: number; 
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={home.photoUrl}
-            srcSet={home.fullResPhotoUrl ? `${home.photoUrl} 1280w, ${home.fullResPhotoUrl} 1920w` : undefined}
-            sizes="(max-width: 640px) 100vw, 50vw"
             alt={`Home at ${home.address}`}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             decoding="async"
@@ -672,8 +670,6 @@ function FullScreenCarouselModal({
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
               src={home.fullResPhotoUrl || home.photoUrl}
-              srcSet={home.fullResPhotoUrl ? `${home.photoUrl} 1280w, ${home.fullResPhotoUrl} 1920w` : undefined}
-              sizes="(max-width: 768px) 100vw, 60vw"
               alt={`Home at ${home.address}`}
               className="w-full h-full object-cover"
               decoding="async"

@@ -106,33 +106,46 @@ function buildSearchQuery(city: string, stateCode: string): string {
 }
 
 /**
- * Upgrade a photo URL to high resolution.
- * rdcpix CDN supports arbitrary width/height parameters.
- * We request 1280x960 for card display (sharp on 2x Retina).
+ * Upgrade rdcpix photo URL to large resolution for card display.
+ *
+ * rdcpix URL format: ...{hash}{sizeChar}-m{id}{sizeChar}.{ext}
+ * Size chars: s=small(~200px), m=medium, l=large(~1024px), od=original
+ *
+ * Example: ...a6eel-m3288469166s.jpg → ...a6eel-m3288469166od.jpg
  */
 function upgradePhotoUrl(url: string): string {
   if (!url) return url;
-  let upgraded = url.replace(/(-w)\d+/, '$11280');
-  upgraded = upgraded.replace(/(_h)\d+/, '$1960');
+  let upgraded = url;
+  // Remove /thumbs/ path segment (forces thumbnail)
   upgraded = upgraded.replace(/\/thumbs\//, '/');
-  upgraded = upgraded.replace(/([_-])s(\.\w+)$/, '$1l$2');
+  // Replace rdcpix size suffix before extension: "s.jpg" → "od.jpg"
+  // The size char (s/m/l) appears right before the file extension
+  if (upgraded.includes('rdcpix.com')) {
+    upgraded = upgraded.replace(/s(\.\w+)$/, 'od$1');
+  }
+  // Handle explicit width/height query params
   upgraded = upgraded.replace(/([?&])w=\d+/, '$1w=1280');
   upgraded = upgraded.replace(/([?&])h=\d+/, '$1h=960');
+  // Handle -w and _h in path
+  upgraded = upgraded.replace(/(-w)\d+/, '$11280');
+  upgraded = upgraded.replace(/(_h)\d+/, '$1960');
   return upgraded;
 }
 
 /**
- * Get an even higher resolution URL for full-screen / modal display.
- * Targets 1920x1440 for crisp rendering on large screens.
+ * Get highest resolution URL for full-screen / modal display.
  */
 function getFullResPhotoUrl(url: string): string {
   if (!url) return url;
-  let upgraded = url.replace(/(-w)\d+/, '$11920');
-  upgraded = upgraded.replace(/(_h)\d+/, '$11440');
+  let upgraded = url;
   upgraded = upgraded.replace(/\/thumbs\//, '/');
-  upgraded = upgraded.replace(/([_-])s(\.\w+)$/, '$1l$2');
+  if (upgraded.includes('rdcpix.com')) {
+    upgraded = upgraded.replace(/s(\.\w+)$/, 'od$1');
+  }
   upgraded = upgraded.replace(/([?&])w=\d+/, '$1w=1920');
   upgraded = upgraded.replace(/([?&])h=\d+/, '$1h=1440');
+  upgraded = upgraded.replace(/(-w)\d+/, '$11920');
+  upgraded = upgraded.replace(/(_h)\d+/, '$11440');
   return upgraded;
 }
 
