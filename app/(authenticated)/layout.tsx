@@ -49,7 +49,12 @@ export default function AuthenticatedLayout({
               />
             </Link>
 
-            {/* Center links + search bar */}
+            {/* Search bar — right of logo */}
+            <div className="hidden md:block w-64 lg:w-80 ml-4">
+              <GlobalSearchBar />
+            </div>
+
+            {/* Center nav links */}
             <div className="hidden md:flex flex-1 items-center justify-center gap-6">
               <Link href="/home-size-calculator" className="text-sm text-slate-600 hover:text-slate-900 transition-colors whitespace-nowrap">
                 Calculator
@@ -63,9 +68,6 @@ export default function AuthenticatedLayout({
               <Link href="/job-finder" className="text-sm text-slate-600 hover:text-slate-900 transition-colors whitespace-nowrap">
                 Pricing
               </Link>
-              <div className="w-64 lg:w-80">
-                <GlobalSearchBar />
-              </div>
             </div>
 
             {/* Right side — Settings icon + Sign Out, pinned far right */}
