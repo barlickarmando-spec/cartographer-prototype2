@@ -8,6 +8,7 @@ import nationPathData from '@/lib/us-nation-path.json';
 import HeatMapTooltip from './HeatMapTooltip';
 import type { LocationCalculation } from '@/hooks/useAffordabilityCalculations';
 import { formatCurrency } from '@/lib/utils';
+import { resolveCountyCityName } from '@/lib/city-name-aliases';
 
 const GRAY = '#E5E7EB';
 const WIDTH = 960;
@@ -233,9 +234,10 @@ export default function USHeatMap({
             {countyPaths.map((county) => {
               const isCity = !!county.cityName;
               const stateName = ABBREV_TO_STATE_NAME[county.stateAbbrev] || '';
+              const dataKey = isCity ? resolveCountyCityName(county.cityName) : stateName;
               const displayName = isCity ? county.cityName : stateName;
               const calc = isCity
-                ? cityData.get(county.cityName)
+                ? cityData.get(dataKey)
                 : stateData.get(stateName);
               return (
                 <path
@@ -249,7 +251,7 @@ export default function USHeatMap({
                   cursor="pointer"
                   onClick={(e) => {
                     if (isCity) {
-                      onLocationClick(county.cityName);
+                      onLocationClick(dataKey);
                     } else {
                       handleStateClick(stateName, e as React.MouseEvent<SVGPathElement>);
                     }

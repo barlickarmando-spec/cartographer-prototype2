@@ -22,6 +22,7 @@ import nationPathData from '@/lib/us-nation-path.json';
 import WealthMapTooltip from '@/components/wealth/WealthMapTooltip';
 import type { MapMode } from '@/components/wealth/types';
 import type { OnboardingAnswers } from '@/lib/onboarding/types';
+import { resolveCountyCityName } from '@/lib/city-name-aliases';
 
 const ABBREV_TO_STATE_NAME: Record<string, string> = {
   'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas', 'CA': 'California',
@@ -492,9 +493,10 @@ export default function WealthGenerationPage() {
                 {countyPaths.map((county) => {
                   const isCity = !!county.cityName;
                   const stateName = ABBREV_TO_STATE_NAME[county.stateAbbrev] || '';
+                  const dataKey = isCity ? resolveCountyCityName(county.cityName) : stateName;
                   const displayName = isCity ? county.cityName : stateName;
                   const loc = isCity
-                    ? cityData.get(county.cityName)
+                    ? cityData.get(dataKey)
                     : stateData.get(stateName);
                   return (
                     <path
@@ -508,8 +510,8 @@ export default function WealthGenerationPage() {
                       cursor="pointer"
                       onClick={(e) => {
                         if (isCity) {
-                          setPendingCalcLocation(county.cityName);
-                          setCalcLocation(county.cityName);
+                          setPendingCalcLocation(dataKey);
+                          setCalcLocation(dataKey);
                         } else {
                           handleWealthStateClick(stateName, e as ReactMouseEvent<SVGPathElement>);
                         }
