@@ -14,11 +14,11 @@ export interface LocationImage {
 
 const LOCATION_IMAGES: Record<string, LocationImage[]> = {
   'Florida': [
-    { src: '/location-images/Florida/florida-wetlands.png', alt: 'Florida wetlands and palm trees' },
-    { src: '/location-images/Florida/florida-highway.png', alt: 'Florida highway and canal aerial view' },
-    { src: '/location-images/Florida/florida-miami.png', alt: 'Miami skyline with palm trees' },
-    { src: '/location-images/Florida/florida-orlando.png', alt: 'Orlando Lake Eola at sunset' },
-    { src: '/location-images/Florida/florida-beach.png', alt: 'Florida beach sunset aerial view' },
+    { src: '/location-images/Florida/florida-1.webp', alt: 'Florida scenic view' },
+    { src: '/location-images/Florida/florida-2.jpg', alt: 'Florida landscape' },
+    { src: '/location-images/Florida/florida-3.jpg', alt: 'Florida coastline' },
+    { src: '/location-images/Florida/florida-4.jpg', alt: 'Florida cityscape' },
+    { src: '/location-images/Florida/florida-5.jpg', alt: 'Florida sunset' },
   ],
 };
 
