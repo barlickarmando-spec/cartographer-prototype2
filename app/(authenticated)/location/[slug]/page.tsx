@@ -13,6 +13,8 @@ import { formatCurrency, formatYears, cn } from '@/lib/utils';
 import type { OnboardingAnswers, UserProfile } from '@/lib/onboarding/types';
 import QoLSection from '@/components/QoLSection';
 import { getPersonalizedQoL, getObjectiveQoL } from '@/lib/qol-engine';
+import LocationHeroCarousel from '@/components/LocationHeroCarousel';
+import { getLocationImages } from '@/lib/location-images';
 
 // ─── Helpers ────────────────────────────────────────────────────────
 function fmtNum(n: number): string {
@@ -304,61 +306,81 @@ export default function LocationPage() {
   return (
     <div className="max-w-7xl mx-auto pb-24">
       {/* ═══ HERO / BANNER ═══ */}
-      <div id="overview" className="relative rounded-2xl overflow-hidden mb-6">
-        {/* Location image - using state flag as hero background */}
-        <div className="h-48 sm:h-64 bg-gradient-to-br from-carto-blue to-[#3A7BC0] relative">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={flagPath}
-            alt={locationName}
-            className="absolute inset-0 w-full h-full object-cover opacity-20"
-            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 p-6">
-            <div className="flex items-end justify-between flex-wrap gap-4">
-              <div>
-                <h1 className="text-3xl sm:text-4xl font-extrabold text-white drop-shadow-lg">
-                  {locationName}
-                  {stateCode && <span className="ml-3 text-lg font-medium text-white/70">{stateCode}</span>}
-                </h1>
-                <div className="flex items-center gap-3 mt-2">
-                  <span className={cn('px-3 py-1 rounded-full text-sm font-semibold', viability.bg, viability.color)}>
-                    {viability.label}
-                  </span>
-                  <span className="text-white/80 text-sm font-medium">{score.toFixed(1)} / 10</span>
-                  {/* Stars */}
-                  <span className="flex items-center gap-0.5">
-                    {[1, 2, 3, 4, 5].map(i => (
-                      <svg key={i} className={cn('w-4 h-4', i <= stars ? 'text-yellow-400' : i - 0.5 <= stars ? 'text-yellow-400' : 'text-white/30')} fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                      </svg>
-                    ))}
-                  </span>
+      <div id="overview" className="mb-6">
+        {(() => {
+          const heroImages = getLocationImages(locationName);
+          const heroOverlay = (
+            <div className="p-6">
+              <div className="flex items-end justify-between flex-wrap gap-4">
+                <div>
+                  <h1 className="text-3xl sm:text-4xl font-extrabold text-white drop-shadow-lg">
+                    {locationName}
+                    {stateCode && <span className="ml-3 text-lg font-medium text-white/70">{stateCode}</span>}
+                  </h1>
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className={cn('px-3 py-1 rounded-full text-sm font-semibold', viability.bg, viability.color)}>
+                      {viability.label}
+                    </span>
+                    <span className="text-white/80 text-sm font-medium">{score.toFixed(1)} / 10</span>
+                    <span className="flex items-center gap-0.5">
+                      {[1, 2, 3, 4, 5].map(i => (
+                        <svg key={i} className={cn('w-4 h-4', i <= stars ? 'text-yellow-400' : i - 0.5 <= stars ? 'text-yellow-400' : 'text-white/30')} fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                      ))}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSave}
+                    className={cn(
+                      'px-4 py-2 rounded-full text-sm font-semibold transition-colors',
+                      isSaved
+                        ? 'bg-white text-carto-blue'
+                        : 'bg-white/20 text-white border border-white/40 hover:bg-white/30'
+                    )}
+                  >
+                    {isSaved ? 'Saved' : 'Save to My Locations'}
+                  </button>
+                  <button
+                    onClick={() => window.print()}
+                    className="px-4 py-2 rounded-full text-sm font-semibold bg-white/20 text-white border border-white/40 hover:bg-white/30 transition-colors"
+                  >
+                    Download PDF
+                  </button>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleSave}
-                  className={cn(
-                    'px-4 py-2 rounded-full text-sm font-semibold transition-colors',
-                    isSaved
-                      ? 'bg-white text-carto-blue'
-                      : 'bg-white/20 text-white border border-white/40 hover:bg-white/30'
-                  )}
-                >
-                  {isSaved ? 'Saved' : 'Save to My Locations'}
-                </button>
-                <button
-                  onClick={() => window.print()}
-                  className="px-4 py-2 rounded-full text-sm font-semibold bg-white/20 text-white border border-white/40 hover:bg-white/30 transition-colors"
-                >
-                  Download PDF
-                </button>
+            </div>
+          );
+
+          if (heroImages && heroImages.length > 0) {
+            return (
+              <LocationHeroCarousel images={heroImages} locationName={locationName}>
+                {heroOverlay}
+              </LocationHeroCarousel>
+            );
+          }
+
+          // Fallback: state flag background (for locations without carousel images)
+          return (
+            <div className="relative rounded-2xl overflow-hidden">
+              <div className="h-72 sm:h-80 md:h-96 bg-gradient-to-br from-carto-blue to-[#3A7BC0] relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={flagPath}
+                  alt={locationName}
+                  className="absolute inset-0 w-full h-full object-cover opacity-20"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0">
+                  {heroOverlay}
+                </div>
               </div>
             </div>
-          </div>
-        </div>
+          );
+        })()}
       </div>
 
       <div className="flex gap-6">
