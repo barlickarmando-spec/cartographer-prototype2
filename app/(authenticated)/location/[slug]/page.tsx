@@ -73,10 +73,10 @@ function MetricCard({ label, value, sub, accent }: { label: string; value: strin
 // ─── Filter Nav ─────────────────────────────────────────────────────
 const SECTIONS = [
   { id: 'overview', label: 'Overview' },
-  { id: 'quality-of-life', label: 'Quality of Life' },
   { id: 'overall', label: 'Overall Stats' },
   { id: 'job-market', label: 'Job Market' },
-  { id: 'ai-overview', label: 'AI Overview' },
+  { id: 'ai-overview', label: 'Overview' },
+  { id: 'quality-of-life', label: 'Quality of Life' },
   { id: 'housing', label: 'Housing' },
   { id: 'allocation', label: 'Allocation Strategy' },
   { id: 'cost-of-living', label: 'Cost of Living' },
@@ -407,11 +407,6 @@ export default function LocationPage() {
         {/* ═══ MAIN CONTENT ═══ */}
         <div className="flex-1 min-w-0 space-y-6">
 
-          {/* ═══ QUALITY OF LIFE ═══ */}
-          <Section id="quality-of-life" title="Quality of Life Index">
-            <QoLSection locationName={locationName} annualIncome={userSalaryForQoL || undefined} />
-          </Section>
-
           {/* ═══ OVERALL OVERVIEW ═══ */}
           <Section id="overall" title="Overall Overview">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -549,7 +544,7 @@ export default function LocationPage() {
           </Section>
 
           {/* ═══ AI OVERVIEW ═══ */}
-          <Section id="ai-overview" title="AI Overview">
+          <Section id="ai-overview" title="Overview">
             <div className="space-y-6">
               {/* Pros & Cons */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -645,6 +640,11 @@ export default function LocationPage() {
                 </div>
               </div>
             </div>
+          </Section>
+
+          {/* ═══ QUALITY OF LIFE ═══ */}
+          <Section id="quality-of-life" title="Quality of Life Index">
+            <QoLSection locationName={locationName} annualIncome={userSalaryForQoL || undefined} />
           </Section>
 
           {/* ═══ HOUSING ═══ */}
