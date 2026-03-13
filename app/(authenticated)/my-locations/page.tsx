@@ -13,6 +13,7 @@ import type { OnboardingAnswers, UserProfile } from '@/lib/onboarding/types';
 import { searchLocations, getAllLocationOptions } from '@/lib/locations';
 import { estimateHomeSizeSqft } from '@/lib/home-value-lookup';
 import { getStateFlagPath, getStateNameFromLocation } from '@/lib/state-flags';
+import { getObjectiveQoL, getPersonalizedQoL } from '@/lib/qol-engine';
 
 // ===== TYPES =====
 
@@ -136,12 +137,21 @@ function StarRating({ rating }: { rating: number }) {
 
 
 
-function getQualityOfLifeLabel(di: number): { label: string; color: string; bgColor: string } {
-  if (di >= 30000) return { label: 'Excellent', color: '#059669', bgColor: '#D1FAE5' };
-  if (di >= 15000) return { label: 'Very Good', color: '#2563EB', bgColor: '#DBEAFE' };
-  if (di >= 5000) return { label: 'Good', color: '#0891B2', bgColor: '#CFFAFE' };
-  if (di >= 0) return { label: 'Fair', color: '#D97706', bgColor: '#FEF3C7' };
-  return { label: 'Challenging', color: '#DC2626', bgColor: '#FEE2E2' };
+function getQualityOfLifeLabel(locationName: string, income?: number): { label: string; color: string; bgColor: string; score: number } {
+  const stateName = getStateNameFromLocation(locationName);
+  if (stateName) {
+    const qol = income && income > 0
+      ? getPersonalizedQoL(stateName, income)
+      : getObjectiveQoL(stateName);
+    if (qol) {
+      const s = qol.personal_qol;
+      if (s >= 80) return { label: qol.personal_label, color: '#059669', bgColor: '#D1FAE5', score: s };
+      if (s >= 65) return { label: qol.personal_label, color: '#2563EB', bgColor: '#DBEAFE', score: s };
+      if (s >= 50) return { label: qol.personal_label, color: '#D97706', bgColor: '#FEF3C7', score: s };
+      return { label: qol.personal_label, color: '#DC2626', bgColor: '#FEE2E2', score: s };
+    }
+  }
+  return { label: 'N/A', color: '#6B7280', bgColor: '#F3F4F6', score: 0 };
 }
 
 // ===== LOCATION FILTER HELPERS =====
@@ -300,7 +310,9 @@ function applySortMode(results: CalculationResult[], mode: SortMode, colKey: str
       }));
     case 'quality-of-life':
       return [...results].sort(viableFirst((a, b) => {
-        return (b.yearByYear[0]?.disposableIncome ?? 0) - (a.yearByYear[0]?.disposableIncome ?? 0);
+        const aQol = getQualityOfLifeLabel(a.location, a.yearByYear[0]?.totalIncome).score;
+        const bQol = getQualityOfLifeLabel(b.location, b.yearByYear[0]?.totalIncome).score;
+        return bQol - aQol;
       }));
     case 'fastest-home-ownership':
       return [...results].sort(viableFirst((a, b) => {
@@ -357,8 +369,7 @@ function LocationCard({
   const viability = getViabilityLabel(result);
   const salary = getSalary(result.location, occupation);
   const col = (result.locationData.adjustedCOL as Record<string, number>)[colKey] || 0;
-  const qualityOfLife = result.yearByYear[0]?.disposableIncome ?? 0;
-  const qol = getQualityOfLifeLabel(qualityOfLife);
+  const qol = getQualityOfLifeLabel(result.location, result.yearByYear[0]?.totalIncome);
   const fastestToHome = result.yearsToMortgage > 0 ? `${result.yearsToMortgage} yr${result.yearsToMortgage !== 1 ? 's' : ''}` : 'N/A';
   const debtFree = result.yearsToDebtFree > 0 ? `${result.yearsToDebtFree} yr${result.yearsToDebtFree !== 1 ? 's' : ''}` : 'Debt-free';
   const starRating = getStarRating(result.numericScore ?? 0);
@@ -491,13 +502,14 @@ function LocationCard({
               </div>
               <span className="text-xs font-medium text-gray-500">Quality of Life</span>
             </div>
-            <p className="pl-9">
+            <p className="pl-9 flex items-center gap-2">
               <span
                 className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold"
                 style={{ backgroundColor: qol.bgColor, color: qol.color }}
               >
                 {qol.label}
               </span>
+              {qol.score > 0 && <span className="text-xs font-bold" style={{ color: qol.color }}>{qol.score.toFixed(0)}/100</span>}
             </p>
           </div>
 

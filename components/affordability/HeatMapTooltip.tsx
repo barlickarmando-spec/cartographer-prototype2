@@ -3,6 +3,7 @@
 import { formatCurrency } from '@/lib/utils';
 import { createRatingColorScale } from '@/lib/color-scale';
 import type { LocationCalculation } from '@/hooks/useAffordabilityCalculations';
+import { getObjectiveQoL } from '@/lib/qol-engine';
 
 interface HeatMapTooltipProps {
   locationName: string;
@@ -14,6 +15,7 @@ interface HeatMapTooltipProps {
 const ratingScale = createRatingColorScale();
 
 export default function HeatMapTooltip({ locationName, data, mode, position }: HeatMapTooltipProps) {
+  const qol = getObjectiveQoL(locationName);
   return (
     <div
       className="fixed z-50 pointer-events-none shadow-2xl min-w-[340px] bg-[#4A90D9]"
@@ -75,8 +77,14 @@ export default function HeatMapTooltip({ locationName, data, mode, position }: H
                 </div>
               </div>
             )}
+            {qol && (
+              <div className="flex justify-between gap-8 mt-3 pt-3 border-t border-white/30">
+                <span className="text-white/80">Quality of Life</span>
+                <span className="font-semibold text-white">{qol.objective_qol.toFixed(0)}/100 — {qol.label}</span>
+              </div>
+            )}
             {!data.isViable && (
-              <p className="text-base text-white/90 mt-4 pt-3 border-t border-white/30 font-medium">Not viable for homeownership</p>
+              <p className="text-base text-white/90 mt-3 pt-3 border-t border-white/30 font-medium">Not viable for homeownership</p>
             )}
           </>
         ) : (

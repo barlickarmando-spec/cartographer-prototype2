@@ -8,9 +8,11 @@ import { getTypicalHomeValue, getPricePerSqft, estimateHomeSizeSqft } from '@/li
 import { generateWealthTimeline, calculateLocationWealth, getRppFactor, analyzeSale, WealthProjection } from '@/lib/wealth-calculations';
 import { normalizeOnboardingAnswers } from '@/lib/onboarding/normalize';
 import { getOnboardingAnswers, getSavedLocations, setSavedLocations } from '@/lib/storage';
-import { getStateFlagPath, STATE_CODES } from '@/lib/state-flags';
+import { getStateFlagPath, STATE_CODES, getStateNameFromLocation } from '@/lib/state-flags';
 import { formatCurrency, formatYears, cn } from '@/lib/utils';
 import type { OnboardingAnswers, UserProfile } from '@/lib/onboarding/types';
+import QoLSection from '@/components/QoLSection';
+import { getPersonalizedQoL, getObjectiveQoL } from '@/lib/qol-engine';
 
 // ─── Helpers ────────────────────────────────────────────────────────
 function fmtNum(n: number): string {
@@ -69,6 +71,7 @@ function MetricCard({ label, value, sub, accent }: { label: string; value: strin
 // ─── Filter Nav ─────────────────────────────────────────────────────
 const SECTIONS = [
   { id: 'overview', label: 'Overview' },
+  { id: 'quality-of-life', label: 'Quality of Life' },
   { id: 'overall', label: 'Overall Stats' },
   { id: 'job-market', label: 'Job Market' },
   { id: 'ai-overview', label: 'AI Overview' },
@@ -154,6 +157,19 @@ export default function LocationPage() {
       salary: getSalary(locationName, occ),
     })).sort((a, b) => b.salary - a.salary);
   }, [locData, locationName]);
+
+  // QoL score
+  const userSalaryForQoL = useMemo(() => {
+    if (!profile) return 0;
+    return getSalary(locationName, profile.userOccupation, profile.userSalary);
+  }, [locationName, profile]);
+
+  const qolResult = useMemo(() => {
+    const stateName = getStateNameFromLocation(locationName);
+    if (!stateName) return null;
+    if (userSalaryForQoL > 0) return getPersonalizedQoL(stateName, userSalaryForQoL);
+    return getObjectiveQoL(stateName);
+  }, [locationName, userSalaryForQoL]);
 
   // All states calculation for suggestions
   const [suggestions, setSuggestions] = useState<{ name: string; score: number; reason: string }[]>([]);
@@ -369,6 +385,11 @@ export default function LocationPage() {
         {/* ═══ MAIN CONTENT ═══ */}
         <div className="flex-1 min-w-0 space-y-6">
 
+          {/* ═══ QUALITY OF LIFE ═══ */}
+          <Section id="quality-of-life" title="Quality of Life Index">
+            <QoLSection locationName={locationName} annualIncome={userSalaryForQoL || undefined} />
+          </Section>
+
           {/* ═══ OVERALL OVERVIEW ═══ */}
           <Section id="overall" title="Overall Overview">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -385,8 +406,9 @@ export default function LocationPage() {
               />
               <MetricCard
                 label="Quality of Life"
-                value={score >= 7 ? 'High' : score >= 4 ? 'Moderate' : 'Low'}
-                sub={`Score: ${score.toFixed(1)}/10`}
+                value={qolResult ? qolResult.personal_label : (score >= 7 ? 'High' : score >= 4 ? 'Moderate' : 'Low')}
+                sub={qolResult ? `${qolResult.personal_qol.toFixed(0)}/100 — Rank #${qolResult.personal_rank}` : `Score: ${score.toFixed(1)}/10`}
+                accent={qolResult && qolResult.personal_qol >= 70 ? '#E8F5E9' : undefined}
               />
               <MetricCard
                 label="Income Tax"
@@ -560,10 +582,10 @@ export default function LocationPage() {
                 <h3 className="font-semibold text-gray-700 mb-3">Rankings Scorecard</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {[
-                    { label: 'Quality of Life', value: Math.min(10, score + (colOnePerson < 35000 ? 1 : 0)) },
-                    { label: 'Healthcare Quality', value: Math.min(10, 5 + (score > 6 ? 2 : 0)) },
-                    { label: 'Healthcare Affordability', value: Math.min(10, colOnePerson < 40000 ? 7 : colOnePerson < 50000 ? 5 : 3) },
-                    { label: 'Education', value: Math.min(10, 5 + (locData.salaries.educationTrainingLibrary > 50000 ? 2 : 0)) },
+                    { label: 'Quality of Life', value: qolResult ? qolResult.personal_qol / 10 : Math.min(10, score + (colOnePerson < 35000 ? 1 : 0)) },
+                    { label: 'Healthcare', value: qolResult ? qolResult.personal_categories.healthcare.score / 10 : Math.min(10, 5 + (score > 6 ? 2 : 0)) },
+                    { label: 'Safety', value: qolResult ? qolResult.personal_categories.safety.score / 10 : Math.min(10, colOnePerson < 40000 ? 7 : colOnePerson < 50000 ? 5 : 3) },
+                    { label: 'Education', value: qolResult ? qolResult.personal_categories.education.score / 10 : Math.min(10, 5 + (locData.salaries.educationTrainingLibrary > 50000 ? 2 : 0)) },
                   ].map(item => (
                     <div key={item.label} className="bg-white border border-gray-200 rounded-xl p-3 text-center">
                       <div className="text-2xl font-bold text-carto-blue">{item.value.toFixed(1)}</div>
