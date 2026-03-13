@@ -438,11 +438,11 @@ export default function LocationPage() {
 
           {/* ═══ OVERVIEW (combined) ═══ */}
           <Section id="overall" title="Overview">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Left column: Key Metrics */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Key Metrics</h3>
-                <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-6">
+              {/* Key Metrics — full-width horizontal row */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Key Metrics</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <MetricCard
                     label="Your Salary"
                     value={userSalary > 0 ? fmtDollars(userSalary) : 'N/A'}
@@ -465,8 +465,12 @@ export default function LocationPage() {
                     sub={`${fmtDollars(getPricePerSqft(locationName))}/sqft`}
                   />
                 </div>
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide pt-2">Your Path</h3>
-                <div className="grid grid-cols-2 gap-3">
+              </div>
+
+              {/* Your Path — full-width horizontal row */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Your Path</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <MetricCard
                     label="Homeownership"
                     value={calcResult.yearsToMortgage > 0 ? formatYears(calcResult.yearsToMortgage) : 'N/A'}
@@ -491,8 +495,8 @@ export default function LocationPage() {
                 </div>
               </div>
 
-              {/* Right column: Pros & Cons */}
-              <div className="space-y-4">
+              {/* Pros & Cons — horizontal side-by-side below */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-emerald-50 rounded-xl p-4">
                   <h3 className="font-semibold text-emerald-800 mb-3">Pros</h3>
                   <ul className="space-y-2 text-sm text-emerald-900">
