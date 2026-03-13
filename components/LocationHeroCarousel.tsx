@@ -6,11 +6,9 @@ import type { LocationImage } from '@/lib/location-images';
 interface LocationHeroCarouselProps {
   images: LocationImage[];
   locationName: string;
-  /** Overlay content rendered on top of the carousel (title, badges, etc.) */
-  children?: React.ReactNode;
 }
 
-export default function LocationHeroCarousel({ images, locationName, children }: LocationHeroCarouselProps) {
+export default function LocationHeroCarousel({ images, locationName }: LocationHeroCarouselProps) {
   const [current, setCurrent] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -47,12 +45,12 @@ export default function LocationHeroCarousel({ images, locationName, children }:
 
   return (
     <div
-      className="relative w-full overflow-hidden rounded-2xl"
+      className="relative w-full overflow-hidden rounded-t-2xl"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Image slides */}
-      <div className="relative h-72 sm:h-80 md:h-96">
+      <div className="relative h-64 sm:h-72 md:h-80">
         {images.map((img, i) => (
           <div
             key={i}
@@ -71,15 +69,6 @@ export default function LocationHeroCarousel({ images, locationName, children }:
             />
           </div>
         ))}
-
-        {/* Gradient overlays for text readability */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/10 z-[2]" />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/30 to-transparent z-[2]" />
-      </div>
-
-      {/* Overlay content (title, badges, buttons) */}
-      <div className="absolute inset-0 z-[3] flex flex-col justify-end">
-        {children}
       </div>
 
       {/* Arrow buttons */}
@@ -87,7 +76,7 @@ export default function LocationHeroCarousel({ images, locationName, children }:
         <>
           <button
             onClick={prev}
-            className="absolute left-3 top-1/2 -translate-y-1/2 z-[4] w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 hover:opacity-100 focus:opacity-100"
+            className="absolute left-3 top-1/2 -translate-y-1/2 z-[4] w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-all"
             style={{ opacity: isHovered ? 1 : 0 }}
             aria-label="Previous image"
           >

@@ -3,6 +3,7 @@
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
+import GlobalSearchBar from '@/components/GlobalSearchBar';
 
 export default function AuthenticatedLayout({
   children,
@@ -48,20 +49,23 @@ export default function AuthenticatedLayout({
               />
             </Link>
 
-            {/* Center links — centered in remaining space */}
-            <div className="hidden md:flex flex-1 items-center justify-center gap-8">
-              <Link href="/home-size-calculator" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">
+            {/* Center links + search bar */}
+            <div className="hidden md:flex flex-1 items-center justify-center gap-6">
+              <Link href="/home-size-calculator" className="text-sm text-slate-600 hover:text-slate-900 transition-colors whitespace-nowrap">
                 Calculator
               </Link>
-              <Link href="/home-affordability" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">
+              <Link href="/home-affordability" className="text-sm text-slate-600 hover:text-slate-900 transition-colors whitespace-nowrap">
                 Analysis
               </Link>
-              <Link href="/my-locations" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">
+              <Link href="/my-locations" className="text-sm text-slate-600 hover:text-slate-900 transition-colors whitespace-nowrap">
                 Research
               </Link>
-              <Link href="/job-finder" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">
+              <Link href="/job-finder" className="text-sm text-slate-600 hover:text-slate-900 transition-colors whitespace-nowrap">
                 Pricing
               </Link>
+              <div className="w-64 lg:w-80">
+                <GlobalSearchBar />
+              </div>
             </div>
 
             {/* Right side — Settings icon + Sign Out, pinned far right */}
