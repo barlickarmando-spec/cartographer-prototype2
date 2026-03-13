@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, type MouseEvent as ReactMouseEvent } from 'react';
+import { useState, useMemo, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWealthCalculations } from '@/hooks/useWealthCalculations';
 import { calculateAutoApproach, CalculationResult } from '@/lib/calculation-engine';
@@ -16,14 +16,31 @@ import {
 import { formatCurrency } from '@/lib/utils';
 import { createRatingColorScale } from '@/lib/color-scale';
 import LocationPicker from '@/components/shared/LocationPicker';
-import statePathsData from '@/lib/us-state-paths.json';
-import cityAreasData from '@/lib/us-city-areas.json';
+import statePathsData from '@/lib/us-atlas-state-paths.json';
+import countyPathsData from '@/lib/us-county-paths.json';
+import nationPathData from '@/lib/us-nation-path.json';
 import WealthMapTooltip from '@/components/wealth/WealthMapTooltip';
 import type { MapMode } from '@/components/wealth/types';
 import type { OnboardingAnswers } from '@/lib/onboarding/types';
 
-const statePaths = statePathsData as { name: string; d: string }[];
-const cityAreas = cityAreasData as unknown as Record<string, { center: [number, number]; d: string }>;
+const ABBREV_TO_STATE_NAME: Record<string, string> = {
+  'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas', 'CA': 'California',
+  'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware', 'FL': 'Florida', 'GA': 'Georgia',
+  'HI': 'Hawaii', 'ID': 'Idaho', 'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa',
+  'KS': 'Kansas', 'KY': 'Kentucky', 'LA': 'Louisiana', 'ME': 'Maine', 'MD': 'Maryland',
+  'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota', 'MS': 'Mississippi',
+  'MO': 'Missouri', 'MT': 'Montana', 'NE': 'Nebraska', 'NV': 'Nevada',
+  'NH': 'New Hampshire', 'NJ': 'New Jersey', 'NM': 'New Mexico', 'NY': 'New York',
+  'NC': 'North Carolina', 'ND': 'North Dakota', 'OH': 'Ohio', 'OK': 'Oklahoma',
+  'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'Rhode Island', 'SC': 'South Carolina',
+  'SD': 'South Dakota', 'TN': 'Tennessee', 'TX': 'Texas', 'UT': 'Utah', 'VT': 'Vermont',
+  'VA': 'Virginia', 'WA': 'Washington', 'WV': 'West Virginia', 'WI': 'Wisconsin', 'WY': 'Wyoming',
+  'DC': 'District of Columbia',
+};
+
+const statePaths = statePathsData as { fips: string; name: string; d: string }[];
+const countyPaths = countyPathsData as { fips: string; stateAbbrev: string; cityName: string; d: string }[];
+const nationPath = nationPathData as { d: string };
 
 const GRAY = '#E5E7EB';
 const WIDTH = 960;
@@ -36,7 +53,7 @@ const COMPARE_COLORS = [
 
 interface TooltipState {
   name: string;
-  data: LocationWealth;
+  data: LocationWealth | null;
   rating: number;
   position: { x: number; y: number };
 }
@@ -66,6 +83,43 @@ export default function WealthGenerationPage() {
 
   // Tooltip state
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+
+  // In-place state zoom
+  const [wealthZoomedState, setWealthZoomedState] = useState<string | null>(null);
+  const [wealthViewBox, setWealthViewBox] = useState(`0 0 ${WIDTH} ${HEIGHT}`);
+  const wealthSvgRef = useRef<SVGSVGElement>(null);
+
+  const handleWealthStateClick = useCallback((stateName: string, e: ReactMouseEvent<SVGPathElement>) => {
+    e.stopPropagation();
+    if (wealthZoomedState) {
+      setPendingCalcLocation(stateName);
+      setCalcLocation(stateName);
+      return;
+    }
+    // Find the state fill path (not the clicked county) to get full state bounds
+    const stateEl = wealthSvgRef.current?.querySelector(`[data-state="${stateName}"]`) as SVGPathElement | null;
+    if (!stateEl) return;
+    const bbox = stateEl.getBBox();
+    const padding = 20;
+    const x = bbox.x - padding;
+    const y = bbox.y - padding;
+    const w = bbox.width + padding * 2;
+    const h = bbox.height + padding * 2;
+    const aspect = WIDTH / HEIGHT;
+    const boxAspect = w / h;
+    let vx = x, vy = y, vw = w, vh = h;
+    if (boxAspect > aspect) { vh = vw / aspect; vy = y - (vh - h) / 2; }
+    else { vw = vh * aspect; vx = x - (vw - w) / 2; }
+    setWealthViewBox(`${vx} ${vy} ${vw} ${vh}`);
+    setWealthZoomedState(stateName);
+    setTooltip(null);
+  }, [wealthZoomedState]);
+
+  const handleWealthZoomOut = useCallback(() => {
+    setWealthViewBox(`0 0 ${WIDTH} ${HEIGHT}`);
+    setWealthZoomedState(null);
+    setTooltip(null);
+  }, []);
 
   const handleMouseMove = useCallback((e: ReactMouseEvent) => {
     setTooltip((prev) =>
@@ -210,8 +264,8 @@ export default function WealthGenerationPage() {
   }, [getHeatValue, minVal, maxVal]);
 
   const handleMouseEnter = useCallback(
-    (name: string, data: LocationWealth, e: ReactMouseEvent) => {
-      setTooltip({ name, data, rating: getStarRating(data), position: { x: e.clientX, y: e.clientY } });
+    (name: string, data: LocationWealth | null, e: ReactMouseEvent) => {
+      setTooltip({ name, data, rating: data ? getStarRating(data) : 0, position: { x: e.clientX, y: e.clientY } });
     },
     [getStarRating]
   );
@@ -364,7 +418,7 @@ export default function WealthGenerationPage() {
       <div className="bg-white rounded-2xl border border-carto-blue-pale/30 overflow-hidden">
         <div className="p-6 pb-0">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <h2 className="text-xl font-bold text-[#4A90D9]">Wealth Generation Map</h2>
+            <h2 className="text-xl font-bold text-[#4A90D9]">Wealth Generation Map{wealthZoomedState ? ` — ${wealthZoomedState}` : ''}</h2>
             <div className="flex bg-gray-100 rounded-full p-1">
               {([
                 { key: 'wealth-gain', label: 'Wealth Gain' },
@@ -399,55 +453,95 @@ export default function WealthGenerationPage() {
                   <span className="text-xs text-gray-600 font-medium">Computing {progress}%</span>
                 </div>
               )}
-              <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-auto" style={{ maxHeight: '75vh' }}>
-                <defs>
-                  <clipPath id="us-wealth-clip">
-                    {statePaths.map((state, i) => <path key={i} d={state.d} />)}
-                  </clipPath>
-                </defs>
+              {/* Back button when zoomed */}
+              {wealthZoomedState && (
+                <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
+                  <button
+                    onClick={handleWealthZoomOut}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white/95 border border-gray-200 rounded-lg shadow-sm hover:bg-gray-50 transition-colors text-sm font-medium text-[#4A90D9]"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    Back
+                  </button>
+                  <span className="px-3 py-1.5 bg-white/95 border border-gray-200 rounded-lg shadow-sm text-sm font-bold text-[#2C3E50]">
+                    {wealthZoomedState}
+                  </span>
+                </div>
+              )}
+              <svg ref={wealthSvgRef} viewBox={wealthViewBox} className="w-full h-auto transition-all duration-500 ease-in-out" style={{ maxHeight: '75vh' }}>
+                {/* State fills — visual background with no gaps */}
                 {statePaths.map((state, i) => {
                   const loc = stateData.get(state.name);
                   return (
                     <path
-                      key={i}
+                      key={`state-fill-${i}`}
+                      data-state={state.name}
                       d={state.d}
                       fill={getColor(loc)}
                       stroke="#FFFFFF"
                       strokeWidth={0.75}
                       strokeLinejoin="round"
-                      strokeLinecap="round"
+                      pointerEvents="none"
+                    />
+                  );
+                })}
+
+                {/* All counties — invisible hover layer for full mouse coverage */}
+                {countyPaths.map((county) => {
+                  const isCity = !!county.cityName;
+                  const stateName = ABBREV_TO_STATE_NAME[county.stateAbbrev] || '';
+                  const displayName = isCity ? county.cityName : stateName;
+                  const loc = isCity
+                    ? cityData.get(county.cityName)
+                    : stateData.get(stateName);
+                  return (
+                    <path
+                      key={county.fips}
+                      d={county.d}
+                      fill={isCity ? getColor(loc) : 'transparent'}
+                      stroke={isCity ? '#000000' : 'none'}
+                      strokeWidth={isCity ? 1 : 0}
+                      strokeLinejoin="round"
+                      pointerEvents="all"
                       cursor="pointer"
-                      onClick={() => { setPendingCalcLocation(state.name); setCalcLocation(state.name); }}
-                      onMouseEnter={(e) => { if (loc) handleMouseEnter(state.name, loc, e); }}
+                      onClick={(e) => {
+                        if (isCity) {
+                          setPendingCalcLocation(county.cityName);
+                          setCalcLocation(county.cityName);
+                        } else {
+                          handleWealthStateClick(stateName, e as ReactMouseEvent<SVGPathElement>);
+                        }
+                      }}
+                      onMouseEnter={(e) => handleMouseEnter(displayName, loc ?? null, e)}
                       onMouseMove={handleMouseMove}
                       onMouseLeave={handleMouseLeave}
                       className="transition-opacity hover:opacity-80"
                     />
                   );
                 })}
-                <g clipPath="url(#us-wealth-clip)">
-                  {Object.entries(cityAreas).map(([cityName, area]) => {
-                    const loc = cityData.get(cityName);
-                    if (!loc) return null;
-                    return (
-                      <path
-                        key={cityName}
-                        d={area.d}
-                        fill={getColor(loc)}
-                        stroke="#666"
-                        strokeWidth={0.5}
-                        strokeLinejoin="round"
-                        fillOpacity={0.92}
-                        cursor="pointer"
-                        onClick={() => { setPendingCalcLocation(cityName); setCalcLocation(cityName); }}
-                        onMouseEnter={(e) => handleMouseEnter(cityName, loc, e)}
-                        onMouseMove={handleMouseMove}
-                        onMouseLeave={handleMouseLeave}
-                        className="transition-opacity hover:opacity-75"
-                      />
-                    );
-                  })}
-                </g>
+                {/* Nation outline — black border around entire country */}
+                <path
+                  d={nationPath.d}
+                  fill="none"
+                  stroke="#000000"
+                  strokeWidth={1.5}
+                  strokeLinejoin="round"
+                  pointerEvents="none"
+                />
+                {/* Zoomed state highlight */}
+                {wealthZoomedState && statePaths.filter(s => s.name === wealthZoomedState).map((state, i) => (
+                  <path
+                    key={`zoom-highlight-${i}`}
+                    d={state.d}
+                    fill="none"
+                    stroke="#4A90D9"
+                    strokeWidth={2.5}
+                    strokeLinejoin="round"
+                    pointerEvents="none"
+                  />
+                ))}
               </svg>
 
               {tooltip && (
@@ -533,9 +627,20 @@ export default function WealthGenerationPage() {
       {/* Wealth Projections */}
       {activeLocation && maxPrice > 0 && (
         <div className="bg-white rounded-2xl border border-carto-blue-pale/30 p-6">
-          <h2 className="text-xl font-bold text-[#4A90D9] mb-1">
-            Projected Wealth — {activeLocation}
-          </h2>
+          <div className="flex items-start justify-between mb-1">
+            <h2 className="text-xl font-bold text-[#4A90D9]">
+              Projected Wealth — {activeLocation}
+            </h2>
+            <button
+              onClick={() => router.push(`/location/${encodeURIComponent(activeLocation.replace(/ /g, '-'))}`)}
+              className="shrink-0 ml-4 px-4 py-1.5 text-sm font-semibold text-[#4A90D9] border border-[#4A90D9] rounded-full hover:bg-[#4A90D9] hover:text-white transition-colors flex items-center gap-1.5"
+            >
+              View Full Page
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+              </svg>
+            </button>
+          </div>
           <p className="text-sm text-[#6B7280] mb-6">
             Based on {formatCurrency(maxPrice)} home with {((locationCalcResult?.locationData.housing.appreciationRate ?? 0.038) * 100).toFixed(1)}% annual appreciation
           </p>

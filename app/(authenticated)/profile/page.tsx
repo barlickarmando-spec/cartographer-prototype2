@@ -11,6 +11,7 @@ import { searchLocations, getAllLocationOptions } from '@/lib/locations';
 import { getPricePerSqft, getTypicalHomeValue } from '@/lib/home-value-lookup';
 import type { OnboardingAnswers } from '@/lib/onboarding/types';
 import { getStateFlagPath, getStateNameFromLocation } from '@/lib/state-flags';
+import { getPersonalizedQoL, getObjectiveQoL, type QoLResult } from '@/lib/qol-engine';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -247,6 +248,15 @@ export default function ProfilePage() {
   };
   const locationData = result.locationData;
   const isViable = result.viabilityClassification !== 'no-viable-path';
+
+  // Quality of Life score
+  const qolResult: QoLResult | null = (() => {
+    const stateName = getStateNameFromLocation(result.location);
+    if (!stateName) return null;
+    const income = result.yearByYear[0]?.totalIncome;
+    if (income && income > 0) return getPersonalizedQoL(stateName, income);
+    return getObjectiveQoL(stateName);
+  })();
   
   // Get viability label
   const getViabilityLabel = (r: CalculationResult) => {
@@ -515,6 +525,16 @@ export default function ProfilePage() {
               <p className="text-2xl font-bold">{result.minimumAllocationRequired}%</p>
               <p className="text-white/60 text-xs mt-1">of discretionary income</p>
             </div>
+          {/* View Full Location Page */}
+          <button
+            onClick={() => router.push(`/location/${encodeURIComponent(result.location.replace(/ /g, '-'))}`)}
+            className="mt-4 w-full flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 text-white py-2.5 rounded-xl transition-colors text-sm font-semibold border border-white/30"
+          >
+            View Full Location Page
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+            </svg>
+          </button>
           </div>
         </div>
 
@@ -663,6 +683,44 @@ export default function ProfilePage() {
             </div>
           )}
         </div>
+
+        {/* QUALITY OF LIFE COMPACT BAR */}
+        {qolResult && (
+          <div className="px-8 py-5 border-t border-[#E5E7EB]">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-carto-slate uppercase tracking-wide">Quality of Life Index</h3>
+              <div className="flex items-center gap-2">
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                  qolResult.personal_qol >= 80 ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' :
+                  qolResult.personal_qol >= 65 ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-200' :
+                  qolResult.personal_qol >= 50 ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200' :
+                  'bg-red-50 text-red-700 ring-1 ring-red-200'
+                }`}>
+                  {qolResult.personal_label}
+                </span>
+                <span className="text-lg font-extrabold" style={{ color: qolResult.personal_qol >= 80 ? '#059669' : qolResult.personal_qol >= 65 ? '#2563EB' : qolResult.personal_qol >= 50 ? '#D97706' : '#DC2626' }}>
+                  {qolResult.personal_qol.toFixed(0)}/100
+                </span>
+              </div>
+            </div>
+            <div className="grid grid-cols-5 gap-3">
+              {(['safety', 'healthcare', 'infrastructure', 'environment', 'education'] as const).map(k => {
+                const cat = qolResult.personal_categories[k];
+                const c = cat.score >= 75 ? '#059669' : cat.score >= 55 ? '#2563EB' : cat.score >= 40 ? '#D97706' : '#DC2626';
+                return (
+                  <div key={k} className="text-center">
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-1.5">
+                      <div className="h-full rounded-full" style={{ width: `${cat.score}%`, backgroundColor: c }} />
+                    </div>
+                    <span className="text-[10px] font-semibold" style={{ color: c }}>{cat.score.toFixed(0)}</span>
+                    <p className="text-[9px] text-gray-400 font-medium uppercase tracking-wide">{cat.name}</p>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-gray-400 mt-2">{qolResult.summary}</p>
+          </div>
+        )}
 
         {/* MIDDLE SECTION - Cost of Living Details */}
         <div className="px-8 py-6 bg-[#F8FAFB]">
