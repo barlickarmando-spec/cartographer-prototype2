@@ -6,15 +6,36 @@ import type { LocationImage } from '@/lib/location-images';
 interface LocationHeroCarouselProps {
   images: LocationImage[];
   locationName: string;
-  /** Overlay content rendered on top of the carousel (title, badges, etc.) */
-  children?: React.ReactNode;
 }
 
-export default function LocationHeroCarousel({ images, locationName, children }: LocationHeroCarouselProps) {
+export default function LocationHeroCarousel({ images: localImages, locationName }: LocationHeroCarouselProps) {
   const [current, setCurrent] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
+  const [hiResImages, setHiResImages] = useState<LocationImage[] | null>(null);
+  const [failedSrcs, setFailedSrcs] = useState<Set<string>>(new Set());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Fetch high-res images from Google API
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchHiRes() {
+      try {
+        const res = await fetch(`/api/location-images?location=${encodeURIComponent(locationName)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && data.success && data.images && data.images.length > 0) {
+          setHiResImages(data.images);
+        }
+      } catch {
+        // Keep using local images
+      }
+    }
+    fetchHiRes();
+    return () => { cancelled = true; };
+  }, [locationName]);
+
+  // Use hi-res images if available, otherwise local
+  const images = hiResImages && hiResImages.length > 0 ? hiResImages : localImages;
   const count = images.length;
 
   const goTo = useCallback((idx: number) => {
@@ -45,41 +66,43 @@ export default function LocationHeroCarousel({ images, locationName, children }:
     return () => window.removeEventListener('keydown', handler);
   }, [prev, next]);
 
+  const handleImageError = useCallback((src: string) => {
+    setFailedSrcs(prev => new Set(prev).add(src));
+  }, []);
+
   return (
     <div
-      className="relative w-full overflow-hidden rounded-2xl"
+      className="relative w-full overflow-hidden rounded-t-2xl bg-gray-100"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Image slides */}
-      <div className="relative h-72 sm:h-80 md:h-96">
+      <div className="relative h-64 sm:h-72 md:h-80">
         {images.map((img, i) => (
           <div
-            key={i}
+            key={`${img.src}-${i}`}
             className="absolute inset-0 transition-opacity duration-700 ease-in-out"
             style={{ opacity: i === current ? 1 : 0, zIndex: i === current ? 1 : 0 }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={img.src}
-              alt={img.alt}
-              className="w-full h-full object-cover"
-              loading={i === 0 ? 'eager' : 'lazy'}
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = 'none';
-              }}
-            />
+            {!failedSrcs.has(img.src) ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={img.src}
+                alt={img.alt}
+                className="w-full h-full object-cover"
+                decoding="async"
+                fetchPriority={i === 0 ? 'high' : undefined}
+                loading={i === 0 ? 'eager' : 'lazy'}
+                referrerPolicy="no-referrer"
+                onError={() => handleImageError(img.src)}
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-[#4A90D9]/20 to-[#3A7BC0]/30 flex items-center justify-center">
+                <span className="text-gray-400 text-sm">Image unavailable</span>
+              </div>
+            )}
           </div>
         ))}
-
-        {/* Gradient overlays for text readability */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/10 z-[2]" />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/30 to-transparent z-[2]" />
-      </div>
-
-      {/* Overlay content (title, badges, buttons) */}
-      <div className="absolute inset-0 z-[3] flex flex-col justify-end">
-        {children}
       </div>
 
       {/* Arrow buttons */}
@@ -87,7 +110,7 @@ export default function LocationHeroCarousel({ images, locationName, children }:
         <>
           <button
             onClick={prev}
-            className="absolute left-3 top-1/2 -translate-y-1/2 z-[4] w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 hover:opacity-100 focus:opacity-100"
+            className="absolute left-3 top-1/2 -translate-y-1/2 z-[4] w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-all"
             style={{ opacity: isHovered ? 1 : 0 }}
             aria-label="Previous image"
           >

@@ -12,9 +12,10 @@ import { getStateFlagPath, STATE_CODES, getStateNameFromLocation } from '@/lib/s
 import { formatCurrency, formatYears, cn } from '@/lib/utils';
 import type { OnboardingAnswers, UserProfile } from '@/lib/onboarding/types';
 import QoLSection from '@/components/QoLSection';
+import QoLGradeCard from '@/components/QoLGradeCard';
 import { getPersonalizedQoL, getObjectiveQoL } from '@/lib/qol-engine';
 import LocationHeroCarousel from '@/components/LocationHeroCarousel';
-import { getLocationImages } from '@/lib/location-images';
+import { getLocationImages, LocationImage } from '@/lib/location-images';
 
 // ─── Helpers ────────────────────────────────────────────────────────
 function fmtNum(n: number): string {
@@ -85,6 +86,7 @@ const SECTIONS = [
   { id: 'job-overview', label: 'Job Overview' },
   { id: 'ai-summary', label: 'AI Summary' },
   { id: 'suggestions', label: 'Suggestions' },
+  { id: 'qol-details', label: 'QoL Details' },
 ];
 
 // ─── Main Page ──────────────────────────────────────────────────────
@@ -307,80 +309,70 @@ export default function LocationPage() {
     <div className="max-w-7xl mx-auto pb-24">
       {/* ═══ HERO / BANNER ═══ */}
       <div id="overview" className="mb-6">
+        {/* Image carousel / hero image */}
         {(() => {
           const heroImages = getLocationImages(locationName);
-          const heroOverlay = (
-            <div className="p-6">
-              <div className="flex items-end justify-between flex-wrap gap-4">
-                <div>
-                  <h1 className="text-3xl sm:text-4xl font-extrabold text-white drop-shadow-lg">
-                    {locationName}
-                    {stateCode && <span className="ml-3 text-lg font-medium text-white/70">{stateCode}</span>}
-                  </h1>
-                  <div className="flex items-center gap-3 mt-2">
-                    <span className={cn('px-3 py-1 rounded-full text-sm font-semibold', viability.bg, viability.color)}>
-                      {viability.label}
-                    </span>
-                    <span className="text-white/80 text-sm font-medium">{score.toFixed(1)} / 10</span>
-                    <span className="flex items-center gap-0.5">
-                      {[1, 2, 3, 4, 5].map(i => (
-                        <svg key={i} className={cn('w-4 h-4', i <= stars ? 'text-yellow-400' : i - 0.5 <= stars ? 'text-yellow-400' : 'text-white/30')} fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                        </svg>
-                      ))}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleSave}
-                    className={cn(
-                      'px-4 py-2 rounded-full text-sm font-semibold transition-colors',
-                      isSaved
-                        ? 'bg-white text-carto-blue'
-                        : 'bg-white/20 text-white border border-white/40 hover:bg-white/30'
-                    )}
-                  >
-                    {isSaved ? 'Saved' : 'Save to My Locations'}
-                  </button>
-                  <button
-                    onClick={() => window.print()}
-                    className="px-4 py-2 rounded-full text-sm font-semibold bg-white/20 text-white border border-white/40 hover:bg-white/30 transition-colors"
-                  >
-                    Download PDF
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-
-          if (heroImages && heroImages.length > 0) {
-            return (
-              <LocationHeroCarousel images={heroImages} locationName={locationName}>
-                {heroOverlay}
-              </LocationHeroCarousel>
-            );
-          }
-
-          // Fallback: state flag background (for locations without carousel images)
+          // Always use carousel — it fetches hi-res images from Google API internally.
+          // Local images serve as instant placeholders while hi-res load.
+          const placeholders: LocationImage[] = heroImages && heroImages.length > 0
+            ? heroImages
+            : [{ src: flagPath, alt: locationName }];
           return (
-            <div className="relative rounded-2xl overflow-hidden">
-              <div className="h-72 sm:h-80 md:h-96 bg-gradient-to-br from-carto-blue to-[#3A7BC0] relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={flagPath}
-                  alt={locationName}
-                  className="absolute inset-0 w-full h-full object-cover opacity-20"
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                <div className="absolute bottom-0 left-0 right-0">
-                  {heroOverlay}
-                </div>
-              </div>
-            </div>
+            <LocationHeroCarousel images={placeholders} locationName={locationName} />
           );
         })()}
+
+        {/* Title card below carousel — Niche style */}
+        <div className="bg-white rounded-b-2xl border border-t-0 border-gray-200 px-6 py-5">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl sm:text-4xl font-extrabold text-carto-slate">
+                {locationName}
+                {stateCode && <span className="ml-2 text-lg font-medium text-gray-400">{stateCode}</span>}
+              </h1>
+              <div className="flex flex-wrap items-center gap-2 mt-2 text-sm text-gray-500">
+                <span className={cn('px-3 py-1 rounded-full text-sm font-semibold', viability.bg, viability.color)}>
+                  {viability.label}
+                </span>
+                <span className="text-gray-400">|</span>
+                <span className="font-medium text-carto-slate">{score.toFixed(1)} / 10</span>
+                <span className="text-gray-400">|</span>
+                <span className="flex items-center gap-0.5">
+                  {[1, 2, 3, 4, 5].map(i => (
+                    <svg key={i} className={cn('w-4 h-4', i <= stars ? 'text-yellow-400' : i - 0.5 <= stars ? 'text-yellow-400' : 'text-gray-200')} fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                  ))}
+                </span>
+                {qolResult && (
+                  <>
+                    <span className="text-gray-400">|</span>
+                    <span>QoL: <strong className="text-carto-slate">{qolResult.personal_label}</strong></span>
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <button
+                onClick={handleSave}
+                className={cn(
+                  'px-5 py-2.5 rounded-full text-sm font-semibold transition-colors border',
+                  isSaved
+                    ? 'bg-[#4A90D9] text-white border-[#4A90D9]'
+                    : 'bg-white text-[#4A90D9] border-[#4A90D9] hover:bg-[#4A90D9]/5'
+                )}
+              >
+                {isSaved ? 'Saved' : 'Save to My Locations'}
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="px-5 py-2.5 rounded-full text-sm font-semibold bg-white text-gray-600 border border-gray-300 hover:bg-gray-50 transition-colors"
+              >
+                Download PDF
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="flex gap-6">
@@ -642,9 +634,9 @@ export default function LocationPage() {
             </div>
           </Section>
 
-          {/* ═══ QUALITY OF LIFE ═══ */}
-          <Section id="quality-of-life" title="Quality of Life Index">
-            <QoLSection locationName={locationName} annualIncome={userSalaryForQoL || undefined} />
+          {/* ═══ QUALITY OF LIFE (Grade Card) ═══ */}
+          <Section id="quality-of-life" title="Quality of Life">
+            <QoLGradeCard locationName={locationName} annualIncome={userSalaryForQoL || undefined} />
           </Section>
 
           {/* ═══ HOUSING ═══ */}
@@ -1027,6 +1019,11 @@ export default function LocationPage() {
                 </>
               )}
             </div>
+          </Section>
+
+          {/* ═══ QOL DETAILS (In-depth breakdown) ═══ */}
+          <Section id="qol-details" title="Quality of Life — In-Depth">
+            <QoLSection locationName={locationName} annualIncome={userSalaryForQoL || undefined} />
           </Section>
 
         </div>
