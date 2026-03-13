@@ -12,8 +12,17 @@ const data = homeValueData as Record<string, HomeValueEntry>;
 // Pre-build a lowercase lookup map for fast case-insensitive matching
 const lowerCaseMap = new Map<string, HomeValueEntry>();
 for (const [key, value] of Object.entries(data)) {
-  lowerCaseMap.set(key.toLowerCase(), value);
+  lowerCaseMap.set(key.trim().toLowerCase(), value);
 }
+
+// Aliases for city names that differ from Typical_Home_Value.json keys
+const HOME_VALUE_ALIASES: Record<string, string> = {
+  'miami-dade': 'miami',
+  'miami dade': 'miami',
+  'orange county': 'anaheim',
+  'broward': 'fort lauderdale',
+  'broward/palm beach': 'fort lauderdale',
+};
 
 /**
  * Look up the price per square foot for a location.
@@ -37,7 +46,7 @@ function lookupEntry(locationName: string): HomeValueEntry | null {
     if (data[cityOnly]) return data[cityOnly];
   }
 
-  const lowerName = locationName.toLowerCase();
+  const lowerName = locationName.trim().toLowerCase();
   const match = lowerCaseMap.get(lowerName);
   if (match) return match;
 
@@ -45,6 +54,20 @@ function lookupEntry(locationName: string): HomeValueEntry | null {
     const lowerCity = locationName.substring(0, commaIdx).trim().toLowerCase();
     const cityMatch = lowerCaseMap.get(lowerCity);
     if (cityMatch) return cityMatch;
+
+    // Try alias for the city part
+    const aliasCity = HOME_VALUE_ALIASES[lowerCity];
+    if (aliasCity) {
+      const aliasMatch = lowerCaseMap.get(aliasCity);
+      if (aliasMatch) return aliasMatch;
+    }
+  }
+
+  // Try alias for the full name
+  const aliasName = HOME_VALUE_ALIASES[lowerName];
+  if (aliasName) {
+    const aliasMatch = lowerCaseMap.get(aliasName);
+    if (aliasMatch) return aliasMatch;
   }
 
   return null;
