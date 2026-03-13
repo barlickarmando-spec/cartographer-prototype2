@@ -74,9 +74,8 @@ function MetricCard({ label, value, sub, accent }: { label: string; value: strin
 // ─── Filter Nav ─────────────────────────────────────────────────────
 const SECTIONS = [
   { id: 'overview', label: 'Overview' },
-  { id: 'overall', label: 'Overall Stats' },
+  { id: 'overall', label: 'Overview' },
   { id: 'job-market', label: 'Job Market' },
-  { id: 'ai-overview', label: 'Overview' },
   { id: 'quality-of-life', label: 'Quality of Life' },
   { id: 'housing', label: 'Housing' },
   { id: 'allocation', label: 'Allocation Strategy' },
@@ -437,74 +436,88 @@ export default function LocationPage() {
         {/* ═══ MAIN CONTENT ═══ */}
         <div className="flex-1 min-w-0 space-y-6">
 
-          {/* ═══ OVERALL OVERVIEW ═══ */}
-          <Section id="overall" title="Overall Overview">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              <MetricCard
-                label="Typical Home Value"
-                value={fmtDollars(locData.housing.medianHomeValue)}
-                sub={`${fmtDollars(getPricePerSqft(locationName))}/sqft`}
-              />
-              <MetricCard
-                label="Min Viable Age for Kids"
-                value={kv.firstKid.isViable ? `Age ${kv.firstKid.minimumAge}` : 'N/A'}
-                sub={kv.firstKid.reason || (kv.firstKid.isViable ? 'First child' : 'Not viable for kids')}
-                accent={kv.firstKid.isViable ? '#E8F5E9' : '#FFF3E0'}
-              />
-              <MetricCard
-                label="Quality of Life"
-                value={qolResult ? qolResult.personal_label : (score >= 7 ? 'High' : score >= 4 ? 'Moderate' : 'Low')}
-                sub={qolResult ? `${qolResult.personal_qol.toFixed(0)}/100 — Rank #${qolResult.personal_rank}` : `Score: ${score.toFixed(1)}/10`}
-                accent={qolResult && qolResult.personal_qol >= 70 ? '#E8F5E9' : undefined}
-              />
-              <MetricCard
-                label="Income Tax"
-                value="Varies"
-                sub="State-specific"
-              />
-              <MetricCard
-                label="Cost of Living"
-                value={fmtDollars(colOnePerson)}
-                sub="Annual, without kids"
-              />
-              <MetricCard
-                label="COL With Kids"
-                value={fmtDollars(colWithOneKid)}
-                sub="Annual, 1 kid"
-                accent="#FFF8E1"
-              />
-              <MetricCard
-                label="Time to Pay Off Debt"
-                value={calcResult.yearsToDebtFree > 0 ? formatYears(calcResult.yearsToDebtFree) : 'No Debt'}
-                sub={calcResult.yearsToDebtFree > 0 ? `Age ${calcResult.ageDebtFree}` : undefined}
-              />
-              <MetricCard
-                label="Median Rent"
-                value={medianRent > 0 ? `${fmtDollars(medianRent)}/mo` : 'N/A'}
-                sub={locData.rent.twoBedroomAnnual > 0 ? `${fmtDollars(locData.rent.twoBedroomAnnual)}/yr (2BR)` : undefined}
-              />
-              <MetricCard
-                label="Economic Opportunity"
-                value={userSalary > 0 ? fmtDollars(userSalary) : 'N/A'}
-                sub={profile?.userOccupation || 'Your industry salary'}
-                accent="#E8F2FB"
-              />
-              <MetricCard
-                label="Min Annual Savings"
-                value={fmtDollars(Math.max(0, disposableIncome * (minAllocation / 100)))}
-                sub={`${minAllocation.toFixed(0)}% allocation needed`}
-                accent={minAllocation > 60 ? '#FFF3E0' : '#E8F5E9'}
-              />
-              <MetricCard
-                label="Homeownership"
-                value={calcResult.yearsToMortgage > 0 ? formatYears(calcResult.yearsToMortgage) : 'N/A'}
-                sub={calcResult.yearsToMortgage > 0 ? `Age ${calcResult.ageMortgageAcquired}` : 'May not be viable'}
-              />
-              <MetricCard
-                label="Affordable Home Size"
-                value={calcResult.projectedSqFt > 0 ? `${fmtNum(Math.round(calcResult.projectedSqFt))} sqft` : 'N/A'}
-                sub={calcResult.houseTag}
-              />
+          {/* ═══ OVERVIEW (combined) ═══ */}
+          <Section id="overall" title="Overview">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left column: Key Metrics */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Key Metrics</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <MetricCard
+                    label="Your Salary"
+                    value={userSalary > 0 ? fmtDollars(userSalary) : 'N/A'}
+                    sub={profile?.userOccupation || 'Your industry'}
+                    accent="#E8F2FB"
+                  />
+                  <MetricCard
+                    label="Cost of Living"
+                    value={fmtDollars(colOnePerson)}
+                    sub="Annual, single person"
+                  />
+                  <MetricCard
+                    label="Median Rent"
+                    value={medianRent > 0 ? `${fmtDollars(medianRent)}/mo` : 'N/A'}
+                    sub="2-bedroom"
+                  />
+                  <MetricCard
+                    label="Typical Home Value"
+                    value={fmtDollars(locData.housing.medianHomeValue)}
+                    sub={`${fmtDollars(getPricePerSqft(locationName))}/sqft`}
+                  />
+                </div>
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide pt-2">Your Path</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <MetricCard
+                    label="Homeownership"
+                    value={calcResult.yearsToMortgage > 0 ? formatYears(calcResult.yearsToMortgage) : 'N/A'}
+                    sub={calcResult.yearsToMortgage > 0 ? `Age ${calcResult.ageMortgageAcquired}` : 'May not be viable'}
+                  />
+                  <MetricCard
+                    label="Affordable Home"
+                    value={calcResult.projectedSqFt > 0 ? `${fmtNum(Math.round(calcResult.projectedSqFt))} sqft` : 'N/A'}
+                    sub={calcResult.houseTag}
+                  />
+                  <MetricCard
+                    label="Debt-Free"
+                    value={calcResult.yearsToDebtFree > 0 ? formatYears(calcResult.yearsToDebtFree) : 'No Debt'}
+                    sub={calcResult.yearsToDebtFree > 0 ? `Age ${calcResult.ageDebtFree}` : undefined}
+                  />
+                  <MetricCard
+                    label="Min Allocation"
+                    value={`${minAllocation.toFixed(0)}%`}
+                    sub="Of disposable income"
+                    accent={minAllocation > 60 ? '#FFF3E0' : '#E8F5E9'}
+                  />
+                </div>
+              </div>
+
+              {/* Right column: Pros & Cons */}
+              <div className="space-y-4">
+                <div className="bg-emerald-50 rounded-xl p-4">
+                  <h3 className="font-semibold text-emerald-800 mb-3">Pros</h3>
+                  <ul className="space-y-2 text-sm text-emerald-900">
+                    {calcResult.isViable && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Viable path to homeownership in {calcResult.yearsToMortgage > 0 ? formatYears(calcResult.yearsToMortgage) : 'this location'}</li>}
+                    {colOnePerson < 35000 && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Below-average cost of living ({fmtDollars(colOnePerson)}/yr)</li>}
+                    {userSalary > locData.salaries.overallAverage && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Your industry pays above local average</li>}
+                    {kv.firstKid.isViable && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Can afford kids (first viable at age {kv.firstKid.minimumAge})</li>}
+                    {locData.housing.appreciationRate > 0.04 && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Strong home appreciation ({fmtPct(locData.housing.appreciationRate)}/yr)</li>}
+                    {minAllocation <= 40 && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Low minimum allocation needed ({minAllocation.toFixed(0)}%)</li>}
+                    {medianRent > 0 && medianRent < 1200 && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Affordable rent while saving ({fmtDollars(medianRent)}/mo)</li>}
+                  </ul>
+                </div>
+                <div className="bg-red-50 rounded-xl p-4">
+                  <h3 className="font-semibold text-red-800 mb-3">Cons</h3>
+                  <ul className="space-y-2 text-sm text-red-900">
+                    {!calcResult.isViable && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>No viable path to homeownership</li>}
+                    {colOnePerson > 45000 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Above-average cost of living ({fmtDollars(colOnePerson)}/yr)</li>}
+                    {minAllocation > 60 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Requires aggressive savings ({minAllocation.toFixed(0)}% allocation)</li>}
+                    {calcResult.yearsToMortgage > 10 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Long time to homeownership ({formatYears(calcResult.yearsToMortgage)})</li>}
+                    {!kv.firstKid.isViable && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Having kids may not be financially viable here</li>}
+                    {locData.housing.medianHomeValue > 500000 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>High home prices ({fmtDollars(locData.housing.medianHomeValue)} median)</li>}
+                    {medianRent > 2000 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Expensive rent ({fmtDollars(medianRent)}/mo) slows savings</li>}
+                  </ul>
+                </div>
+              </div>
             </div>
           </Section>
 
@@ -573,90 +586,25 @@ export default function LocationPage() {
             </div>
           </Section>
 
-          {/* ═══ AI OVERVIEW ═══ */}
-          <Section id="ai-overview" title="Overview">
+          {/* ═══ ANALYSIS ═══ */}
+          <Section id="ai-overview" title="Analysis">
             <div className="space-y-6">
-              {/* Pros & Cons */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-emerald-50 rounded-xl p-4">
-                  <h3 className="font-semibold text-emerald-800 mb-3">Pros</h3>
-                  <ul className="space-y-2 text-sm text-emerald-900">
-                    {calcResult.isViable && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Viable path to homeownership in {calcResult.yearsToMortgage > 0 ? formatYears(calcResult.yearsToMortgage) : 'this location'}</li>}
-                    {colOnePerson < 35000 && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Below-average cost of living ({fmtDollars(colOnePerson)}/yr)</li>}
-                    {userSalary > locData.salaries.overallAverage && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Your industry pays above local average</li>}
-                    {kv.firstKid.isViable && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Can afford kids (first viable at age {kv.firstKid.minimumAge})</li>}
-                    {locData.housing.appreciationRate > 0.04 && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Strong home appreciation ({fmtPct(locData.housing.appreciationRate)}/yr)</li>}
-                    {minAllocation <= 40 && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Low minimum allocation needed ({minAllocation.toFixed(0)}%)</li>}
-                    {medianRent > 0 && medianRent < 1200 && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Affordable rent while saving ({fmtDollars(medianRent)}/mo)</li>}
-                  </ul>
-                </div>
-                <div className="bg-red-50 rounded-xl p-4">
-                  <h3 className="font-semibold text-red-800 mb-3">Cons</h3>
-                  <ul className="space-y-2 text-sm text-red-900">
-                    {!calcResult.isViable && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>No viable path to homeownership</li>}
-                    {colOnePerson > 45000 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Above-average cost of living ({fmtDollars(colOnePerson)}/yr)</li>}
-                    {minAllocation > 60 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Requires aggressive savings ({minAllocation.toFixed(0)}% allocation)</li>}
-                    {calcResult.yearsToMortgage > 10 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Long time to homeownership ({formatYears(calcResult.yearsToMortgage)})</li>}
-                    {!kv.firstKid.isViable && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Having kids may not be financially viable here</li>}
-                    {locData.housing.medianHomeValue > 500000 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>High home prices ({fmtDollars(locData.housing.medianHomeValue)} median)</li>}
-                    {medianRent > 2000 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Expensive rent ({fmtDollars(medianRent)}/mo) slows savings</li>}
-                  </ul>
-                </div>
-              </div>
-
-              {/* Additional analysis */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-gray-50 rounded-xl p-4">
-                  <h4 className="font-medium text-gray-700 mb-2">Can you afford private school?</h4>
-                  <p className="text-sm text-gray-600">
-                    {disposableIncome > 15000
-                      ? `With ${fmtDollars(disposableIncome)} annual disposable income, private school (~$12K/yr) may be feasible with careful budgeting.`
-                      : `With ${fmtDollars(disposableIncome)} disposable income, private school would be very difficult. Consider public options.`}
-                  </p>
-                </div>
-                <div className="bg-gray-50 rounded-xl p-4">
-                  <h4 className="font-medium text-gray-700 mb-2">Can you comfortably take a car loan?</h4>
-                  <p className="text-sm text-gray-600">
-                    {disposableIncome > 8000
-                      ? `Yes — a moderate car payment (~$400/mo) would use ~${Math.round(4800 / disposableIncome * 100)}% of your disposable income.`
-                      : `A car loan would strain your budget significantly. Consider buying used or saving up.`}
-                  </p>
-                </div>
-              </div>
-
               {/* Scorecard */}
-              <div>
-                <h3 className="font-semibold text-gray-700 mb-3">Rankings Scorecard</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {[
-                    { label: 'Quality of Life', value: qolResult ? qolResult.personal_qol / 10 : Math.min(10, score + (colOnePerson < 35000 ? 1 : 0)) },
-                    { label: 'Healthcare', value: qolResult ? qolResult.personal_categories.healthcare.score / 10 : Math.min(10, 5 + (score > 6 ? 2 : 0)) },
-                    { label: 'Safety', value: qolResult ? qolResult.personal_categories.safety.score / 10 : Math.min(10, colOnePerson < 40000 ? 7 : colOnePerson < 50000 ? 5 : 3) },
-                    { label: 'Education', value: qolResult ? qolResult.personal_categories.education.score / 10 : Math.min(10, 5 + (locData.salaries.educationTrainingLibrary > 50000 ? 2 : 0)) },
-                  ].map(item => (
-                    <div key={item.label} className="bg-white border border-gray-200 rounded-xl p-3 text-center">
-                      <div className="text-2xl font-bold text-carto-blue">{item.value.toFixed(1)}</div>
-                      <div className="text-xs text-gray-500 mt-1">{item.label}</div>
-                    </div>
-                  ))}
-                </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: 'Quality of Life', value: qolResult ? qolResult.personal_qol / 10 : Math.min(10, score + (colOnePerson < 35000 ? 1 : 0)) },
+                  { label: 'Healthcare', value: qolResult ? qolResult.personal_categories.healthcare.score / 10 : Math.min(10, 5 + (score > 6 ? 2 : 0)) },
+                  { label: 'Safety', value: qolResult ? qolResult.personal_categories.safety.score / 10 : Math.min(10, colOnePerson < 40000 ? 7 : colOnePerson < 50000 ? 5 : 3) },
+                  { label: 'Education', value: qolResult ? qolResult.personal_categories.education.score / 10 : Math.min(10, 5 + (locData.salaries.educationTrainingLibrary > 50000 ? 2 : 0)) },
+                ].map(item => (
+                  <div key={item.label} className="bg-white border border-gray-200 rounded-xl p-3 text-center">
+                    <div className="text-2xl font-bold text-carto-blue">{item.value.toFixed(1)}</div>
+                    <div className="text-xs text-gray-500 mt-1">{item.label}</div>
+                  </div>
+                ))}
               </div>
 
-              {/* Recommendations */}
-              {calcResult.recommendations.length > 0 && (
-                <div>
-                  <h3 className="font-semibold text-gray-700 mb-3">Recommended Changes to Improve Viability</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {calcResult.recommendations.map((rec, i) => (
-                      <span key={i} className="px-3 py-1.5 bg-carto-blue-sky text-carto-slate text-sm rounded-full border border-carto-blue-pale/40">
-                        {rec}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Minimum allocation */}
+              {/* Minimum allocation bar */}
               <div>
                 <h3 className="font-semibold text-gray-700 mb-2">Minimum Allocation Required</h3>
                 <div className="relative h-6 bg-gray-200 rounded-full overflow-hidden">
@@ -669,6 +617,20 @@ export default function LocationPage() {
                   </span>
                 </div>
               </div>
+
+              {/* Recommendations */}
+              {calcResult.recommendations.length > 0 && (
+                <div>
+                  <h3 className="font-semibold text-gray-700 mb-3">Recommendations</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {calcResult.recommendations.map((rec, i) => (
+                      <span key={i} className="px-3 py-1.5 bg-carto-blue-sky text-carto-slate text-sm rounded-full border border-carto-blue-pale/40">
+                        {rec}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </Section>
 
