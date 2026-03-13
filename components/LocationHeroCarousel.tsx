@@ -8,11 +8,34 @@ interface LocationHeroCarouselProps {
   locationName: string;
 }
 
-export default function LocationHeroCarousel({ images, locationName }: LocationHeroCarouselProps) {
+export default function LocationHeroCarousel({ images: localImages, locationName }: LocationHeroCarouselProps) {
   const [current, setCurrent] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
+  const [hiResImages, setHiResImages] = useState<LocationImage[] | null>(null);
+  const [failedSrcs, setFailedSrcs] = useState<Set<string>>(new Set());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Fetch high-res images from Google API
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchHiRes() {
+      try {
+        const res = await fetch(`/api/location-images?location=${encodeURIComponent(locationName)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && data.success && data.images && data.images.length > 0) {
+          setHiResImages(data.images);
+        }
+      } catch {
+        // Keep using local images
+      }
+    }
+    fetchHiRes();
+    return () => { cancelled = true; };
+  }, [locationName]);
+
+  // Use hi-res images if available, otherwise local
+  const images = hiResImages && hiResImages.length > 0 ? hiResImages : localImages;
   const count = images.length;
 
   const goTo = useCallback((idx: number) => {
@@ -43,9 +66,13 @@ export default function LocationHeroCarousel({ images, locationName }: LocationH
     return () => window.removeEventListener('keydown', handler);
   }, [prev, next]);
 
+  const handleImageError = useCallback((src: string) => {
+    setFailedSrcs(prev => new Set(prev).add(src));
+  }, []);
+
   return (
     <div
-      className="relative w-full overflow-hidden rounded-t-2xl"
+      className="relative w-full overflow-hidden rounded-t-2xl bg-gray-100"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -53,20 +80,27 @@ export default function LocationHeroCarousel({ images, locationName }: LocationH
       <div className="relative h-64 sm:h-72 md:h-80">
         {images.map((img, i) => (
           <div
-            key={i}
+            key={`${img.src}-${i}`}
             className="absolute inset-0 transition-opacity duration-700 ease-in-out"
             style={{ opacity: i === current ? 1 : 0, zIndex: i === current ? 1 : 0 }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={img.src}
-              alt={img.alt}
-              className="w-full h-full object-cover"
-              loading={i === 0 ? 'eager' : 'lazy'}
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = 'none';
-              }}
-            />
+            {!failedSrcs.has(img.src) ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={img.src}
+                alt={img.alt}
+                className="w-full h-full object-cover"
+                decoding="async"
+                fetchPriority={i === 0 ? 'high' : undefined}
+                loading={i === 0 ? 'eager' : 'lazy'}
+                referrerPolicy="no-referrer"
+                onError={() => handleImageError(img.src)}
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-[#4A90D9]/20 to-[#3A7BC0]/30 flex items-center justify-center">
+                <span className="text-gray-400 text-sm">Image unavailable</span>
+              </div>
+            )}
           </div>
         ))}
       </div>

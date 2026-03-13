@@ -15,7 +15,7 @@ import QoLSection from '@/components/QoLSection';
 import QoLGradeCard from '@/components/QoLGradeCard';
 import { getPersonalizedQoL, getObjectiveQoL } from '@/lib/qol-engine';
 import LocationHeroCarousel from '@/components/LocationHeroCarousel';
-import { getLocationImages } from '@/lib/location-images';
+import { getLocationImages, LocationImage } from '@/lib/location-images';
 
 // ─── Helpers ────────────────────────────────────────────────────────
 function fmtNum(n: number): string {
@@ -312,24 +312,13 @@ export default function LocationPage() {
         {/* Image carousel / hero image */}
         {(() => {
           const heroImages = getLocationImages(locationName);
-          if (heroImages && heroImages.length > 0) {
-            return (
-              <LocationHeroCarousel images={heroImages} locationName={locationName} />
-            );
-          }
-          // Fallback: state flag background
+          // Always use carousel — it fetches hi-res images from Google API internally.
+          // Local images serve as instant placeholders while hi-res load.
+          const placeholders: LocationImage[] = heroImages && heroImages.length > 0
+            ? heroImages
+            : [{ src: flagPath, alt: locationName }];
           return (
-            <div className="relative rounded-2xl overflow-hidden">
-              <div className="h-64 sm:h-72 md:h-80 bg-gradient-to-br from-carto-blue to-[#3A7BC0] relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={flagPath}
-                  alt={locationName}
-                  className="absolute inset-0 w-full h-full object-cover opacity-20"
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                />
-              </div>
-            </div>
+            <LocationHeroCarousel images={placeholders} locationName={locationName} />
           );
         })()}
 
