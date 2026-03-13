@@ -4,6 +4,7 @@
 // (auto-complete → properties/v3/list)
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getCitiesRows } from '@/lib/data';
 
 // ── Config ──────────────────────────────────────────────────────────
 const API_KEY = process.env.RAPIDAPI_KEY || '';
@@ -53,6 +54,30 @@ const STATE_CAPITALS: Record<string, string> = {
   'VT': 'Burlington', 'VA': 'Virginia Beach', 'WA': 'Seattle', 'WV': 'Charleston',
   'WI': 'Milwaukee', 'WY': 'Cheyenne',
 };
+
+// ── City → State lookup from local database ─────────────────────────
+// Build a map of lowercase city name → state code(s) from the local 151-city DB.
+// This enables resolving cities that aren't state capitals.
+let _cityStateMap: Map<string, string> | null = null;
+
+function getCityStateMap(): Map<string, string> {
+  if (_cityStateMap) return _cityStateMap;
+  _cityStateMap = new Map();
+  try {
+    const rows = getCitiesRows();
+    for (const row of rows) {
+      const city = String(row['City/County'] || row['City'] || row['city'] || '').trim();
+      const state = String(row['State'] || row['state'] || '').trim();
+      if (city && state && state !== 'null') {
+        // Store the canonical city name with its state code
+        _cityStateMap.set(city.toLowerCase(), state.toUpperCase());
+      }
+    }
+  } catch (e) {
+    console.log('[homes/search] Could not load city database:', e instanceof Error ? e.message : e);
+  }
+  return _cityStateMap;
+}
 
 // ── Shared utilities ────────────────────────────────────────────────
 function parseLocation(location: string): { city: string; stateCode: string } {
@@ -470,6 +495,21 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Strategy 4b: Look up city in local database (151 cities with state codes)
+      if (listings.length === 0 && city && !stateCode) {
+        const cityMap = getCityStateMap();
+        const lookupState = cityMap.get(city.toLowerCase());
+        if (lookupState) {
+          console.log(`[homes/search] Local DB match: ${city}, ${lookupState}`);
+          const result = await searchListings({ city, state_code: lookupState }, minPrice, maxPrice);
+          if (result && result.listings.length > 0) {
+            listings = result.listings;
+            totalAvailable = result.totalAvailable;
+            debug.searchMethod = 'local_db_match';
+          }
+        }
+      }
+
       // Strategy 5: If auto-complete failed but we can extract a zip from the location, try postal_code
       if (listings.length === 0 && !isZipCode) {
         const zipMatch = location.match(/\b(\d{5})\b/);
@@ -613,6 +653,14 @@ export async function GET(request: NextRequest) {
               tryCity = capitalCity;
               break;
             }
+          }
+        }
+        // Also try local city database
+        if (!tryState) {
+          const cityMap = getCityStateMap();
+          const lookupState = cityMap.get(city.toLowerCase());
+          if (lookupState) {
+            tryState = lookupState;
           }
         }
         if (tryState) {
