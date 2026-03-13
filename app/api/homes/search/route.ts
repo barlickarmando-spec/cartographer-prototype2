@@ -226,10 +226,13 @@ async function autoComplete(query: string): Promise<ResolvedLocation | null> {
   }
 
   const json = await res.json();
-  const autocomplete = json.autocomplete || [];
+  console.log('[homes/search] Auto-complete raw response keys:', Object.keys(json));
+
+  // Try multiple response formats — the API may have changed
+  const autocomplete = json.autocomplete || json.data?.autocomplete || json.results || json.data || [];
 
   if (!Array.isArray(autocomplete) || autocomplete.length === 0) {
-    console.log('[homes/search] Auto-complete returned no results');
+    console.log('[homes/search] Auto-complete returned no results. Raw:', JSON.stringify(json).slice(0, 500));
     return null;
   }
 
@@ -439,7 +442,35 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Strategy 3: If auto-complete failed but we can extract a zip from the location, try postal_code
+      // Strategy 3: Skip auto-complete, try direct city/state from parsed location
+      if (listings.length === 0 && city && stateCode) {
+        console.log(`[homes/search] Auto-complete failed, trying direct city/state: ${city}, ${stateCode}`);
+        const result = await searchListings({ city, state_code: stateCode }, minPrice, maxPrice);
+        if (result && result.listings.length > 0) {
+          listings = result.listings;
+          totalAvailable = result.totalAvailable;
+          debug.searchMethod = 'city_state_direct';
+        }
+      }
+
+      // Strategy 4: Try with just the city name and guess state from capitals/common cities
+      if (listings.length === 0 && city && !stateCode) {
+        // Try looking up the city in state capitals to guess the state
+        for (const [code, capitalCity] of Object.entries(STATE_CAPITALS)) {
+          if (capitalCity.toLowerCase() === city.toLowerCase()) {
+            console.log(`[homes/search] Trying capital match: ${capitalCity}, ${code}`);
+            const result = await searchListings({ city: capitalCity, state_code: code }, minPrice, maxPrice);
+            if (result && result.listings.length > 0) {
+              listings = result.listings;
+              totalAvailable = result.totalAvailable;
+              debug.searchMethod = 'capital_match';
+              break;
+            }
+          }
+        }
+      }
+
+      // Strategy 5: If auto-complete failed but we can extract a zip from the location, try postal_code
       if (listings.length === 0 && !isZipCode) {
         const zipMatch = location.match(/\b(\d{5})\b/);
         if (zipMatch) {
@@ -545,22 +576,73 @@ export async function GET(request: NextRequest) {
   if (testLocation) {
     const { city, stateCode } = parseLocation(testLocation);
     const searchQuery = buildSearchQuery(city, stateCode);
+    const isZipCode = /^\d{5}$/.test(testLocation.trim());
     const steps: any[] = [];
+    let foundListings = false;
 
     try {
+      // Test 1: Auto-complete
       const resolved = await autoComplete(searchQuery);
-      steps.push({ step: 'auto-complete', resolved });
+      steps.push({ step: '1-auto-complete', resolved, status: resolved ? 'OK' : 'FAILED' });
 
+      // Test 2: City/state search (if auto-complete worked)
       if (resolved) {
         const result = await searchListings(resolved, 100000, 500000);
         const firstListing = result?.listings?.[0];
         steps.push({
-          step: 'properties-list',
+          step: '2-city-state-search',
+          status: result && result.listings.length > 0 ? 'OK' : 'NO_RESULTS',
           totalAvailable: result?.totalAvailable,
           listingCount: result?.listings?.length || 0,
           samplePhotoRaw: firstListing?.primary_photo?.href || 'none',
-          samplePhotoUpgraded: firstListing?.primary_photo?.href ? upgradePhotoUrl(firstListing.primary_photo.href) : 'none',
+          sampleKeys: firstListing ? Object.keys(firstListing).slice(0, 15) : [],
         });
+        if (result && result.listings.length > 0) foundListings = true;
+      }
+
+      // Test 3: Direct city/state (bypassing auto-complete)
+      if (!foundListings && city) {
+        const directState = stateCode || (STATE_CAPITALS[stateCode] ? stateCode : '');
+        // Try to find the state from capitals
+        let tryCity = city;
+        let tryState = stateCode;
+        if (!tryState) {
+          for (const [code, capitalCity] of Object.entries(STATE_CAPITALS)) {
+            if (capitalCity.toLowerCase() === city.toLowerCase()) {
+              tryState = code;
+              tryCity = capitalCity;
+              break;
+            }
+          }
+        }
+        if (tryState) {
+          const result = await searchListings({ city: tryCity, state_code: tryState }, 100000, 500000);
+          steps.push({
+            step: '3-direct-city-state',
+            city: tryCity,
+            state_code: tryState,
+            status: result && result.listings.length > 0 ? 'OK' : 'NO_RESULTS',
+            listingCount: result?.listings?.length || 0,
+          });
+          if (result && result.listings.length > 0) foundListings = true;
+        } else {
+          steps.push({ step: '3-direct-city-state', status: 'SKIPPED', reason: 'Could not determine state code' });
+        }
+      }
+
+      // Test 4: Postal code search
+      if (isZipCode) {
+        const result = await searchByPostalCode(testLocation.trim(), 100000, 500000);
+        const firstListing = result?.listings?.[0];
+        steps.push({
+          step: '4-postal-code',
+          postalCode: testLocation.trim(),
+          status: result && result.listings.length > 0 ? 'OK' : 'NO_RESULTS',
+          listingCount: result?.listings?.length || 0,
+          sampleKeys: firstListing ? Object.keys(firstListing).slice(0, 15) : [],
+          samplePhotoRaw: firstListing?.primary_photo?.href || 'none',
+        });
+        if (result && result.listings.length > 0) foundListings = true;
       }
     } catch (e) {
       steps.push({ step: 'error', error: e instanceof Error ? e.message : String(e) });
@@ -569,8 +651,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       apiHost: API_HOST,
       apiKeyConfigured: !!API_KEY,
+      apiKeyPrefix: API_KEY.slice(0, 8) + '...',
       locationInput: testLocation,
       searchQuery,
+      isZipCode,
+      parsedCity: city,
+      parsedStateCode: stateCode,
+      foundListings,
       steps,
     });
   }
