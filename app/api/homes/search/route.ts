@@ -220,7 +220,8 @@ async function autoComplete(query: string): Promise<ResolvedLocation | null> {
   });
 
   if (!res.ok) {
-    console.log(`[homes/search] Auto-complete failed: ${res.status}`);
+    const errText = await res.text().catch(() => '');
+    console.log(`[homes/search] Auto-complete failed: ${res.status} — ${errText.slice(0, 300)}`);
     return null;
   }
 
@@ -259,6 +260,56 @@ async function autoComplete(query: string): Promise<ResolvedLocation | null> {
   return null;
 }
 
+async function searchByPostalCode(
+  postalCode: string,
+  minPrice: number,
+  maxPrice: number,
+): Promise<{ listings: any[]; totalAvailable: number } | null> {
+  const body = {
+    limit: 200,
+    offset: 0,
+    postal_code: postalCode,
+    status: ['for_sale', 'ready_to_build'],
+    sort: { direction: 'desc', field: 'list_date' },
+    ...(minPrice > 0 || maxPrice < Infinity ? { list_price: { min: minPrice, max: maxPrice } } : {}),
+  };
+
+  try {
+    console.log(`[homes/search] POST /properties/v3/list (postal_code=${postalCode}):`, JSON.stringify(body).slice(0, 200));
+    const res = await fetch(`${API_URL}/properties/v3/list`, {
+      method: 'POST',
+      headers: API_HEADERS,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.log(`[homes/search] Postal code search failed: ${res.status} ${text.slice(0, 200)}`);
+      return null;
+    }
+
+    const json = await res.json();
+    const homeSearch = json.data?.home_search || json.data?.results || {};
+    let results = homeSearch.results || homeSearch || [];
+    if (!Array.isArray(results)) {
+      results = json.data?.properties || json.properties || json.results || json.data || [];
+    }
+    if (!Array.isArray(results)) results = [];
+
+    const total = homeSearch.total || json.data?.total || json.total || results.length;
+    console.log(`[homes/search] Postal code search got ${results.length} listings (${total} total)`);
+
+    if (results.length > 0) {
+      return { listings: results.slice(0, MAX_LISTINGS), totalAvailable: total };
+    }
+  } catch (e) {
+    console.log(`[homes/search] Postal code search error:`, e instanceof Error ? e.message : e);
+  }
+
+  return null;
+}
+
 async function searchListings(
   loc: ResolvedLocation,
   minPrice: number,
@@ -269,18 +320,18 @@ async function searchListings(
     {
       city: loc.city,
       state_code: loc.state_code,
-      status: ['for_sale'],
+      status: ['for_sale', 'ready_to_build'],
       sort: { direction: 'desc', field: 'list_date' },
       list_price: { min: minPrice, max: maxPrice },
-      limit: 42,
+      limit: 200,
       offset: 0,
     },
     {
       city: loc.city,
       state_code: loc.state_code,
-      status: ['for_sale'],
+      status: ['for_sale', 'ready_to_build'],
       sort: { direction: 'desc', field: 'list_date' },
-      limit: 42,
+      limit: 200,
       offset: 0,
     },
   ];
@@ -297,7 +348,8 @@ async function searchListings(
       });
 
       if (!res.ok) {
-        console.log(`[homes/search] List failed: ${res.status}`);
+        const errText = await res.text().catch(() => '');
+        console.log(`[homes/search] List failed: ${res.status} — ${errText.slice(0, 300)}`);
         continue;
       }
 
@@ -353,19 +405,54 @@ export async function POST(request: NextRequest) {
     let listings: any[] = [];
     let totalAvailable = 0;
 
+    // ── Try to detect if location looks like a zip code ──
+    const isZipCode = /^\d{5}$/.test(location.trim());
+    debug.isZipCode = isZipCode;
+
     // ── Resolve location and search ──
     try {
       console.log('[homes/search] Searching realty-in-us...');
-      const resolved = await autoComplete(searchQuery);
-      debug.resolved = resolved;
 
-      if (resolved) {
-        const result = await searchListings(resolved, minPrice, maxPrice);
-        if (result && result.listings.length > 0) {
-          listings = result.listings;
-          totalAvailable = result.totalAvailable;
+      // Strategy 1: If it's a zip code, try postal_code search directly first
+      if (isZipCode) {
+        console.log(`[homes/search] Detected zip code: ${location.trim()}, trying postal_code search...`);
+        const postalResult = await searchByPostalCode(location.trim(), minPrice, maxPrice);
+        if (postalResult && postalResult.listings.length > 0) {
+          listings = postalResult.listings;
+          totalAvailable = postalResult.totalAvailable;
+          debug.searchMethod = 'postal_code_direct';
         }
       }
+
+      // Strategy 2: Auto-complete → city/state search
+      if (listings.length === 0) {
+        const resolved = await autoComplete(searchQuery);
+        debug.resolved = resolved;
+
+        if (resolved) {
+          const result = await searchListings(resolved, minPrice, maxPrice);
+          if (result && result.listings.length > 0) {
+            listings = result.listings;
+            totalAvailable = result.totalAvailable;
+            debug.searchMethod = 'city_state';
+          }
+        }
+      }
+
+      // Strategy 3: If auto-complete failed but we can extract a zip from the location, try postal_code
+      if (listings.length === 0 && !isZipCode) {
+        const zipMatch = location.match(/\b(\d{5})\b/);
+        if (zipMatch) {
+          console.log(`[homes/search] City/state search failed, trying extracted zip: ${zipMatch[1]}`);
+          const postalResult = await searchByPostalCode(zipMatch[1], minPrice, maxPrice);
+          if (postalResult && postalResult.listings.length > 0) {
+            listings = postalResult.listings;
+            totalAvailable = postalResult.totalAvailable;
+            debug.searchMethod = 'postal_code_extracted';
+          }
+        }
+      }
+
       debug.listingCount = listings.length;
     } catch (e) {
       console.log('[homes/search] API error:', e instanceof Error ? e.message : e);
