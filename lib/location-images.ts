@@ -75,6 +75,15 @@ const LOCATION_IMAGES: Record<string, LocationImage[]> = {
     { src: '/location-images/Georgia/Georgia 2.jpg', alt: 'Georgia landscape' },
     { src: '/location-images/Georgia/Georgia 3.jpg', alt: 'Georgia cityscape' },
   ],
+  'Hawaii': [
+    { src: '/location-images/Hawaii/Hilo-in-Hawaii-Island-and-Haleiwa-in-Oahu-are-amon.webp', alt: 'Hilo Hawaii' },
+    { src: '/location-images/Hawaii/Oahu-Honolulu-Aerial-Hero-2_1.jpg.webp', alt: 'Honolulu aerial view' },
+    { src: '/location-images/Hawaii/Papaoneone_Beach_Oahu.webp', alt: 'Papaoneone Beach Oahu' },
+    { src: '/location-images/Hawaii/download.jpg', alt: 'Hawaii scenic view' },
+    { src: '/location-images/Hawaii/image.webp', alt: 'Hawaii landscape' },
+    { src: '/location-images/Hawaii/images.jpg', alt: 'Hawaii coastline' },
+    { src: '/location-images/Hawaii/the-beautiful-and-unique-landscape-of-coastal-oahu-hawaii-and-the-kualoa-ranch-where-jurassic-park-was-filmed-as-shot-from-an-altitude-of-about-1000-feet-over-the-pacific-ocean-stockpack-istock-2048x1367.jpg', alt: 'Oahu coastal landscape' },
+  ],
   'Idaho': [
     { src: '/location-images/Idaho/Idaho.jpg', alt: 'Idaho scenic view' },
     { src: '/location-images/Idaho/Idaho 2.jpg', alt: 'Idaho mountains' },
@@ -350,7 +359,16 @@ const LOCATION_IMAGES: Record<string, LocationImage[]> = {
     { src: '/location-images/Vermont/things_to_do_in_burlington_vt_75933a781d.webp', alt: 'Burlington Vermont' },
     { src: '/location-images/Vermont/top-10-things-to-do-in-vermont-mountains-maple-small-town-charm-wQ-1024x574.jpg', alt: 'Vermont mountains' },
   ],
-  'Virginia': [],
+  'Virginia': [
+    { src: '/location-images/Virginia/247739725_10161294631605558_4027226096542341256_n-2000-e68c6e17f3fc45afb6516117e706c52f.jpg', alt: 'Virginia scenic view' },
+    { src: '/location-images/Virginia/Pros_and_Cons_of_Living_in_Virginia_fa487b899f.jpg', alt: 'Virginia landscape' },
+    { src: '/location-images/Virginia/Richmond-VA-Best-Place-to-Live-in-Virginia.jpg', alt: 'Richmond Virginia' },
+    { src: '/location-images/Virginia/ancient-dna-is-solving-colonial-mysteries-in-jamestown-391848-960x540.jpg', alt: 'Jamestown Virginia' },
+    { src: '/location-images/Virginia/download.jpg', alt: 'Virginia cityscape' },
+    { src: '/location-images/Virginia/download (1).jpg', alt: 'Virginia mountains' },
+    { src: '/location-images/Virginia/download (2).jpg', alt: 'Virginia countryside' },
+    { src: '/location-images/Virginia/l-intro-1685455313.jpg', alt: 'Virginia nature' },
+  ],
   'Washington': [
     { src: '/location-images/Washington/FO_Waterfront-Seattle_1_Photo-by-Erik-Holsather-courtesy-Friends-of-Waterfront-Park.webp', alt: 'Seattle waterfront' },
     { src: '/location-images/Washington/Seattle_Dest_42-52432475.jpg', alt: 'Seattle Washington' },
