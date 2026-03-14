@@ -98,7 +98,16 @@ const LOCATION_IMAGES: Record<string, LocationImage[]> = {
     { src: '/location-images/Florida/imagereader.webp', alt: 'Florida sunset' },
     { src: '/location-images/Florida/shutterstock_1735760138-e1731065033105.jpg', alt: 'Florida nature' },
   ],
-  'Georgia': [],
+  'Georgia': [
+    { src: '/location-images/Georgia/800X600_Blog05_01-9.jpg', alt: 'Georgia scenic view' },
+    { src: '/location-images/Georgia/Georgia.jpg', alt: 'Georgia landscape' },
+    { src: '/location-images/Georgia/Georgia 2.jpg', alt: 'Georgia cityscape' },
+    { src: '/location-images/Georgia/Plains+-+Julian+Buckmaster.webp', alt: 'Plains Georgia' },
+    { src: '/location-images/Georgia/best-vacation-spots-that-are-insta-worthy-blog-2.jpg', alt: 'Georgia vacation spot' },
+    { src: '/location-images/Georgia/emory-university-2.jpg', alt: 'Emory University Georgia' },
+    { src: '/location-images/Georgia/nature-of-georgia.webp', alt: 'Georgia nature' },
+    { src: '/location-images/Georgia/shutterstock_2320681803-scaled.jpg', alt: 'Georgia downtown' },
+  ],
   'Hawaii': [
     { src: '/location-images/Hawaii/Hilo-in-Hawaii-Island-and-Haleiwa-in-Oahu-are-amon.webp', alt: 'Hilo Hawaii' },
     { src: '/location-images/Hawaii/Oahu-Honolulu-Aerial-Hero-2_1.jpg.webp', alt: 'Honolulu aerial view' },
