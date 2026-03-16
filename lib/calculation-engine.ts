@@ -327,32 +327,52 @@ function calculateAutoApproach(
     }
 
     // Pre-compute kid viability to find minimum viable ages
-    // When kids-asap-viable is selected, use these ages as hard birth dates
     const kidViability = calculateKidViability(profile, locationData);
     const hasAsapRule = profile.hardRules && profile.hardRules.includes('kids-asap-viable');
 
     let simProfile = profile;
-    if (hasAsapRule && profile.kidsPlan !== 'no') {
-      // Respect the user's declared kid count — don't inflate beyond what they asked for
-      const userWantedKids = Math.min(3, profile.declaredKidCount || (profile.plannedKidAges?.length || 0));
-      const allViableAges: number[] = [];
-      if (kidViability.firstKid.isViable && kidViability.firstKid.minimumAge != null) {
-        allViableAges.push(kidViability.firstKid.minimumAge);
-      }
-      if (kidViability.secondKid.isViable && kidViability.secondKid.minimumAge != null) {
-        allViableAges.push(kidViability.secondKid.minimumAge);
-      }
-      if (kidViability.thirdKid.isViable && kidViability.thirdKid.minimumAge != null) {
-        allViableAges.push(kidViability.thirdKid.minimumAge);
-      }
-      // Only take as many viable ages as the user actually wants
-      const viableAges = allViableAges.slice(0, userWantedKids);
-      if (viableAges.length > 0) {
-        simProfile = {
-          ...profile,
-          plannedKidAges: viableAges,
-          declaredKidCount: viableAges.length,
-        };
+    if (profile.kidsPlan !== 'no' && profile.plannedKidAges && profile.plannedKidAges.length > 0) {
+      const viabilityByIndex = [kidViability.firstKid, kidViability.secondKid, kidViability.thirdKid];
+
+      if (hasAsapRule) {
+        // ASAP rule: use earliest viable ages, respecting user's declared kid count
+        const userWantedKids = Math.min(3, profile.declaredKidCount || (profile.plannedKidAges?.length || 0));
+        const allViableAges: number[] = [];
+        for (let i = 0; i < userWantedKids; i++) {
+          if (viabilityByIndex[i].isViable && viabilityByIndex[i].minimumAge != null) {
+            allViableAges.push(viabilityByIndex[i].minimumAge!);
+          }
+        }
+        if (allViableAges.length > 0) {
+          simProfile = {
+            ...profile,
+            plannedKidAges: allViableAges,
+            declaredKidCount: allViableAges.length,
+          };
+        }
+      } else {
+        // Standard path: check each planned age — if not viable, push to earliest viable age
+        const adjustedAges: number[] = [];
+        for (let i = 0; i < profile.plannedKidAges.length; i++) {
+          const plannedAge = profile.plannedKidAges[i];
+          const viability = viabilityByIndex[i];
+
+          if (viability.isViable && viability.minimumAge != null) {
+            // Use the planned age if it's at or after the minimum viable age, otherwise push to viable
+            const adjustedAge = Math.max(plannedAge, viability.minimumAge);
+            // Also ensure it's after the previous kid
+            const prevAge = adjustedAges.length > 0 ? adjustedAges[adjustedAges.length - 1] : 0;
+            adjustedAges.push(Math.max(adjustedAge, prevAge + 1));
+          }
+          // If not viable at all, drop this kid from the plan
+        }
+        if (adjustedAges.length !== profile.plannedKidAges.length || adjustedAges.some((a, i) => a !== profile.plannedKidAges![i])) {
+          simProfile = {
+            ...profile,
+            plannedKidAges: adjustedAges,
+            declaredKidCount: adjustedAges.length,
+          };
+        }
       }
     }
 
@@ -1037,7 +1057,7 @@ function runYearByYearSimulation(
       homeValue: currentHomeValue,
       mortgageBalance: currentMortgageBalance,
       homeEquity,
-      netWealth: savings + homeEquity - loanDebt,
+      netWealth: savings + homeEquity - loanDebt - ccDebtAmount,
       debugNotes,
     });
 
@@ -1587,8 +1607,10 @@ function calculateHouseProjections(
       continue;
     }
     
-    // Use no-mortgage savings: "if you saved X years without buying, what could you afford?"
-    const savings = snapshot.savingsNoMortgage;
+    // Use no-mortgage savings minus remaining debt: must pay off all debt before mortgage
+    // Subtract outstanding loan debt from available savings since mortgage requires loanDebt === 0
+    const rawSavings = snapshot.savingsNoMortgage;
+    const savings = Math.max(0, rawSavings - snapshot.loanDebtEnd);
     const downPaymentPercent = locationData.housing.downPaymentPercent || 0.107;
     const mortgageRate = locationData.housing.mortgageRate || 0.065;
     
@@ -2101,7 +2123,8 @@ function calculateProjectionForYear(
   const snapshot = simulation.find(s => s.year === roundedYear) || simulation[simulation.length - 1];
   if (!snapshot || !locationData.housing) return null;
 
-  const savings = snapshot.savingsNoMortgage;
+  // Subtract outstanding debt from savings since mortgage requires loanDebt === 0
+  const savings = Math.max(0, snapshot.savingsNoMortgage - snapshot.loanDebtEnd);
   const downPaymentPercent = locationData.housing.downPaymentPercent || 0.107;
   const mortgageRate = locationData.housing.mortgageRate || 0.065;
   const annualCostFactor = calculateAnnualCostFactor(mortgageRate, downPaymentPercent);
@@ -2194,7 +2217,8 @@ function calculateFastestToTarget(
   // 1. Savings cover down payment + first year payment
   // 2. Future worst-case DI can sustain the annual cost (checked from that year onward, not globally)
   for (const snap of simulation) {
-    if (snap.savingsNoMortgage >= savingsNeeded) {
+    const effectiveSavings = Math.max(0, snap.savingsNoMortgage - snap.loanDebtEnd);
+    if (effectiveSavings >= savingsNeeded) {
       // Check sustainability from THIS year onward (not global worst-case)
       const futureSnapshots = simulation.filter(s => s.year >= snap.year);
       let worstFutureDI = snap.totalIncome - snap.adjustedCOL;
@@ -2208,8 +2232,8 @@ function calculateFastestToTarget(
         return {
           year: snap.year,
           age: snap.age,
-          totalSavings: Math.round(snap.savingsNoMortgage),
-          maxPossibleHousePrice: Math.round(snap.savingsNoMortgage / (downPaymentPercent + ((1 - downPaymentPercent) * annualCostFactor))),
+          totalSavings: Math.round(effectiveSavings),
+          maxPossibleHousePrice: Math.round(effectiveSavings / (downPaymentPercent + ((1 - downPaymentPercent) * annualCostFactor))),
           downPaymentRequired: Math.round(downPayment),
           firstYearPaymentRequired: Math.round(annualPaymentForTarget),
           maxSustainableHousePrice: Math.round(targetPrice),
