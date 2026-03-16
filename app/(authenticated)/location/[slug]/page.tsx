@@ -15,6 +15,7 @@ import QoLSection from '@/components/QoLSection';
 import QoLGradeCard from '@/components/QoLGradeCard';
 import { getPersonalizedQoL, getObjectiveQoL } from '@/lib/qol-engine';
 import LocationHeroCarousel from '@/components/LocationHeroCarousel';
+import SimpleHomeCarousel from '@/components/SimpleHomeCarousel';
 import { getLocationImages, LocationImage } from '@/lib/location-images';
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -1148,35 +1149,98 @@ export default function LocationPage() {
             </div>
           </Section>
 
-          {/* Home Size Calculator */}
-          <Section id="home-size-calc" title="Home Size Calculator">
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600">Based on your financial profile in {locationName}:</p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-carto-blue-sky rounded-xl p-5 text-center">
-                  <p className="text-xs font-medium text-gray-500 uppercase">Affordable Price</p>
-                  <p className="text-2xl font-bold text-carto-slate mt-1">{maxAffordable ? fmtDollars(maxAffordable.maxSustainableHousePrice) : 'N/A'}</p>
-                </div>
-                <div className="bg-carto-blue-sky rounded-xl p-5 text-center">
-                  <p className="text-xs font-medium text-gray-500 uppercase">Estimated Size</p>
-                  <p className="text-2xl font-bold text-carto-slate mt-1">{calcResult.projectedSqFt > 0 ? `${fmtNum(Math.round(calcResult.projectedSqFt))} sqft` : 'N/A'}</p>
-                </div>
-                <div className="bg-carto-blue-sky rounded-xl p-5 text-center">
-                  <p className="text-xs font-medium text-gray-500 uppercase">Home Type</p>
-                  <p className="text-2xl font-bold text-carto-slate mt-1">{calcResult.houseTag || 'N/A'}</p>
-                </div>
-              </div>
-              <div className="bg-gray-50 rounded-xl p-4">
-                <p className="text-sm text-gray-600">
-                  At <span className="font-semibold">{fmtDollars(getPricePerSqft(locationName))}/sqft</span> in {locationName}, your max budget of{' '}
-                  <span className="font-semibold">{maxAffordable ? fmtDollars(maxAffordable.maxSustainableHousePrice) : 'N/A'}</span>{' '}
-                  gets you approximately <span className="font-semibold">{calcResult.projectedSqFt > 0 ? `${fmtNum(Math.round(calcResult.projectedSqFt))} sqft` : 'N/A'}</span>.
-                  {calcResult.projectedSqFt > 0 && calcResult.projectedSqFt < 800 && ' This is a compact space — consider looking at more affordable areas for more room.'}
-                  {calcResult.projectedSqFt >= 2000 && ' This is a spacious home with plenty of room for a family.'}
-                </p>
-              </div>
+          {/* Home Size Calculator — by Area Quality */}
+          <Section id="home-size-calc" title="What You Can Get in Each Neighborhood">
+            <div className="space-y-6">
+              <p className="text-sm text-gray-600">
+                At <span className="font-semibold">{fmtDollars(getPricePerSqft(locationName))}/sqft</span> in {locationName}, here&apos;s what your budget looks like across different neighborhood tiers:
+              </p>
+
+              {/* Quality tier cards */}
+              {(() => {
+                const basePrice = maxAffordable?.maxSustainableHousePrice || 0;
+                const tiers = [
+                  { key: 'nice' as const, label: 'Nice Area', sub: 'Premium neighborhoods', multiplier: 1.3, color: { text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', accent: '#E8F5E9' } },
+                  { key: 'average' as const, label: 'Average Area', sub: 'Typical neighborhoods', multiplier: 1.0, color: { text: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200', accent: '#E3F2FD' } },
+                  { key: 'any' as const, label: 'Budget-Friendly Area', sub: 'More affordable neighborhoods', multiplier: 0.75, color: { text: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200', accent: '#FFF8E1' } },
+                ];
+
+                return (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {tiers.map(tier => {
+                        const sqft = basePrice > 0 ? Math.round(estimateHomeSizeSqft(basePrice / tier.multiplier, locationName)) : 0;
+                        const effectivePrice = basePrice;
+                        const tag = sqft >= 2500 ? '3+ BR House' : sqft >= 1500 ? '2-3 BR Home' : sqft >= 800 ? '1-2 BR Condo/Apt' : sqft > 0 ? 'Studio/1 BR' : 'N/A';
+                        return (
+                          <div key={tier.key} className={`rounded-xl border ${tier.color.border} ${tier.color.bg} p-5`}>
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className={`font-semibold ${tier.color.text}`}>{tier.label}</h4>
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${tier.color.bg} ${tier.color.text} border ${tier.color.border}`}>
+                                {tier.multiplier > 1 ? `${((tier.multiplier - 1) * 100).toFixed(0)}% premium` : tier.multiplier < 1 ? `${((1 - tier.multiplier) * 100).toFixed(0)}% cheaper` : 'Baseline'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-500 mb-3">{tier.sub}</p>
+                            <div className="space-y-2">
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-600">Budget</span>
+                                <span className="font-bold text-carto-slate">{effectivePrice > 0 ? fmtDollars(effectivePrice) : 'N/A'}</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-600">Est. Size</span>
+                                <span className="font-bold text-carto-slate">{sqft > 0 ? `${fmtNum(sqft)} sqft` : 'N/A'}</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-600">Home Type</span>
+                                <span className="font-medium text-gray-700">{tag}</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-600">Price/sqft</span>
+                                <span className="font-medium text-gray-700">{fmtDollars(Math.round(getPricePerSqft(locationName) * tier.multiplier))}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Summary insight */}
+                    <div className="bg-gray-50 rounded-xl p-4">
+                      <p className="text-sm text-gray-600">
+                        {basePrice > 0 ? (
+                          <>
+                            Your max budget of <span className="font-semibold">{fmtDollars(basePrice)}</span> gets you anywhere from{' '}
+                            <span className="font-semibold">{fmtNum(Math.round(estimateHomeSizeSqft(basePrice / 1.3, locationName)))} sqft</span> in a nice area to{' '}
+                            <span className="font-semibold">{fmtNum(Math.round(estimateHomeSizeSqft(basePrice / 0.75, locationName)))} sqft</span> in a budget-friendly area.
+                            {calcResult.projectedSqFt > 0 && calcResult.projectedSqFt < 800 && ' Consider budget-friendly neighborhoods for more room.'}
+                            {calcResult.projectedSqFt >= 2000 && ' You have great buying power in this market.'}
+                          </>
+                        ) : (
+                          'Complete your financial profile to see personalized home size estimates.'
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </Section>
+
+          {/* Browse Homes — real listings */}
+          {maxAffordable && maxAffordable.maxSustainableHousePrice > 0 && (
+            <Section id="browse-homes" title={`Browse Homes in ${locationName}`}>
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">
+                  Real listings near your <span className="font-semibold">{fmtDollars(maxAffordable.maxSustainableHousePrice)}</span> budget in {locationName}:
+                </p>
+                <SimpleHomeCarousel
+                  location={locationName}
+                  targetPrice={maxAffordable.maxSustainableHousePrice}
+                  priceRange={50000}
+                />
+              </div>
+            </Section>
+          )}
 
           {/* Buying vs Renting */}
           <Section id="housing-bvr" title="Buying vs Renting">
