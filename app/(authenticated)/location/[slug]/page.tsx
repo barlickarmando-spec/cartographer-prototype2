@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { calculateAutoApproach, CalculationResult } from '@/lib/calculation-engine';
-import { getLocationData, LocationData, getOccupationList, getSalary } from '@/lib/data-extraction';
+import { getLocationData, LocationData, getOccupationList, getSalary, getAllLocations, getAllCities } from '@/lib/data-extraction';
 import { getTypicalHomeValue, getPricePerSqft, estimateHomeSizeSqft } from '@/lib/home-value-lookup';
 import { generateWealthTimeline, calculateLocationWealth, getRppFactor, analyzeSale, WealthProjection } from '@/lib/wealth-calculations';
 import { normalizeOnboardingAnswers } from '@/lib/onboarding/normalize';
@@ -11,7 +11,7 @@ import { getOnboardingAnswers, getSavedLocations, setSavedLocations } from '@/li
 import { getStateFlagPath, STATE_CODES, getStateNameFromLocation } from '@/lib/state-flags';
 import { formatCurrency, formatYears, cn } from '@/lib/utils';
 import type { OnboardingAnswers, UserProfile } from '@/lib/onboarding/types';
-import QoLSection from '@/components/QoLSection';
+import { REGIONS, STATE_TO_ABBREV, ABBREV_TO_STATE } from '@/lib/location-filters';
 import QoLGradeCard from '@/components/QoLGradeCard';
 import { getPersonalizedQoL, getObjectiveQoL } from '@/lib/qol-engine';
 import LocationHeroCarousel from '@/components/LocationHeroCarousel';
@@ -86,8 +86,7 @@ const SECTIONS = [
   { id: 'buy-vs-rent', label: 'Buying vs Renting' },
   { id: 'job-overview', label: 'Job Overview' },
   { id: 'ai-summary', label: 'AI Summary' },
-  { id: 'suggestions', label: 'Suggestions' },
-  { id: 'qol-details', label: 'QoL Details' },
+  { id: 'browse-similar', label: 'Browse Similar' },
 ];
 
 // ─── Main Page ──────────────────────────────────────────────────────
@@ -113,6 +112,14 @@ export default function LocationPage() {
   const [areaQualityFilter, setAreaQualityFilter] = useState<string>('all');
   const [settingFilter, setSettingFilter] = useState<string>('all');
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+
+  // Browse Similar Locations filters
+  type SuggestionSortMode = 'most-viable' | 'fastest-home' | 'best-value' | 'quality-of-life' | 'most-similar' | 'largest-home';
+  const [suggestionSort, setSuggestionSort] = useState<SuggestionSortMode>('most-viable');
+  const [suggestionRegionFilter, setSuggestionRegionFilter] = useState<string>('all');
+  const [suggestionStateFilter, setSuggestionStateFilter] = useState<string>('all');
+  const [suggestionFilterOpen, setSuggestionFilterOpen] = useState(false);
+  const [stateSearchQuery, setStateSearchQuery] = useState('');
 
   // Load profile + run calculation
   useEffect(() => {
@@ -183,32 +190,111 @@ export default function LocationPage() {
     return getObjectiveQoL(stateName);
   }, [locationName, userSalaryForQoL]);
 
-  // All states calculation for suggestions
-  const [suggestions, setSuggestions] = useState<{ name: string; score: number; reason: string }[]>([]);
+  // Detect whether current location is a state or a city
+  const isStatePage = !!STATE_CODES[locationName];
+  const currentStateCode = isStatePage ? STATE_CODES[locationName] : '';
+  const currentStateName = isStatePage ? locationName : getStateNameFromLocation(locationName) || '';
+
+  // Compute suggestions: cities within same state + similar locations elsewhere
+  interface SuggestionItem {
+    name: string;
+    displayName: string;
+    type: 'state' | 'city';
+    score: number;
+    yearsToMortgage: number;
+    projectedSqFt: number;
+    col: number;
+    qolScore: number;
+    reason: string;
+    state: string;
+    region: string;
+  }
+
+  const [allSuggestions, setAllSuggestions] = useState<SuggestionItem[]>([]);
+  const [citiesInState, setCitiesInState] = useState<SuggestionItem[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(true);
+
   useEffect(() => {
     if (!profile || !calcResult) return;
-    // Compute a few comparison locations in background
+    setSuggestionsLoading(true);
+
     const timer = setTimeout(() => {
-      const comparisons: { name: string; score: number; reason: string }[] = [];
-      const states = Object.keys(STATE_CODES);
-      for (const st of states) {
-        if (st === locationName) continue;
+      const allLocs = getAllLocations();
+      const results: SuggestionItem[] = [];
+
+      for (const loc of allLocs) {
+        if (loc.name === locationName) continue;
+        // For state pages showing "Browse Similar", only show other states
+        // For city pages, show both cities and states
         try {
-          const r = calculateAutoApproach(profile, st, 30);
-          if (r && r.numericScore > 0) {
-            let reason = '';
-            if (r.numericScore > calcResult.numericScore + 1) reason = 'Higher viability score';
-            else if (r.locationData.adjustedCOL.onePerson < (calcResult.locationData?.adjustedCOL.onePerson || Infinity) * 0.9) reason = 'Lower cost of living';
-            else continue;
-            comparisons.push({ name: st, score: r.numericScore, reason });
+          const r = calculateAutoApproach(profile, loc.name, 30);
+          if (!r || r.numericScore <= 0) continue;
+
+          // Get QoL
+          const locStateName = loc.type === 'state' ? loc.name : getStateNameFromLocation(loc.displayName) || loc.name;
+          const qol = userSalaryForQoL > 0
+            ? getPersonalizedQoL(locStateName, userSalaryForQoL)
+            : getObjectiveQoL(locStateName);
+          const qolScore = qol?.objective_qol ?? 0;
+
+          // Get region
+          const stateForRegion = loc.type === 'state' ? loc.name : locStateName;
+          let region = '';
+          for (const [rName, rStates] of Object.entries(REGIONS)) {
+            if (rName === 'Continental United States' || rName === 'Non-Continental United States') continue;
+            if (rStates.includes(stateForRegion)) { region = rName; break; }
           }
+
+          // Determine the state abbrev for this location
+          const locState = loc.type === 'state' ? (STATE_TO_ABBREV[loc.name] || '') : (loc.displayName.split(', ').pop() || '');
+
+          let reason = '';
+          if (r.numericScore > calcResult.numericScore + 1) reason = 'Higher viability score';
+          else if (r.locationData.adjustedCOL.onePerson < (calcResult.locationData?.adjustedCOL.onePerson || Infinity) * 0.9) reason = 'Lower cost of living';
+          else if (qolScore > (qolResult?.objective_qol ?? 0) + 5) reason = 'Higher quality of life';
+          else reason = 'Similar area';
+
+          results.push({
+            name: loc.name,
+            displayName: loc.displayName,
+            type: loc.type,
+            score: r.numericScore,
+            yearsToMortgage: r.yearsToMortgage >= 0 ? r.yearsToMortgage : 99,
+            projectedSqFt: r.projectedSqFt,
+            col: r.locationData?.adjustedCOL?.onePerson || 0,
+            qolScore,
+            reason,
+            state: locState,
+            region,
+          });
         } catch { /* skip */ }
       }
-      comparisons.sort((a, b) => b.score - a.score);
-      setSuggestions(comparisons.slice(0, 8));
-    }, 100);
+
+      // Split into cities within current state and all suggestions
+      if (isStatePage) {
+        const stateAbbrev = STATE_CODES[locationName];
+        const inState = results
+          .filter(s => s.type === 'city' && s.state === stateAbbrev)
+          .sort((a, b) => b.score - a.score);
+        setCitiesInState(inState);
+
+        // Browse Similar = only states, excluding current
+        const similarStates = results
+          .filter(s => s.type === 'state')
+          .sort((a, b) => b.score - a.score);
+        setAllSuggestions(similarStates);
+      } else {
+        // City page: show mix of cities and states, preferring same state/region
+        setCitiesInState([]);
+        results.sort((a, b) => b.score - a.score);
+        setAllSuggestions(results);
+      }
+
+      setSuggestionsLoading(false);
+    }, 150);
     return () => clearTimeout(timer);
-  }, [profile, calcResult, locationName]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, calcResult, locationName, isStatePage, userSalaryForQoL]);
 
   // Toggle save
   const handleSave = useCallback(() => {
@@ -1117,77 +1203,286 @@ export default function LocationPage() {
             </div>
           </Section>
 
-          {/* ═══ SUGGESTIONS ═══ */}
-          <Section id="suggestions" title="Suggestions">
-            <div className="space-y-4">
-              {calcResult.isViable ? (
-                <>
-                  <p className="text-sm text-gray-600">
-                    Since {locationName} is viable, here are similar locations that may offer even better value:
-                  </p>
-                  {suggestions.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {suggestions.map(s => (
-                        <button
-                          key={s.name}
-                          onClick={() => router.push(`/location/${encodeSlug(s.name)}`)}
-                          className="flex items-center justify-between bg-gray-50 hover:bg-carto-blue-sky rounded-xl p-4 text-left transition-colors"
-                        >
-                          <div>
-                            <p className="font-semibold text-carto-slate">{s.name}</p>
-                            <p className="text-xs text-gray-500">{s.reason}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-lg font-bold text-carto-blue">{s.score.toFixed(1)}</p>
-                            <p className="text-xs text-gray-400">score</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="animate-pulse flex gap-4">
-                      {[1, 2, 3, 4].map(i => <div key={i} className="h-20 bg-gray-100 rounded-xl flex-1" />)}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  <p className="text-sm text-gray-600">
-                    Since {locationName} is not viable, here are better and more optimal locations:
-                  </p>
-                  {suggestions.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {suggestions.map(s => (
-                        <button
-                          key={s.name}
-                          onClick={() => router.push(`/location/${encodeSlug(s.name)}`)}
-                          className="flex items-center justify-between bg-emerald-50 hover:bg-emerald-100 rounded-xl p-4 text-left transition-colors"
-                        >
-                          <div>
-                            <p className="font-semibold text-carto-slate">{s.name}</p>
-                            <p className="text-xs text-emerald-700">{s.reason}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-lg font-bold text-emerald-600">{s.score.toFixed(1)}</p>
-                            <p className="text-xs text-gray-400">score</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="animate-pulse flex gap-4">
-                      {[1, 2, 3, 4].map(i => <div key={i} className="h-20 bg-gray-100 rounded-xl flex-1" />)}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </Section>
+          {/* ═══ WHERE IN STATE (state pages only) ═══ */}
+          {isStatePage && (() => {
+            const filtered = stateSearchQuery
+              ? citiesInState.filter(c => c.name.toLowerCase().includes(stateSearchQuery.toLowerCase()))
+              : citiesInState;
 
-          {/* ═══ QOL DETAILS (In-depth breakdown) ═══ */}
-          <Section id="qol-details" title="Quality of Life — In-Depth">
-            <QoLSection locationName={locationName} annualIncome={userSalaryForQoL || undefined} />
-          </Section>
+            return (
+              <Section id="where-in-state" title={`Where in ${locationName}`} headerRight={
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder={`Search cities in ${locationName}...`}
+                    value={stateSearchQuery}
+                    onChange={e => setStateSearchQuery(e.target.value)}
+                    className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#4A90D9] focus:ring-1 focus:ring-[#4A90D9]/30 w-48"
+                  />
+                  <svg className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+              }>
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-600">
+                    Cities in {locationName} ranked by viability — from most to least viable for your profile:
+                  </p>
+
+                  {suggestionsLoading ? (
+                    <div className="animate-pulse space-y-2">
+                      {[1, 2, 3, 4].map(i => <div key={i} className="h-16 bg-gray-100 rounded-xl" />)}
+                    </div>
+                  ) : filtered.length > 0 ? (
+                    <div className="space-y-2">
+                      {filtered.map((city, idx) => (
+                        <button
+                          key={city.name}
+                          onClick={() => router.push(`/location/${encodeSlug(city.displayName)}`)}
+                          className="flex items-center justify-between w-full bg-gray-50 hover:bg-blue-50 rounded-xl p-4 text-left transition-colors group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className={`text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center ${
+                              idx === 0 ? 'bg-emerald-100 text-emerald-700' : idx < 3 ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'
+                            }`}>
+                              {idx + 1}
+                            </span>
+                            <div>
+                              <p className="font-semibold text-carto-slate group-hover:text-[#4A90D9] transition-colors">{city.name}</p>
+                              <div className="flex items-center gap-2 text-[10px] text-gray-500 mt-0.5">
+                                <span>{city.yearsToMortgage < 99 ? `${city.yearsToMortgage}yr to home` : 'N/A'}</span>
+                                <span>·</span>
+                                <span>{city.projectedSqFt > 0 ? `${Math.round(city.projectedSqFt).toLocaleString()} sqft` : 'N/A'}</span>
+                                <span>·</span>
+                                <span>QoL: {city.qolScore > 0 ? city.qolScore.toFixed(0) : 'N/A'}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className={`text-lg font-bold ${city.score >= 6 ? 'text-emerald-600' : city.score >= 4 ? 'text-amber-600' : 'text-red-500'}`}>{city.score.toFixed(1)}</p>
+                            <p className="text-[10px] text-gray-400">score</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 py-4 text-center">
+                      {stateSearchQuery ? `No cities matching "${stateSearchQuery}"` : `No city data available for ${locationName}`}
+                    </p>
+                  )}
+                </div>
+              </Section>
+            );
+          })()}
+
+          {/* ═══ BROWSE SIMILAR LOCATIONS ═══ */}
+          {(() => {
+            // Sort suggestions
+            const sortFn = (a: SuggestionItem, b: SuggestionItem): number => {
+              switch (suggestionSort) {
+                case 'most-viable': return b.score - a.score;
+                case 'fastest-home': return a.yearsToMortgage - b.yearsToMortgage;
+                case 'largest-home': return b.projectedSqFt - a.projectedSqFt;
+                case 'best-value': {
+                  const aVal = a.col > 0 ? a.score / (a.col / 30000) : 0;
+                  const bVal = b.col > 0 ? b.score / (b.col / 30000) : 0;
+                  return bVal - aVal;
+                }
+                case 'quality-of-life': return b.qolScore - a.qolScore;
+                case 'most-similar': {
+                  const curQol = qolResult?.objective_qol ?? 50;
+                  const aDist = Math.abs(a.qolScore - curQol);
+                  const bDist = Math.abs(b.qolScore - curQol);
+                  // Sort by QoL similarity, then by viability desc as tiebreaker
+                  if (Math.abs(aDist - bDist) < 3) return b.score - a.score;
+                  return aDist - bDist;
+                }
+                default: return b.score - a.score;
+              }
+            };
+
+            // Filter by region
+            let filtered = [...allSuggestions];
+            if (suggestionRegionFilter !== 'all') {
+              const regionStates = REGIONS[suggestionRegionFilter];
+              if (regionStates) {
+                filtered = filtered.filter(s => {
+                  const sState = s.type === 'state' ? s.name : (ABBREV_TO_STATE[s.state] || '');
+                  return regionStates.includes(sState);
+                });
+              }
+            }
+            // Filter by state
+            if (suggestionStateFilter !== 'all') {
+              filtered = filtered.filter(s => {
+                if (s.type === 'state') return s.name === suggestionStateFilter;
+                return (ABBREV_TO_STATE[s.state] || '') === suggestionStateFilter;
+              });
+            }
+
+            filtered.sort(sortFn);
+            const displayed = filtered.slice(0, 12);
+
+            const sortOptions: { value: SuggestionSortMode; label: string }[] = [
+              { value: 'most-viable', label: 'Most Viable' },
+              { value: 'fastest-home', label: 'Fastest Home Ownership' },
+              { value: 'largest-home', label: 'Largest Projected Home' },
+              { value: 'best-value', label: 'Best Value' },
+              { value: 'quality-of-life', label: 'Highest Quality of Life' },
+              { value: 'most-similar', label: 'Most Similar' },
+            ];
+
+            const regionOptions = Object.keys(REGIONS).filter(r => r !== 'Continental United States' && r !== 'Non-Continental United States');
+
+            // Get unique states from suggestions for the state filter dropdown
+            const availableStates = [...new Set(allSuggestions.map(s => s.type === 'state' ? s.name : (ABBREV_TO_STATE[s.state] || '')).filter(Boolean))].sort();
+
+            const hasActiveFilters = suggestionSort !== 'most-viable' || suggestionRegionFilter !== 'all' || suggestionStateFilter !== 'all';
+
+            const filterBtn = (
+              <button
+                onClick={() => setSuggestionFilterOpen(!suggestionFilterOpen)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  hasActiveFilters
+                    ? 'bg-[#4A90D9] text-white border-[#4A90D9]'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-[#4A90D9] hover:text-[#4A90D9]'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+                </svg>
+                Filters
+              </button>
+            );
+
+            return (
+              <Section id="browse-similar" title="Browse Similar Locations" headerRight={filterBtn}>
+                <div className="space-y-4">
+
+                  {/* Filter panel */}
+                  {suggestionFilterOpen && (
+                    <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 space-y-4">
+                      {/* Sort */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Sort By</label>
+                        <div className="flex flex-wrap gap-2">
+                          {sortOptions.map(opt => (
+                            <button key={opt.value} onClick={() => setSuggestionSort(opt.value)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                suggestionSort === opt.value
+                                  ? 'bg-[#4A90D9] text-white'
+                                  : 'bg-white text-gray-600 border border-gray-200 hover:border-[#4A90D9]'
+                              }`}>
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Region filter */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Region</label>
+                        <div className="flex flex-wrap gap-2">
+                          <button onClick={() => setSuggestionRegionFilter('all')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                              suggestionRegionFilter === 'all' ? 'bg-emerald-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-emerald-400'
+                            }`}>All Regions</button>
+                          {regionOptions.map(r => (
+                            <button key={r} onClick={() => setSuggestionRegionFilter(r)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                suggestionRegionFilter === r ? 'bg-emerald-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-emerald-400'
+                              }`}>
+                              {r}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* State filter */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">State</label>
+                        <select
+                          value={suggestionStateFilter}
+                          onChange={e => setSuggestionStateFilter(e.target.value)}
+                          className="px-3 py-1.5 rounded-lg text-xs border border-gray-200 focus:outline-none focus:border-[#4A90D9] bg-white"
+                        >
+                          <option value="all">All States</option>
+                          {availableStates.map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {hasActiveFilters && (
+                        <button onClick={() => { setSuggestionSort('most-viable'); setSuggestionRegionFilter('all'); setSuggestionStateFilter('all'); }}
+                          className="text-xs text-gray-400 hover:text-gray-600 underline">Reset filters</button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Context text */}
+                  <p className="text-sm text-gray-600">
+                    {isStatePage ? (
+                      <>Other states {calcResult.isViable ? 'with similar or better viability' : 'that may be more viable for your profile'}:</>
+                    ) : (
+                      <>Locations {calcResult.isViable ? 'with similar or better value' : 'that may be more viable for your profile'}:</>
+                    )}
+                    {suggestionSort !== 'most-viable' && (
+                      <span className="ml-1 text-[#4A90D9] font-medium">
+                        Sorted by {sortOptions.find(o => o.value === suggestionSort)?.label?.toLowerCase()}
+                      </span>
+                    )}
+                  </p>
+
+                  {/* Suggestion cards */}
+                  {suggestionsLoading ? (
+                    <div className="animate-pulse grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {[1, 2, 3, 4].map(i => <div key={i} className="h-24 bg-gray-100 rounded-xl" />)}
+                    </div>
+                  ) : displayed.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {displayed.map(s => {
+                        const cardBg = s.score >= 6 ? 'bg-emerald-50 hover:bg-emerald-100' : s.score >= 4 ? 'bg-amber-50 hover:bg-amber-100' : 'bg-gray-50 hover:bg-gray-100';
+                        const scoreBg = s.score >= 6 ? 'text-emerald-600' : s.score >= 4 ? 'text-amber-600' : 'text-red-500';
+                        return (
+                          <button
+                            key={s.name}
+                            onClick={() => router.push(`/location/${encodeSlug(s.type === 'city' ? s.displayName : s.name)}`)}
+                            className={`flex items-center justify-between ${cardBg} rounded-xl p-4 text-left transition-colors group w-full`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-carto-slate group-hover:text-[#4A90D9] transition-colors truncate">
+                                {s.type === 'city' ? s.displayName : s.name}
+                              </p>
+                              <p className="text-[10px] text-gray-500 mt-0.5">{s.reason}</p>
+                              <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-1">
+                                {s.yearsToMortgage < 99 && <span>{s.yearsToMortgage}yr to home</span>}
+                                {s.projectedSqFt > 0 && <><span>·</span><span>{Math.round(s.projectedSqFt).toLocaleString()} sqft</span></>}
+                                {s.qolScore > 0 && <><span>·</span><span>QoL {s.qolScore.toFixed(0)}</span></>}
+                                {s.region && <><span>·</span><span>{s.region}</span></>}
+                              </div>
+                            </div>
+                            <div className="text-right ml-3 flex-shrink-0">
+                              <p className={`text-xl font-bold ${scoreBg}`}>{s.score.toFixed(1)}</p>
+                              <p className="text-[10px] text-gray-400">score</p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 py-4 text-center">No matching locations found. Try adjusting your filters.</p>
+                  )}
+
+                  {filtered.length > 12 && (
+                    <p className="text-xs text-gray-400 text-center">
+                      Showing top 12 of {filtered.length} locations
+                    </p>
+                  )}
+                </div>
+              </Section>
+            );
+          })()}
 
         </div>
       </div>
@@ -1250,11 +1545,6 @@ export default function LocationPage() {
           {/* QoL Grades */}
           <Section id="qol-grades" title="Quality of Life Grades">
             <QoLGradeCard locationName={locationName} annualIncome={userSalaryForQoL || undefined} />
-          </Section>
-
-          {/* In-depth QoL */}
-          <Section id="qol-indepth" title="Quality of Life — In-Depth">
-            <QoLSection locationName={locationName} annualIncome={userSalaryForQoL || undefined} />
           </Section>
         </div>
       )}
@@ -1735,12 +2025,12 @@ export default function LocationPage() {
                         <td className="px-4 py-2 text-right">{fmtDollars(locData.housing.medianHomeValue)}</td>
                         <td className="px-4 py-2 text-right">{calcResult.projectedSqFt > 0 ? `${fmtNum(Math.round(calcResult.projectedSqFt))} sqft` : 'N/A'}</td>
                       </tr>
-                      {suggestions.slice(0, 5).map(s => {
+                      {allSuggestions.slice(0, 5).map(s => {
                         const sData = getLocationData(s.name);
                         const sSqft = maxAffordable ? estimateHomeSizeSqft(maxAffordable.maxSustainableHousePrice, s.name) : 0;
                         return (
-                          <tr key={s.name} className="border-t border-gray-50 cursor-pointer hover:bg-gray-50" onClick={() => router.push(`/location/${encodeSlug(s.name)}`)}>
-                            <td className="px-4 py-2 text-carto-slate">{s.name}</td>
+                          <tr key={s.name} className="border-t border-gray-50 cursor-pointer hover:bg-gray-50" onClick={() => router.push(`/location/${encodeSlug(s.type === 'city' ? s.displayName : s.name)}`)}>
+                            <td className="px-4 py-2 text-carto-slate">{s.type === 'city' ? s.displayName : s.name}</td>
                             <td className="px-4 py-2 text-right">{s.score.toFixed(1)}</td>
                             <td className="px-4 py-2 text-right">{sData ? fmtDollars(sData.housing.medianHomeValue) : 'N/A'}</td>
                             <td className="px-4 py-2 text-right">{sSqft > 0 ? `${fmtNum(sSqft)} sqft` : 'N/A'}</td>
@@ -1750,7 +2040,7 @@ export default function LocationPage() {
                     </tbody>
                   </table>
                 </div>
-                {suggestions.length === 0 && (
+                {allSuggestions.length === 0 && suggestionsLoading && (
                   <div className="animate-pulse mt-2 h-32 bg-gray-100 rounded-xl" />
                 )}
               </div>
