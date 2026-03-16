@@ -51,11 +51,12 @@ function encodeSlug(name: string): string {
 }
 
 // ─── Section Wrapper ────────────────────────────────────────────────
-function Section({ id, title, children, className }: { id: string; title: string; children: React.ReactNode; className?: string }) {
+function Section({ id, title, children, className, headerRight }: { id: string; title: string; children: React.ReactNode; className?: string; headerRight?: React.ReactNode }) {
   return (
     <section id={id} className={cn('bg-white rounded-2xl border border-carto-blue-pale/30 overflow-hidden', className)}>
-      <div className="px-6 py-4 border-b border-gray-100">
+      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
         <h2 className="text-xl font-bold text-carto-slate">{title}</h2>
+        {headerRight}
       </div>
       <div className="p-6">{children}</div>
     </section>
@@ -561,17 +562,125 @@ export default function LocationPage() {
                 />
               </div>
 
-              {/* Potential homes carousel */}
-              {maxAffordable && maxAffordable.maxSustainableHousePrice > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Potential Homes in {locationName}</h3>
-                  <SimpleHomeCarousel
-                    location={locationName}
-                    targetPrice={maxAffordable.maxSustainableHousePrice}
-                    priceRange={50000}
-                  />
-                </div>
-              )}
+              {/* Viable homes carousel with filters */}
+              {maxAffordable && maxAffordable.maxSustainableHousePrice > 0 && (() => {
+                const ovApiFilters: HomeSearchFilters = {};
+                if (housingTypeFilter === 'house') ovApiFilters.propertyType = ['single_family'];
+                else if (housingTypeFilter === 'condo') ovApiFilters.propertyType = ['condo', 'condos'];
+                else if (housingTypeFilter === 'single-family') ovApiFilters.propertyType = ['single_family'];
+                else if (housingTypeFilter === '3+bed') ovApiFilters.bedsMin = 3;
+                let ovPriceMult = 1.0;
+                if (areaQualityFilter === 'nice') ovPriceMult = 1.3;
+                else if (areaQualityFilter === 'any') ovPriceMult = 0.75;
+                if (settingFilter === 'urban') ovApiFilters.lotSqftMax = 5000;
+                else if (settingFilter === 'suburban') { ovApiFilters.lotSqftMin = 3000; ovApiFilters.lotSqftMax = 43560; }
+                else if (settingFilter === 'rural') ovApiFilters.lotSqftMin = 43560;
+                const ovAdjustedPrice = Math.round(maxAffordable.maxSustainableHousePrice * ovPriceMult);
+                const ovHasApiFilters = Object.keys(ovApiFilters).length > 0;
+                const ovHasActive = housingTypeFilter !== 'all' || areaQualityFilter !== 'all' || settingFilter !== 'all';
+                const ovActiveCount = [housingTypeFilter, areaQualityFilter, settingFilter].filter(f => f !== 'all').length;
+
+                return (
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Viable Homes in {locationName}</h3>
+                      <button
+                        onClick={() => setFilterMenuOpen(!filterMenuOpen)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                          ovHasActive
+                            ? 'bg-[#4A90D9] text-white border-[#4A90D9]'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-[#4A90D9] hover:text-[#4A90D9]'
+                        }`}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+                        </svg>
+                        Filters
+                        {ovActiveCount > 0 && (
+                          <span className="bg-white text-[#4A90D9] text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                            {ovActiveCount}
+                          </span>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Inline filter panel */}
+                    {filterMenuOpen && (
+                      <div className="bg-gray-50 rounded-xl border border-gray-200 p-3 mb-3 space-y-3">
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Housing Type</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {[{ value: 'all', label: 'All' }, { value: 'house', label: 'House' }, { value: 'condo', label: 'Condo' }, { value: 'single-family', label: 'Single Family' }, { value: '3+bed', label: '3+ Bed' }].map(opt => (
+                              <button key={opt.value} onClick={() => setHousingTypeFilter(opt.value)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${housingTypeFilter === opt.value ? 'bg-[#4A90D9] text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-[#4A90D9]'}`}>
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Area Quality</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {[{ value: 'all', label: 'All' }, { value: 'nice', label: 'Nice Area' }, { value: 'normal', label: 'Normal' }, { value: 'any', label: 'Any Area' }].map(opt => (
+                              <button key={opt.value} onClick={() => setAreaQualityFilter(opt.value)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${areaQualityFilter === opt.value ? 'bg-emerald-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-emerald-400'}`}>
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Setting</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {[{ value: 'all', label: 'All' }, { value: 'urban', label: 'Urban' }, { value: 'suburban', label: 'Suburban' }, { value: 'rural', label: 'Rural' }].map(opt => (
+                              <button key={opt.value} onClick={() => setSettingFilter(opt.value)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${settingFilter === opt.value ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-amber-400'}`}>
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        {ovHasActive && (
+                          <button onClick={() => { setHousingTypeFilter('all'); setAreaQualityFilter('all'); setSettingFilter('all'); }}
+                            className="text-xs text-gray-400 hover:text-gray-600 underline">Clear all</button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Active filter pills */}
+                    {ovHasActive && !filterMenuOpen && (
+                      <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                        {housingTypeFilter !== 'all' && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-medium border border-blue-200">
+                            {housingTypeFilter === 'house' ? 'House' : housingTypeFilter === 'condo' ? 'Condo' : housingTypeFilter === 'single-family' ? 'Single Family' : '3+ Bed'}
+                            <button onClick={() => setHousingTypeFilter('all')} className="hover:text-blue-900"><svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                          </span>
+                        )}
+                        {areaQualityFilter !== 'all' && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-medium border border-emerald-200">
+                            {areaQualityFilter === 'nice' ? 'Nice' : areaQualityFilter === 'normal' ? 'Normal' : 'Any'}
+                            <button onClick={() => setAreaQualityFilter('all')} className="hover:text-emerald-900"><svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                          </span>
+                        )}
+                        {settingFilter !== 'all' && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-medium border border-amber-200">
+                            {settingFilter === 'urban' ? 'Urban' : settingFilter === 'suburban' ? 'Suburban' : 'Rural'}
+                            <button onClick={() => setSettingFilter('all')} className="hover:text-amber-900"><svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    <SimpleHomeCarousel
+                      key={`ov-${housingTypeFilter}-${areaQualityFilter}-${settingFilter}`}
+                      location={locationName}
+                      targetPrice={ovAdjustedPrice}
+                      priceRange={areaQualityFilter === 'nice' ? 75000 : areaQualityFilter === 'any' ? 40000 : 50000}
+                      filters={ovHasApiFilters ? ovApiFilters : undefined}
+                    />
+                  </div>
+                );
+              })()}
             </div>
           </Section>
 
@@ -1227,64 +1336,65 @@ export default function LocationPage() {
             const activeFilterCount = [housingTypeFilter, areaQualityFilter, settingFilter].filter(f => f !== 'all').length;
             const hasApiFilters = Object.keys(apiFilters).length > 0;
 
+            const filterButton = (
+              <button
+                onClick={() => setFilterMenuOpen(!filterMenuOpen)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  hasActiveFilters
+                    ? 'bg-[#4A90D9] text-white border-[#4A90D9]'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-[#4A90D9] hover:text-[#4A90D9]'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+                </svg>
+                Filters
+                {activeFilterCount > 0 && (
+                  <span className="bg-white text-[#4A90D9] text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+            );
+
             return (
-              <Section id="viable-homes" title={`Viable Homes in ${locationName}`}>
+              <Section id="viable-homes" title={`Viable Homes in ${locationName}`} headerRight={filterButton}>
                 <div className="space-y-4">
-                  {/* Filter bar */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      onClick={() => setFilterMenuOpen(!filterMenuOpen)}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                        hasActiveFilters
-                          ? 'bg-[#4A90D9] text-white border-[#4A90D9]'
-                          : 'bg-white text-gray-700 border-gray-200 hover:border-[#4A90D9] hover:text-[#4A90D9]'
-                      }`}
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
-                      </svg>
-                      Filters
-                      {activeFilterCount > 0 && (
-                        <span className="bg-white text-[#4A90D9] text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
-                          {activeFilterCount}
+                  {/* Active filter pills */}
+                  {hasActiveFilters && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {housingTypeFilter !== 'all' && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium border border-blue-200">
+                          {housingTypeFilter === 'house' ? 'House' : housingTypeFilter === 'condo' ? 'Condo' : housingTypeFilter === 'single-family' ? 'Single Family' : '3+ Bedrooms'}
+                          <button onClick={() => setHousingTypeFilter('all')} className="hover:text-blue-900">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
                         </span>
                       )}
-                    </button>
-
-                    {/* Active filter pills */}
-                    {housingTypeFilter !== 'all' && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium border border-blue-200">
-                        {housingTypeFilter === 'house' ? 'House' : housingTypeFilter === 'condo' ? 'Condo' : housingTypeFilter === 'single-family' ? 'Single Family' : '3+ Bedrooms'}
-                        <button onClick={() => setHousingTypeFilter('all')} className="hover:text-blue-900">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                        </button>
-                      </span>
-                    )}
-                    {areaQualityFilter !== 'all' && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-200">
-                        {areaQualityFilter === 'nice' ? 'Nice Area' : areaQualityFilter === 'normal' ? 'Normal Area' : 'Any Area'}
-                        <button onClick={() => setAreaQualityFilter('all')} className="hover:text-emerald-900">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                        </button>
-                      </span>
-                    )}
-                    {settingFilter !== 'all' && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-medium border border-amber-200">
-                        {settingFilter === 'urban' ? 'Urban' : settingFilter === 'suburban' ? 'Suburban' : 'Rural'}
-                        <button onClick={() => setSettingFilter('all')} className="hover:text-amber-900">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                        </button>
-                      </span>
-                    )}
-                    {hasActiveFilters && (
+                      {areaQualityFilter !== 'all' && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-200">
+                          {areaQualityFilter === 'nice' ? 'Nice Area' : areaQualityFilter === 'normal' ? 'Normal Area' : 'Any Area'}
+                          <button onClick={() => setAreaQualityFilter('all')} className="hover:text-emerald-900">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </span>
+                      )}
+                      {settingFilter !== 'all' && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-medium border border-amber-200">
+                          {settingFilter === 'urban' ? 'Urban' : settingFilter === 'suburban' ? 'Suburban' : 'Rural'}
+                          <button onClick={() => setSettingFilter('all')} className="hover:text-amber-900">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </span>
+                      )}
                       <button
                         onClick={() => { setHousingTypeFilter('all'); setAreaQualityFilter('all'); setSettingFilter('all'); }}
                         className="text-xs text-gray-400 hover:text-gray-600 underline"
                       >
                         Clear all
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                   {/* Expandable filter panel */}
                   {filterMenuOpen && (
@@ -1396,53 +1506,77 @@ export default function LocationPage() {
                 At <span className="font-semibold">{fmtDollars(getPricePerSqft(locationName))}/sqft</span> in {locationName}, here&apos;s what your budget looks like across different neighborhood tiers:
               </p>
 
-              {/* Quality tier cards */}
+              {/* Quality tier cards with carousels */}
               {(() => {
                 const basePrice = maxAffordable?.maxSustainableHousePrice || 0;
                 const tiers = [
-                  { key: 'nice' as const, label: 'Nice Area', sub: 'Premium neighborhoods', multiplier: 1.3, color: { text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', accent: '#E8F5E9' } },
-                  { key: 'average' as const, label: 'Average Area', sub: 'Typical neighborhoods', multiplier: 1.0, color: { text: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200', accent: '#E3F2FD' } },
-                  { key: 'any' as const, label: 'Budget-Friendly Area', sub: 'More affordable neighborhoods', multiplier: 0.75, color: { text: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200', accent: '#FFF8E1' } },
+                  { key: 'nice' as const, label: 'Nice Area', sub: 'Premium neighborhoods', multiplier: 1.3, areaFilter: 'nice', color: { text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', accent: '#E8F5E9' } },
+                  { key: 'average' as const, label: 'Average Area', sub: 'Typical neighborhoods', multiplier: 1.0, areaFilter: 'normal', color: { text: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200', accent: '#E3F2FD' } },
+                  { key: 'any' as const, label: 'Budget-Friendly Area', sub: 'More affordable neighborhoods', multiplier: 0.75, areaFilter: 'any', color: { text: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200', accent: '#FFF8E1' } },
                 ];
 
                 return (
                   <div className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {tiers.map(tier => {
-                        const sqft = basePrice > 0 ? Math.round(estimateHomeSizeSqft(basePrice / tier.multiplier, locationName)) : 0;
-                        const effectivePrice = basePrice;
-                        const tag = sqft >= 2500 ? '3+ BR House' : sqft >= 1500 ? '2-3 BR Home' : sqft >= 800 ? '1-2 BR Condo/Apt' : sqft > 0 ? 'Studio/1 BR' : 'N/A';
-                        return (
-                          <div key={tier.key} className={`rounded-xl border ${tier.color.border} ${tier.color.bg} p-5`}>
-                            <div className="flex items-center justify-between mb-3">
-                              <h4 className={`font-semibold ${tier.color.text}`}>{tier.label}</h4>
-                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${tier.color.bg} ${tier.color.text} border ${tier.color.border}`}>
-                                {tier.multiplier > 1 ? `${((tier.multiplier - 1) * 100).toFixed(0)}% premium` : tier.multiplier < 1 ? `${((1 - tier.multiplier) * 100).toFixed(0)}% cheaper` : 'Baseline'}
-                              </span>
+                    {tiers.map(tier => {
+                      const sqft = basePrice > 0 ? Math.round(estimateHomeSizeSqft(basePrice / tier.multiplier, locationName)) : 0;
+                      const effectivePrice = basePrice;
+                      const tierTargetPrice = Math.round(basePrice * tier.multiplier);
+                      const tag = sqft >= 2500 ? '3+ BR House' : sqft >= 1500 ? '2-3 BR Home' : sqft >= 800 ? '1-2 BR Condo/Apt' : sqft > 0 ? 'Studio/1 BR' : 'N/A';
+
+                      // Build tier-specific filters
+                      const tierFilters: HomeSearchFilters = {};
+                      if (housingTypeFilter === 'house') tierFilters.propertyType = ['single_family'];
+                      else if (housingTypeFilter === 'condo') tierFilters.propertyType = ['condo', 'condos'];
+                      else if (housingTypeFilter === 'single-family') tierFilters.propertyType = ['single_family'];
+                      else if (housingTypeFilter === '3+bed') tierFilters.bedsMin = 3;
+                      if (settingFilter === 'urban') tierFilters.lotSqftMax = 5000;
+                      else if (settingFilter === 'suburban') { tierFilters.lotSqftMin = 3000; tierFilters.lotSqftMax = 43560; }
+                      else if (settingFilter === 'rural') tierFilters.lotSqftMin = 43560;
+                      const tierHasFilters = Object.keys(tierFilters).length > 0;
+
+                      return (
+                        <div key={tier.key} className={`rounded-xl border ${tier.color.border} ${tier.color.bg} p-5`}>
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className={`font-semibold ${tier.color.text}`}>{tier.label}</h4>
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${tier.color.bg} ${tier.color.text} border ${tier.color.border}`}>
+                              {tier.multiplier > 1 ? `${((tier.multiplier - 1) * 100).toFixed(0)}% premium` : tier.multiplier < 1 ? `${((1 - tier.multiplier) * 100).toFixed(0)}% cheaper` : 'Baseline'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500 mb-3">{tier.sub}</p>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+                            <div className="bg-white/60 rounded-lg p-2 text-center">
+                              <p className="text-xs text-gray-500">Budget</p>
+                              <p className="text-sm font-bold text-carto-slate">{effectivePrice > 0 ? fmtDollars(effectivePrice) : 'N/A'}</p>
                             </div>
-                            <p className="text-xs text-gray-500 mb-3">{tier.sub}</p>
-                            <div className="space-y-2">
-                              <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Budget</span>
-                                <span className="font-bold text-carto-slate">{effectivePrice > 0 ? fmtDollars(effectivePrice) : 'N/A'}</span>
-                              </div>
-                              <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Est. Size</span>
-                                <span className="font-bold text-carto-slate">{sqft > 0 ? `${fmtNum(sqft)} sqft` : 'N/A'}</span>
-                              </div>
-                              <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Home Type</span>
-                                <span className="font-medium text-gray-700">{tag}</span>
-                              </div>
-                              <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Price/sqft</span>
-                                <span className="font-medium text-gray-700">{fmtDollars(Math.round(getPricePerSqft(locationName) * tier.multiplier))}</span>
-                              </div>
+                            <div className="bg-white/60 rounded-lg p-2 text-center">
+                              <p className="text-xs text-gray-500">Est. Size</p>
+                              <p className="text-sm font-bold text-carto-slate">{sqft > 0 ? `${fmtNum(sqft)} sqft` : 'N/A'}</p>
+                            </div>
+                            <div className="bg-white/60 rounded-lg p-2 text-center">
+                              <p className="text-xs text-gray-500">Home Type</p>
+                              <p className="text-sm font-medium text-gray-700">{tag}</p>
+                            </div>
+                            <div className="bg-white/60 rounded-lg p-2 text-center">
+                              <p className="text-xs text-gray-500">Price/sqft</p>
+                              <p className="text-sm font-medium text-gray-700">{fmtDollars(Math.round(getPricePerSqft(locationName) * tier.multiplier))}</p>
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
+
+                          {/* Mini carousel for this tier */}
+                          {basePrice > 0 && (
+                            <div className="bg-white/50 rounded-xl p-3">
+                              <SimpleHomeCarousel
+                                key={`tier-${tier.key}-${housingTypeFilter}-${settingFilter}`}
+                                location={locationName}
+                                targetPrice={tierTargetPrice}
+                                priceRange={tier.multiplier > 1 ? 75000 : tier.multiplier < 1 ? 40000 : 50000}
+                                filters={tierHasFilters ? tierFilters : undefined}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
 
                     {/* Summary insight */}
                     <div className="bg-gray-50 rounded-xl p-4">
