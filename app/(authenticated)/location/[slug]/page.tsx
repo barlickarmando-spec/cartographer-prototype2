@@ -15,7 +15,7 @@ import QoLSection from '@/components/QoLSection';
 import QoLGradeCard from '@/components/QoLGradeCard';
 import { getPersonalizedQoL, getObjectiveQoL } from '@/lib/qol-engine';
 import LocationHeroCarousel from '@/components/LocationHeroCarousel';
-import SimpleHomeCarousel from '@/components/SimpleHomeCarousel';
+import SimpleHomeCarousel, { HomeSearchFilters } from '@/components/SimpleHomeCarousel';
 import { getLocationImages, LocationImage } from '@/lib/location-images';
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -106,6 +106,12 @@ export default function LocationPage() {
   const [compareIndustry, setCompareIndustry] = useState<string>('');
   const [allocationMode, setAllocationMode] = useState<'conservative' | 'balanced' | 'aggressive'>('balanced');
   const [loading, setLoading] = useState(true);
+
+  // Housing tab filters
+  const [housingTypeFilter, setHousingTypeFilter] = useState<string>('all');
+  const [areaQualityFilter, setAreaQualityFilter] = useState<string>('all');
+  const [settingFilter, setSettingFilter] = useState<string>('all');
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
 
   // Load profile + run calculation
   useEffect(() => {
@@ -1192,6 +1198,197 @@ export default function LocationPage() {
             </div>
           </Section>
 
+          {/* Viable Homes — real listings with filters */}
+          {maxAffordable && maxAffordable.maxSustainableHousePrice > 0 && (() => {
+            // Build filters for the API call
+            const apiFilters: HomeSearchFilters = {};
+            if (housingTypeFilter === 'house') apiFilters.propertyType = ['single_family'];
+            else if (housingTypeFilter === 'condo') apiFilters.propertyType = ['condo', 'condos'];
+            else if (housingTypeFilter === 'single-family') apiFilters.propertyType = ['single_family'];
+            else if (housingTypeFilter === '3+bed') apiFilters.bedsMin = 3;
+
+            // Area quality adjusts price range
+            let priceMultiplier = 1.0;
+            if (areaQualityFilter === 'nice') priceMultiplier = 1.3;
+            else if (areaQualityFilter === 'any') priceMultiplier = 0.75;
+
+            // Setting filter uses lot size as proxy
+            if (settingFilter === 'urban') {
+              apiFilters.lotSqftMax = 5000;
+            } else if (settingFilter === 'suburban') {
+              apiFilters.lotSqftMin = 3000;
+              apiFilters.lotSqftMax = 43560;
+            } else if (settingFilter === 'rural') {
+              apiFilters.lotSqftMin = 43560;
+            }
+
+            const adjustedPrice = Math.round(maxAffordable.maxSustainableHousePrice * priceMultiplier);
+            const hasActiveFilters = housingTypeFilter !== 'all' || areaQualityFilter !== 'all' || settingFilter !== 'all';
+            const activeFilterCount = [housingTypeFilter, areaQualityFilter, settingFilter].filter(f => f !== 'all').length;
+            const hasApiFilters = Object.keys(apiFilters).length > 0;
+
+            return (
+              <Section id="viable-homes" title={`Viable Homes in ${locationName}`}>
+                <div className="space-y-4">
+                  {/* Filter bar */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => setFilterMenuOpen(!filterMenuOpen)}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                        hasActiveFilters
+                          ? 'bg-[#4A90D9] text-white border-[#4A90D9]'
+                          : 'bg-white text-gray-700 border-gray-200 hover:border-[#4A90D9] hover:text-[#4A90D9]'
+                      }`}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+                      </svg>
+                      Filters
+                      {activeFilterCount > 0 && (
+                        <span className="bg-white text-[#4A90D9] text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                          {activeFilterCount}
+                        </span>
+                      )}
+                    </button>
+
+                    {/* Active filter pills */}
+                    {housingTypeFilter !== 'all' && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium border border-blue-200">
+                        {housingTypeFilter === 'house' ? 'House' : housingTypeFilter === 'condo' ? 'Condo' : housingTypeFilter === 'single-family' ? 'Single Family' : '3+ Bedrooms'}
+                        <button onClick={() => setHousingTypeFilter('all')} className="hover:text-blue-900">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      </span>
+                    )}
+                    {areaQualityFilter !== 'all' && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-200">
+                        {areaQualityFilter === 'nice' ? 'Nice Area' : areaQualityFilter === 'normal' ? 'Normal Area' : 'Any Area'}
+                        <button onClick={() => setAreaQualityFilter('all')} className="hover:text-emerald-900">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      </span>
+                    )}
+                    {settingFilter !== 'all' && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-medium border border-amber-200">
+                        {settingFilter === 'urban' ? 'Urban' : settingFilter === 'suburban' ? 'Suburban' : 'Rural'}
+                        <button onClick={() => setSettingFilter('all')} className="hover:text-amber-900">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      </span>
+                    )}
+                    {hasActiveFilters && (
+                      <button
+                        onClick={() => { setHousingTypeFilter('all'); setAreaQualityFilter('all'); setSettingFilter('all'); }}
+                        className="text-xs text-gray-400 hover:text-gray-600 underline"
+                      >
+                        Clear all
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Expandable filter panel */}
+                  {filterMenuOpen && (
+                    <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 space-y-4">
+                      {/* Housing Type */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Housing Type</label>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { value: 'all', label: 'All Types' },
+                            { value: 'house', label: 'House' },
+                            { value: 'condo', label: 'Condo' },
+                            { value: 'single-family', label: 'Single Family' },
+                            { value: '3+bed', label: '3+ Bedrooms' },
+                          ].map(opt => (
+                            <button
+                              key={opt.value}
+                              onClick={() => setHousingTypeFilter(opt.value)}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                housingTypeFilter === opt.value
+                                  ? 'bg-[#4A90D9] text-white'
+                                  : 'bg-white text-gray-600 border border-gray-200 hover:border-[#4A90D9] hover:text-[#4A90D9]'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Area Quality */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Area Quality</label>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { value: 'all', label: 'All Areas' },
+                            { value: 'nice', label: 'Nice Area' },
+                            { value: 'normal', label: 'Normal Area' },
+                            { value: 'any', label: 'Any Area' },
+                          ].map(opt => (
+                            <button
+                              key={opt.value}
+                              onClick={() => setAreaQualityFilter(opt.value)}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                areaQualityFilter === opt.value
+                                  ? 'bg-emerald-500 text-white'
+                                  : 'bg-white text-gray-600 border border-gray-200 hover:border-emerald-400 hover:text-emerald-600'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Setting */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Location Setting</label>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { value: 'all', label: 'All Settings' },
+                            { value: 'urban', label: 'Urban' },
+                            { value: 'suburban', label: 'Suburban' },
+                            { value: 'rural', label: 'Rural' },
+                          ].map(opt => (
+                            <button
+                              key={opt.value}
+                              onClick={() => setSettingFilter(opt.value)}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                settingFilter === opt.value
+                                  ? 'bg-amber-500 text-white'
+                                  : 'bg-white text-gray-600 border border-gray-200 hover:border-amber-400 hover:text-amber-600'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Price context */}
+                  <p className="text-sm text-gray-600">
+                    {areaQualityFilter !== 'all' && areaQualityFilter !== 'normal' ? (
+                      <>Showing homes near <span className="font-semibold">{fmtDollars(adjustedPrice)}</span> ({areaQualityFilter === 'nice' ? 'premium areas — higher price point' : 'budget-friendly areas — lower price point'})</>
+                    ) : (
+                      <>Real listings near your <span className="font-semibold">{fmtDollars(adjustedPrice)}</span> budget</>
+                    )}
+                  </p>
+
+                  {/* Carousel */}
+                  <SimpleHomeCarousel
+                    key={`${housingTypeFilter}-${areaQualityFilter}-${settingFilter}`}
+                    location={locationName}
+                    targetPrice={adjustedPrice}
+                    priceRange={areaQualityFilter === 'nice' ? 75000 : areaQualityFilter === 'any' ? 40000 : 50000}
+                    filters={hasApiFilters ? apiFilters : undefined}
+                  />
+                </div>
+              </Section>
+            );
+          })()}
+
           {/* Home Size Calculator — by Area Quality */}
           <Section id="home-size-calc" title="What You Can Get in Each Neighborhood">
             <div className="space-y-6">
@@ -1268,22 +1465,6 @@ export default function LocationPage() {
               })()}
             </div>
           </Section>
-
-          {/* Browse Homes — real listings */}
-          {maxAffordable && maxAffordable.maxSustainableHousePrice > 0 && (
-            <Section id="browse-homes" title={`Browse Homes in ${locationName}`}>
-              <div className="space-y-4">
-                <p className="text-sm text-gray-600">
-                  Real listings near your <span className="font-semibold">{fmtDollars(maxAffordable.maxSustainableHousePrice)}</span> budget in {locationName}:
-                </p>
-                <SimpleHomeCarousel
-                  location={locationName}
-                  targetPrice={maxAffordable.maxSustainableHousePrice}
-                  priceRange={50000}
-                />
-              </div>
-            </Section>
-          )}
 
           {/* Buying vs Renting */}
           <Section id="housing-bvr" title="Buying vs Renting">

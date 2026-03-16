@@ -351,29 +351,54 @@ async function searchByPostalCode(
   return null;
 }
 
+interface SearchFilters {
+  propertyType?: string[];  // e.g. ['single_family'], ['condo'], ['townhomes']
+  bedsMin?: number;
+  lotSqftMin?: number;
+  lotSqftMax?: number;
+  keywords?: string[];
+}
+
 async function searchListings(
   loc: ResolvedLocation,
   minPrice: number,
   maxPrice: number,
+  filters?: SearchFilters,
 ): Promise<{ listings: any[]; totalAvailable: number } | null> {
+
+  const baseBody: Record<string, any> = {
+    city: loc.city,
+    state_code: loc.state_code,
+    status: ['for_sale', 'ready_to_build'],
+    sort: { direction: 'desc', field: 'list_date' },
+    limit: 200,
+    offset: 0,
+  };
+
+  // Apply optional filters
+  if (filters?.propertyType && filters.propertyType.length > 0) {
+    baseBody.type = filters.propertyType;
+  }
+  if (filters?.bedsMin && filters.bedsMin > 0) {
+    baseBody.beds_min = filters.bedsMin;
+  }
+  if (filters?.lotSqftMin) {
+    baseBody.lot_sqft = { ...(baseBody.lot_sqft || {}), min: filters.lotSqftMin };
+  }
+  if (filters?.lotSqftMax) {
+    baseBody.lot_sqft = { ...(baseBody.lot_sqft || {}), max: filters.lotSqftMax };
+  }
+  if (filters?.keywords && filters.keywords.length > 0) {
+    baseBody.keywords = filters.keywords;
+  }
 
   const bodyVariants = [
     {
-      city: loc.city,
-      state_code: loc.state_code,
-      status: ['for_sale', 'ready_to_build'],
-      sort: { direction: 'desc', field: 'list_date' },
+      ...baseBody,
       list_price: { min: minPrice, max: maxPrice },
-      limit: 200,
-      offset: 0,
     },
     {
-      city: loc.city,
-      state_code: loc.state_code,
-      status: ['for_sale', 'ready_to_build'],
-      sort: { direction: 'desc', field: 'list_date' },
-      limit: 200,
-      offset: 0,
+      ...baseBody,
     },
   ];
 
@@ -422,7 +447,7 @@ async function searchListings(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { location, minPrice, maxPrice } = body;
+    const { location, minPrice, maxPrice, filters: rawFilters } = body;
 
     if (!location || !minPrice || !maxPrice) {
       return NextResponse.json(
@@ -430,6 +455,27 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Build search filters from request
+    const searchFilters: SearchFilters = {};
+    if (rawFilters) {
+      if (rawFilters.propertyType && Array.isArray(rawFilters.propertyType) && rawFilters.propertyType.length > 0) {
+        searchFilters.propertyType = rawFilters.propertyType;
+      }
+      if (rawFilters.bedsMin && typeof rawFilters.bedsMin === 'number') {
+        searchFilters.bedsMin = rawFilters.bedsMin;
+      }
+      if (rawFilters.lotSqftMin && typeof rawFilters.lotSqftMin === 'number') {
+        searchFilters.lotSqftMin = rawFilters.lotSqftMin;
+      }
+      if (rawFilters.lotSqftMax && typeof rawFilters.lotSqftMax === 'number') {
+        searchFilters.lotSqftMax = rawFilters.lotSqftMax;
+      }
+      if (rawFilters.keywords && Array.isArray(rawFilters.keywords)) {
+        searchFilters.keywords = rawFilters.keywords;
+      }
+    }
+    const hasFilters = Object.keys(searchFilters).length > 0;
 
     const debug: Record<string, any> = {};
 
@@ -442,6 +488,7 @@ export async function POST(request: NextRequest) {
     debug.searchQuery = searchQuery;
     debug.parsedCity = city;
     debug.parsedStateCode = stateCode;
+    debug.filters = searchFilters;
 
     let listings: any[] = [];
     let totalAvailable = 0;
@@ -471,7 +518,7 @@ export async function POST(request: NextRequest) {
         debug.resolved = resolved;
 
         if (resolved) {
-          const result = await searchListings(resolved, minPrice, maxPrice);
+          const result = await searchListings(resolved, minPrice, maxPrice, hasFilters ? searchFilters : undefined);
           if (result && result.listings.length > 0) {
             listings = result.listings;
             totalAvailable = result.totalAvailable;
@@ -483,7 +530,7 @@ export async function POST(request: NextRequest) {
       // Strategy 3: Skip auto-complete, try direct city/state from parsed location
       if (listings.length === 0 && city && stateCode) {
         console.log(`[homes/search] Auto-complete failed, trying direct city/state: ${city}, ${stateCode}`);
-        const result = await searchListings({ city, state_code: stateCode }, minPrice, maxPrice);
+        const result = await searchListings({ city, state_code: stateCode }, minPrice, maxPrice, hasFilters ? searchFilters : undefined);
         if (result && result.listings.length > 0) {
           listings = result.listings;
           totalAvailable = result.totalAvailable;
@@ -497,7 +544,7 @@ export async function POST(request: NextRequest) {
         for (const [code, capitalCity] of Object.entries(STATE_CAPITALS)) {
           if (capitalCity.toLowerCase() === city.toLowerCase()) {
             console.log(`[homes/search] Trying capital match: ${capitalCity}, ${code}`);
-            const result = await searchListings({ city: capitalCity, state_code: code }, minPrice, maxPrice);
+            const result = await searchListings({ city: capitalCity, state_code: code }, minPrice, maxPrice, hasFilters ? searchFilters : undefined);
             if (result && result.listings.length > 0) {
               listings = result.listings;
               totalAvailable = result.totalAvailable;
@@ -514,7 +561,7 @@ export async function POST(request: NextRequest) {
         const lookupState = cityMap.get(city.toLowerCase());
         if (lookupState) {
           console.log(`[homes/search] Local DB match: ${city}, ${lookupState}`);
-          const result = await searchListings({ city, state_code: lookupState }, minPrice, maxPrice);
+          const result = await searchListings({ city, state_code: lookupState }, minPrice, maxPrice, hasFilters ? searchFilters : undefined);
           if (result && result.listings.length > 0) {
             listings = result.listings;
             totalAvailable = result.totalAvailable;

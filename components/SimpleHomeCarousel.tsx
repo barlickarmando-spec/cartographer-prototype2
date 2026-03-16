@@ -11,10 +11,19 @@ interface GoogleImage {
   height?: number;
 }
 
+export interface HomeSearchFilters {
+  propertyType?: string[];
+  bedsMin?: number;
+  lotSqftMin?: number;
+  lotSqftMax?: number;
+  keywords?: string[];
+}
+
 interface SimpleHomeCarouselProps {
   location: string;
   targetPrice: number;
   priceRange?: number;
+  filters?: HomeSearchFilters;
 }
 
 interface Home {
@@ -107,6 +116,7 @@ export default function SimpleHomeCarousel({
   location,
   targetPrice,
   priceRange = 50000,
+  filters,
 }: SimpleHomeCarouselProps) {
   const [homes, setHomes] = useState<Home[]>([]);
   const [googleImages, setGoogleImages] = useState<GoogleImage[]>([]);
@@ -154,7 +164,7 @@ export default function SimpleHomeCarousel({
         const res = await fetch('/api/homes/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ location, minPrice, maxPrice }),
+          body: JSON.stringify({ location, minPrice, maxPrice, filters: filters || undefined }),
         });
 
         if (!res.ok) throw new Error('API error');
@@ -201,7 +211,8 @@ export default function SimpleHomeCarousel({
 
     fetchHomes();
     return () => { cancelled = true; };
-  }, [location, targetPrice, priceRange, minPrice, maxPrice]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location, targetPrice, priceRange, minPrice, maxPrice, JSON.stringify(filters)]);
 
   const goToPage = useCallback((page: number) => {
     if (page >= 0 && page < totalPages) setCurrentPage(page);
