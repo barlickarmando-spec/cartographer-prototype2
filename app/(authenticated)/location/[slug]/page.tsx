@@ -526,6 +526,49 @@ export default function LocationPage() {
             </div>
           </Section>
 
+          {/* ═══ YOUR HOME ═══ */}
+          <Section id="housing" title="Your Home">
+            <div className="space-y-5">
+              {/* Max home value highlight card */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <MetricCard
+                  label="Max Affordable Home"
+                  value={maxAffordable ? fmtDollars(maxAffordable.maxSustainableHousePrice) : 'N/A'}
+                  sub={maxAffordable ? `${fmtDollars(Math.round(maxAffordable.sustainableAnnualPayment / 12))}/mo` : undefined}
+                  accent="#E8F5E9"
+                />
+                <MetricCard
+                  label="Projected Size"
+                  value={calcResult.projectedSqFt > 0 ? `${fmtNum(Math.round(calcResult.projectedSqFt))} sqft` : 'N/A'}
+                  sub={calcResult.houseTag}
+                  accent="#E8F2FB"
+                />
+                <MetricCard
+                  label="Typical Home Value"
+                  value={fmtDollars(locData.housing.medianHomeValue)}
+                  sub={`${fmtDollars(getPricePerSqft(locationName))}/sqft`}
+                />
+                <MetricCard
+                  label="Down Payment"
+                  value={maxAffordable ? fmtDollars(maxAffordable.sustainableDownPayment) : 'N/A'}
+                  sub={maxAffordable ? `${locData.housing.downPaymentPercent}% down` : undefined}
+                />
+              </div>
+
+              {/* Potential homes carousel */}
+              {maxAffordable && maxAffordable.maxSustainableHousePrice > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Potential Homes in {locationName}</h3>
+                  <SimpleHomeCarousel
+                    location={locationName}
+                    targetPrice={maxAffordable.maxSustainableHousePrice}
+                    priceRange={50000}
+                  />
+                </div>
+              )}
+            </div>
+          </Section>
+
           {/* ═══ JOB MARKET ═══ */}
           <Section id="job-market" title="Job Market">
             <div className="space-y-4">
