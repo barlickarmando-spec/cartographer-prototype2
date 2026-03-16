@@ -1225,41 +1225,28 @@ export default function LocationPage() {
                 </div>
               }>
                 <div className="space-y-3">
-                  <p className="text-sm text-gray-600">
-                    Cities in {locationName} ranked by viability — from most to least viable for your profile:
-                  </p>
-
                   {suggestionsLoading ? (
-                    <div className="animate-pulse space-y-2">
-                      {[1, 2, 3, 4].map(i => <div key={i} className="h-16 bg-gray-100 rounded-xl" />)}
+                    <div className="animate-pulse grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {[1, 2, 3, 4].map(i => <div key={i} className="h-24 bg-gray-100 rounded-xl" />)}
                     </div>
                   ) : filtered.length > 0 ? (
-                    <div className="space-y-2">
-                      {filtered.map((city, idx) => (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {filtered.map(city => (
                         <button
                           key={city.name}
                           onClick={() => router.push(`/location/${encodeSlug(city.displayName)}`)}
-                          className="flex items-center justify-between w-full bg-gray-50 hover:bg-blue-50 rounded-xl p-4 text-left transition-colors group"
+                          className="flex items-center justify-between bg-gray-50 hover:bg-blue-50 rounded-xl p-4 text-left transition-colors group w-full"
                         >
-                          <div className="flex items-center gap-3">
-                            <span className={`text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center ${
-                              idx === 0 ? 'bg-emerald-100 text-emerald-700' : idx < 3 ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'
-                            }`}>
-                              {idx + 1}
-                            </span>
-                            <div>
-                              <p className="font-semibold text-carto-slate group-hover:text-[#4A90D9] transition-colors">{city.name}</p>
-                              <div className="flex items-center gap-2 text-[10px] text-gray-500 mt-0.5">
-                                <span>{city.yearsToMortgage < 99 ? `${city.yearsToMortgage}yr to home` : 'N/A'}</span>
-                                <span>·</span>
-                                <span>{city.projectedSqFt > 0 ? `${Math.round(city.projectedSqFt).toLocaleString()} sqft` : 'N/A'}</span>
-                                <span>·</span>
-                                <span>QoL: {city.qolScore > 0 ? city.qolScore.toFixed(0) : 'N/A'}</span>
-                              </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-carto-slate group-hover:text-[#4A90D9] transition-colors truncate">{city.name}</p>
+                            <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-1">
+                              {city.yearsToMortgage < 99 && <span>{city.yearsToMortgage}yr to home</span>}
+                              {city.projectedSqFt > 0 && <><span>·</span><span>{Math.round(city.projectedSqFt).toLocaleString()} sqft</span></>}
+                              {city.qolScore > 0 && <><span>·</span><span>QoL {city.qolScore.toFixed(0)}</span></>}
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className={`text-lg font-bold ${city.score >= 6 ? 'text-emerald-600' : city.score >= 4 ? 'text-amber-600' : 'text-red-500'}`}>{city.score.toFixed(1)}</p>
+                          <div className="text-right ml-3 flex-shrink-0">
+                            <p className={`text-xl font-bold ${city.score >= 6 ? 'text-emerald-600' : city.score >= 4 ? 'text-amber-600' : 'text-red-500'}`}>{city.score.toFixed(1)}</p>
                             <p className="text-[10px] text-gray-400">score</p>
                           </div>
                         </button>
@@ -1338,101 +1325,141 @@ export default function LocationPage() {
             const availableStates = [...new Set(allSuggestions.map(s => s.type === 'state' ? s.name : (ABBREV_TO_STATE[s.state] || '')).filter(Boolean))].sort();
 
             const hasActiveFilters = suggestionSort !== 'most-viable' || suggestionRegionFilter !== 'all' || suggestionStateFilter !== 'all';
+            const activeFilterCount = (suggestionSort !== 'most-viable' ? 1 : 0) + (suggestionRegionFilter !== 'all' ? 1 : 0) + (suggestionStateFilter !== 'all' ? 1 : 0);
 
             const filterBtn = (
-              <button
-                onClick={() => setSuggestionFilterOpen(!suggestionFilterOpen)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                  hasActiveFilters
-                    ? 'bg-[#4A90D9] text-white border-[#4A90D9]'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-[#4A90D9] hover:text-[#4A90D9]'
-                }`}
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
-                </svg>
-                Filters
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setSuggestionFilterOpen(!suggestionFilterOpen)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                    hasActiveFilters
+                      ? 'bg-[#EDE9FE] text-[#7C3AED] border-[#7C3AED]/30'
+                      : 'bg-white text-gray-600 border-gray-200 hover:bg-[#EDE9FE] hover:text-[#7C3AED]'
+                  }`}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+                  </svg>
+                  Filter
+                  {hasActiveFilters && (
+                    <span className="text-[10px] bg-[#7C3AED] text-white rounded-full w-4 h-4 flex items-center justify-center font-bold">{activeFilterCount}</span>
+                  )}
+                  <svg className={`w-3 h-3 transition-transform ${suggestionFilterOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                  </svg>
+                </button>
+
+                {/* Dropdown filter panel */}
+                {suggestionFilterOpen && (
+                  <div className="absolute z-20 right-0 mt-1 w-64 bg-white border border-gray-200 rounded-xl shadow-lg max-h-[420px] overflow-y-auto">
+                    {/* Sort section */}
+                    <div className="sticky top-0 z-10 px-4 py-2 bg-gray-50 border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider">Sort By</div>
+                    {sortOptions.map(opt => (
+                      <button key={opt.value}
+                        onClick={() => setSuggestionSort(opt.value)}
+                        className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center gap-2.5 ${
+                          suggestionSort === opt.value ? 'bg-[#EFF6FF] text-[#4A90D9] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                        }`}>
+                        <span className={`w-3 h-3 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                          suggestionSort === opt.value ? 'border-[#4A90D9]' : 'border-gray-300'
+                        }`}>
+                          {suggestionSort === opt.value && <span className="w-1.5 h-1.5 rounded-full bg-[#4A90D9]" />}
+                        </span>
+                        {opt.label}
+                      </button>
+                    ))}
+
+                    {/* Region section */}
+                    <div className="sticky top-0 z-10 px-4 py-2 bg-gray-50 border-y border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                      <span>Region</span>
+                      {suggestionRegionFilter !== 'all' && (
+                        <button onClick={() => setSuggestionRegionFilter('all')} className="text-[10px] text-[#4A90D9] hover:text-[#4A8FCC] font-semibold">Clear</button>
+                      )}
+                    </div>
+                    <button onClick={() => setSuggestionRegionFilter('all')}
+                      className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center gap-2.5 ${
+                        suggestionRegionFilter === 'all' ? 'bg-[#EFF6FF] text-[#4A90D9] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                      }`}>
+                      <span className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
+                        suggestionRegionFilter === 'all' ? 'bg-[#7C3AED] border-[#7C3AED]' : 'border-gray-300'
+                      }`}>
+                        {suggestionRegionFilter === 'all' && (
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                        )}
+                      </span>
+                      All Regions
+                    </button>
+                    {regionOptions.map(r => (
+                      <button key={r} onClick={() => setSuggestionRegionFilter(r)}
+                        className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center gap-2.5 ${
+                          suggestionRegionFilter === r ? 'bg-[#EFF6FF] text-[#4A90D9] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                        }`}>
+                        <span className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
+                          suggestionRegionFilter === r ? 'bg-[#7C3AED] border-[#7C3AED]' : 'border-gray-300'
+                        }`}>
+                          {suggestionRegionFilter === r && (
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                          )}
+                        </span>
+                        {r}
+                      </button>
+                    ))}
+
+                    {/* State section */}
+                    <div className="sticky top-0 z-10 px-4 py-2 bg-gray-50 border-y border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                      <span>State</span>
+                      {suggestionStateFilter !== 'all' && (
+                        <button onClick={() => setSuggestionStateFilter('all')} className="text-[10px] text-[#4A90D9] hover:text-[#4A8FCC] font-semibold">Clear</button>
+                      )}
+                    </div>
+                    <button onClick={() => setSuggestionStateFilter('all')}
+                      className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center gap-2.5 ${
+                        suggestionStateFilter === 'all' ? 'bg-[#EFF6FF] text-[#4A90D9] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                      }`}>
+                      <span className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
+                        suggestionStateFilter === 'all' ? 'bg-[#7C3AED] border-[#7C3AED]' : 'border-gray-300'
+                      }`}>
+                        {suggestionStateFilter === 'all' && (
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                        )}
+                      </span>
+                      All States
+                    </button>
+                    {availableStates.map(s => (
+                      <button key={s} onClick={() => setSuggestionStateFilter(s)}
+                        className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center gap-2.5 ${
+                          suggestionStateFilter === s ? 'bg-[#EFF6FF] text-[#4A90D9] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                        }`}>
+                        <span className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
+                          suggestionStateFilter === s ? 'bg-[#7C3AED] border-[#7C3AED]' : 'border-gray-300'
+                        }`}>
+                          {suggestionStateFilter === s && (
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                          )}
+                        </span>
+                        {s}
+                      </button>
+                    ))}
+
+                    {/* Clear all */}
+                    {hasActiveFilters && (
+                      <div className="sticky bottom-0 border-t border-gray-100 bg-white px-4 py-2.5">
+                        <button
+                          onClick={() => { setSuggestionSort('most-viable'); setSuggestionRegionFilter('all'); setSuggestionStateFilter('all'); }}
+                          className="w-full text-center text-sm font-medium text-red-500 hover:text-red-600 transition-colors"
+                        >
+                          Clear All Filters
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             );
 
             return (
               <Section id="browse-similar" title="Browse Similar Locations" headerRight={filterBtn}>
                 <div className="space-y-4">
-
-                  {/* Filter panel */}
-                  {suggestionFilterOpen && (
-                    <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 space-y-4">
-                      {/* Sort */}
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Sort By</label>
-                        <div className="flex flex-wrap gap-2">
-                          {sortOptions.map(opt => (
-                            <button key={opt.value} onClick={() => setSuggestionSort(opt.value)}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                                suggestionSort === opt.value
-                                  ? 'bg-[#4A90D9] text-white'
-                                  : 'bg-white text-gray-600 border border-gray-200 hover:border-[#4A90D9]'
-                              }`}>
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Region filter */}
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Region</label>
-                        <div className="flex flex-wrap gap-2">
-                          <button onClick={() => setSuggestionRegionFilter('all')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                              suggestionRegionFilter === 'all' ? 'bg-emerald-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-emerald-400'
-                            }`}>All Regions</button>
-                          {regionOptions.map(r => (
-                            <button key={r} onClick={() => setSuggestionRegionFilter(r)}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                                suggestionRegionFilter === r ? 'bg-emerald-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-emerald-400'
-                              }`}>
-                              {r}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* State filter */}
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">State</label>
-                        <select
-                          value={suggestionStateFilter}
-                          onChange={e => setSuggestionStateFilter(e.target.value)}
-                          className="px-3 py-1.5 rounded-lg text-xs border border-gray-200 focus:outline-none focus:border-[#4A90D9] bg-white"
-                        >
-                          <option value="all">All States</option>
-                          {availableStates.map(s => (
-                            <option key={s} value={s}>{s}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {hasActiveFilters && (
-                        <button onClick={() => { setSuggestionSort('most-viable'); setSuggestionRegionFilter('all'); setSuggestionStateFilter('all'); }}
-                          className="text-xs text-gray-400 hover:text-gray-600 underline">Reset filters</button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Context text */}
-                  <p className="text-sm text-gray-600">
-                    {isStatePage ? (
-                      <>Other states {calcResult.isViable ? 'with similar or better viability' : 'that may be more viable for your profile'}:</>
-                    ) : (
-                      <>Locations {calcResult.isViable ? 'with similar or better value' : 'that may be more viable for your profile'}:</>
-                    )}
-                    {suggestionSort !== 'most-viable' && (
-                      <span className="ml-1 text-[#4A90D9] font-medium">
-                        Sorted by {sortOptions.find(o => o.value === suggestionSort)?.label?.toLowerCase()}
-                      </span>
-                    )}
-                  </p>
 
                   {/* Suggestion cards */}
                   {suggestionsLoading ? (
@@ -1442,19 +1469,17 @@ export default function LocationPage() {
                   ) : displayed.length > 0 ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {displayed.map(s => {
-                        const cardBg = s.score >= 6 ? 'bg-emerald-50 hover:bg-emerald-100' : s.score >= 4 ? 'bg-amber-50 hover:bg-amber-100' : 'bg-gray-50 hover:bg-gray-100';
-                        const scoreBg = s.score >= 6 ? 'text-emerald-600' : s.score >= 4 ? 'text-amber-600' : 'text-red-500';
+                        const scoreColor = s.score >= 6 ? 'text-emerald-600' : s.score >= 4 ? 'text-amber-600' : 'text-red-500';
                         return (
                           <button
                             key={s.name}
                             onClick={() => router.push(`/location/${encodeSlug(s.type === 'city' ? s.displayName : s.name)}`)}
-                            className={`flex items-center justify-between ${cardBg} rounded-xl p-4 text-left transition-colors group w-full`}
+                            className="flex items-center justify-between bg-gray-50 hover:bg-blue-50 rounded-xl p-4 text-left transition-colors group w-full"
                           >
                             <div className="min-w-0 flex-1">
                               <p className="font-semibold text-carto-slate group-hover:text-[#4A90D9] transition-colors truncate">
                                 {s.type === 'city' ? s.displayName : s.name}
                               </p>
-                              <p className="text-[10px] text-gray-500 mt-0.5">{s.reason}</p>
                               <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-1">
                                 {s.yearsToMortgage < 99 && <span>{s.yearsToMortgage}yr to home</span>}
                                 {s.projectedSqFt > 0 && <><span>·</span><span>{Math.round(s.projectedSqFt).toLocaleString()} sqft</span></>}
@@ -1463,8 +1488,8 @@ export default function LocationPage() {
                               </div>
                             </div>
                             <div className="text-right ml-3 flex-shrink-0">
-                              <p className={`text-xl font-bold ${scoreBg}`}>{s.score.toFixed(1)}</p>
-                              <p className="text-[10px] text-gray-400">score</p>
+                              <p className={`text-xl font-bold ${scoreColor}`}>{s.score.toFixed(1)}</p>
+                              <p className="text-[10px] text-gray-400">/ 10</p>
                             </div>
                           </button>
                         );
