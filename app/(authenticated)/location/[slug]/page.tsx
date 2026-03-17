@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { calculateAutoApproach, CalculationResult } from '@/lib/calculation-engine';
-import { getLocationData, LocationData, getOccupationList, getSalary } from '@/lib/data-extraction';
+import { getLocationData, LocationData, getOccupationList, getSalary, getAllLocations, getAllCities } from '@/lib/data-extraction';
 import { getTypicalHomeValue, getPricePerSqft, estimateHomeSizeSqft } from '@/lib/home-value-lookup';
 import { generateWealthTimeline, calculateLocationWealth, getRppFactor, analyzeSale, WealthProjection } from '@/lib/wealth-calculations';
 import { normalizeOnboardingAnswers } from '@/lib/onboarding/normalize';
@@ -11,10 +11,11 @@ import { getOnboardingAnswers, getSavedLocations, setSavedLocations } from '@/li
 import { getStateFlagPath, STATE_CODES, getStateNameFromLocation } from '@/lib/state-flags';
 import { formatCurrency, formatYears, cn } from '@/lib/utils';
 import type { OnboardingAnswers, UserProfile } from '@/lib/onboarding/types';
-import QoLSection from '@/components/QoLSection';
+import { REGIONS, STATE_TO_ABBREV, ABBREV_TO_STATE } from '@/lib/location-filters';
 import QoLGradeCard from '@/components/QoLGradeCard';
 import { getPersonalizedQoL, getObjectiveQoL } from '@/lib/qol-engine';
 import LocationHeroCarousel from '@/components/LocationHeroCarousel';
+import SimpleHomeCarousel, { HomeSearchFilters } from '@/components/SimpleHomeCarousel';
 import { getLocationImages, LocationImage } from '@/lib/location-images';
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -50,11 +51,12 @@ function encodeSlug(name: string): string {
 }
 
 // ─── Section Wrapper ────────────────────────────────────────────────
-function Section({ id, title, children, className }: { id: string; title: string; children: React.ReactNode; className?: string }) {
+function Section({ id, title, children, className, headerRight }: { id: string; title: string; children: React.ReactNode; className?: string; headerRight?: React.ReactNode }) {
   return (
     <section id={id} className={cn('bg-white rounded-2xl border border-carto-blue-pale/30 overflow-hidden', className)}>
-      <div className="px-6 py-4 border-b border-gray-100">
+      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
         <h2 className="text-xl font-bold text-carto-slate">{title}</h2>
+        {headerRight}
       </div>
       <div className="p-6">{children}</div>
     </section>
@@ -84,8 +86,7 @@ const SECTIONS = [
   { id: 'buy-vs-rent', label: 'Buying vs Renting' },
   { id: 'job-overview', label: 'Job Overview' },
   { id: 'ai-summary', label: 'AI Summary' },
-  { id: 'suggestions', label: 'Suggestions' },
-  { id: 'qol-details', label: 'QoL Details' },
+  { id: 'browse-similar', label: 'Browse Similar' },
 ];
 
 // ─── Main Page ──────────────────────────────────────────────────────
@@ -105,6 +106,20 @@ export default function LocationPage() {
   const [compareIndustry, setCompareIndustry] = useState<string>('');
   const [allocationMode, setAllocationMode] = useState<'conservative' | 'balanced' | 'aggressive'>('balanced');
   const [loading, setLoading] = useState(true);
+
+  // Housing tab filters
+  const [housingTypeFilter, setHousingTypeFilter] = useState<string>('all');
+  const [areaQualityFilter, setAreaQualityFilter] = useState<string>('all');
+  const [settingFilter, setSettingFilter] = useState<string>('all');
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+
+  // Browse Similar Locations filters
+  type SuggestionSortMode = 'most-viable' | 'fastest-home' | 'best-value' | 'quality-of-life' | 'most-similar' | 'largest-home';
+  const [suggestionSort, setSuggestionSort] = useState<SuggestionSortMode>('most-viable');
+  const [suggestionRegionFilter, setSuggestionRegionFilter] = useState<string>('all');
+  const [suggestionStateFilter, setSuggestionStateFilter] = useState<string>('all');
+  const [suggestionFilterOpen, setSuggestionFilterOpen] = useState(false);
+  const [stateSearchQuery, setStateSearchQuery] = useState('');
 
   // Load profile + run calculation
   useEffect(() => {
@@ -175,32 +190,111 @@ export default function LocationPage() {
     return getObjectiveQoL(stateName);
   }, [locationName, userSalaryForQoL]);
 
-  // All states calculation for suggestions
-  const [suggestions, setSuggestions] = useState<{ name: string; score: number; reason: string }[]>([]);
+  // Detect whether current location is a state or a city
+  const isStatePage = !!STATE_CODES[locationName];
+  const currentStateCode = isStatePage ? STATE_CODES[locationName] : '';
+  const currentStateName = isStatePage ? locationName : getStateNameFromLocation(locationName) || '';
+
+  // Compute suggestions: cities within same state + similar locations elsewhere
+  interface SuggestionItem {
+    name: string;
+    displayName: string;
+    type: 'state' | 'city';
+    score: number;
+    yearsToMortgage: number;
+    projectedSqFt: number;
+    col: number;
+    qolScore: number;
+    reason: string;
+    state: string;
+    region: string;
+  }
+
+  const [allSuggestions, setAllSuggestions] = useState<SuggestionItem[]>([]);
+  const [citiesInState, setCitiesInState] = useState<SuggestionItem[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(true);
+
   useEffect(() => {
     if (!profile || !calcResult) return;
-    // Compute a few comparison locations in background
+    setSuggestionsLoading(true);
+
     const timer = setTimeout(() => {
-      const comparisons: { name: string; score: number; reason: string }[] = [];
-      const states = Object.keys(STATE_CODES);
-      for (const st of states) {
-        if (st === locationName) continue;
+      const allLocs = getAllLocations();
+      const results: SuggestionItem[] = [];
+
+      for (const loc of allLocs) {
+        if (loc.name === locationName) continue;
+        // For state pages showing "Browse Similar", only show other states
+        // For city pages, show both cities and states
         try {
-          const r = calculateAutoApproach(profile, st, 30);
-          if (r && r.numericScore > 0) {
-            let reason = '';
-            if (r.numericScore > calcResult.numericScore + 1) reason = 'Higher viability score';
-            else if (r.locationData.adjustedCOL.onePerson < (calcResult.locationData?.adjustedCOL.onePerson || Infinity) * 0.9) reason = 'Lower cost of living';
-            else continue;
-            comparisons.push({ name: st, score: r.numericScore, reason });
+          const r = calculateAutoApproach(profile, loc.name, 30);
+          if (!r || r.numericScore <= 0) continue;
+
+          // Get QoL
+          const locStateName = loc.type === 'state' ? loc.name : getStateNameFromLocation(loc.displayName) || loc.name;
+          const qol = userSalaryForQoL > 0
+            ? getPersonalizedQoL(locStateName, userSalaryForQoL)
+            : getObjectiveQoL(locStateName);
+          const qolScore = qol?.objective_qol ?? 0;
+
+          // Get region
+          const stateForRegion = loc.type === 'state' ? loc.name : locStateName;
+          let region = '';
+          for (const [rName, rStates] of Object.entries(REGIONS)) {
+            if (rName === 'Continental United States' || rName === 'Non-Continental United States') continue;
+            if (rStates.includes(stateForRegion)) { region = rName; break; }
           }
+
+          // Determine the state abbrev for this location
+          const locState = loc.type === 'state' ? (STATE_TO_ABBREV[loc.name] || '') : (loc.displayName.split(', ').pop() || '');
+
+          let reason = '';
+          if (r.numericScore > calcResult.numericScore + 1) reason = 'Higher viability score';
+          else if (r.locationData.adjustedCOL.onePerson < (calcResult.locationData?.adjustedCOL.onePerson || Infinity) * 0.9) reason = 'Lower cost of living';
+          else if (qolScore > (qolResult?.objective_qol ?? 0) + 5) reason = 'Higher quality of life';
+          else reason = 'Similar area';
+
+          results.push({
+            name: loc.name,
+            displayName: loc.displayName,
+            type: loc.type,
+            score: r.numericScore,
+            yearsToMortgage: r.yearsToMortgage >= 0 ? r.yearsToMortgage : 99,
+            projectedSqFt: r.projectedSqFt,
+            col: r.locationData?.adjustedCOL?.onePerson || 0,
+            qolScore,
+            reason,
+            state: locState,
+            region,
+          });
         } catch { /* skip */ }
       }
-      comparisons.sort((a, b) => b.score - a.score);
-      setSuggestions(comparisons.slice(0, 8));
-    }, 100);
+
+      // Split into cities within current state and all suggestions
+      if (isStatePage) {
+        const stateAbbrev = STATE_CODES[locationName];
+        const inState = results
+          .filter(s => s.type === 'city' && s.state === stateAbbrev)
+          .sort((a, b) => b.score - a.score);
+        setCitiesInState(inState);
+
+        // Browse Similar = only states, excluding current
+        const similarStates = results
+          .filter(s => s.type === 'state')
+          .sort((a, b) => b.score - a.score);
+        setAllSuggestions(similarStates);
+      } else {
+        // City page: show mix of cities and states, preferring same state/region
+        setCitiesInState([]);
+        results.sort((a, b) => b.score - a.score);
+        setAllSuggestions(results);
+      }
+
+      setSuggestionsLoading(false);
+    }, 150);
     return () => clearTimeout(timer);
-  }, [profile, calcResult, locationName]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, calcResult, locationName, isStatePage, userSalaryForQoL]);
 
   // Toggle save
   const handleSave = useCallback(() => {
@@ -522,6 +616,157 @@ export default function LocationPage() {
                   </ul>
                 </div>
               </div>
+            </div>
+          </Section>
+
+          {/* ═══ YOUR HOME ═══ */}
+          <Section id="housing" title="Your Home">
+            <div className="space-y-5">
+              {/* Max home value highlight card */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <MetricCard
+                  label="Max Affordable Home"
+                  value={maxAffordable ? fmtDollars(maxAffordable.maxSustainableHousePrice) : 'N/A'}
+                  sub={maxAffordable ? `${fmtDollars(Math.round(maxAffordable.sustainableAnnualPayment / 12))}/mo` : undefined}
+                  accent="#E8F5E9"
+                />
+                <MetricCard
+                  label="Projected Size"
+                  value={calcResult.projectedSqFt > 0 ? `${fmtNum(Math.round(calcResult.projectedSqFt))} sqft` : 'N/A'}
+                  sub={calcResult.houseTag}
+                  accent="#E8F2FB"
+                />
+                <MetricCard
+                  label="Typical Home Value"
+                  value={fmtDollars(locData.housing.medianHomeValue)}
+                  sub={`${fmtDollars(getPricePerSqft(locationName))}/sqft`}
+                />
+                <MetricCard
+                  label="Down Payment"
+                  value={maxAffordable ? fmtDollars(maxAffordable.sustainableDownPayment) : 'N/A'}
+                  sub={maxAffordable ? `${locData.housing.downPaymentPercent}% down` : undefined}
+                />
+              </div>
+
+              {/* Viable homes carousel with filters */}
+              {maxAffordable && maxAffordable.maxSustainableHousePrice > 0 && (() => {
+                const ovApiFilters: HomeSearchFilters = {};
+                if (housingTypeFilter === 'house') ovApiFilters.propertyType = ['single_family'];
+                else if (housingTypeFilter === 'condo') ovApiFilters.propertyType = ['condo', 'condos'];
+                else if (housingTypeFilter === 'single-family') ovApiFilters.propertyType = ['single_family'];
+                else if (housingTypeFilter === '3+bed') ovApiFilters.bedsMin = 3;
+                let ovPriceMult = 1.0;
+                if (areaQualityFilter === 'nice') ovPriceMult = 1.3;
+                else if (areaQualityFilter === 'any') ovPriceMult = 0.75;
+                if (settingFilter === 'urban') ovApiFilters.lotSqftMax = 5000;
+                else if (settingFilter === 'suburban') { ovApiFilters.lotSqftMin = 3000; ovApiFilters.lotSqftMax = 43560; }
+                else if (settingFilter === 'rural') ovApiFilters.lotSqftMin = 43560;
+                const ovAdjustedPrice = Math.round(maxAffordable.maxSustainableHousePrice * ovPriceMult);
+                const ovHasApiFilters = Object.keys(ovApiFilters).length > 0;
+                const ovHasActive = housingTypeFilter !== 'all' || areaQualityFilter !== 'all' || settingFilter !== 'all';
+                const ovActiveCount = [housingTypeFilter, areaQualityFilter, settingFilter].filter(f => f !== 'all').length;
+
+                return (
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Viable Homes in {locationName}</h3>
+                      <button
+                        onClick={() => setFilterMenuOpen(!filterMenuOpen)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                          ovHasActive
+                            ? 'bg-[#4A90D9] text-white border-[#4A90D9]'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-[#4A90D9] hover:text-[#4A90D9]'
+                        }`}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+                        </svg>
+                        Filters
+                        {ovActiveCount > 0 && (
+                          <span className="bg-white text-[#4A90D9] text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                            {ovActiveCount}
+                          </span>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Inline filter panel */}
+                    {filterMenuOpen && (
+                      <div className="bg-gray-50 rounded-xl border border-gray-200 p-3 mb-3 space-y-3">
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Housing Type</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {[{ value: 'all', label: 'All' }, { value: 'house', label: 'House' }, { value: 'condo', label: 'Condo' }, { value: 'single-family', label: 'Single Family' }, { value: '3+bed', label: '3+ Bed' }].map(opt => (
+                              <button key={opt.value} onClick={() => setHousingTypeFilter(opt.value)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${housingTypeFilter === opt.value ? 'bg-[#4A90D9] text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-[#4A90D9]'}`}>
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Area Quality</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {[{ value: 'all', label: 'All' }, { value: 'nice', label: 'Nice Area' }, { value: 'normal', label: 'Normal' }, { value: 'any', label: 'Any Area' }].map(opt => (
+                              <button key={opt.value} onClick={() => setAreaQualityFilter(opt.value)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${areaQualityFilter === opt.value ? 'bg-emerald-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-emerald-400'}`}>
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Setting</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {[{ value: 'all', label: 'All' }, { value: 'urban', label: 'Urban' }, { value: 'suburban', label: 'Suburban' }, { value: 'rural', label: 'Rural' }].map(opt => (
+                              <button key={opt.value} onClick={() => setSettingFilter(opt.value)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${settingFilter === opt.value ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-amber-400'}`}>
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        {ovHasActive && (
+                          <button onClick={() => { setHousingTypeFilter('all'); setAreaQualityFilter('all'); setSettingFilter('all'); }}
+                            className="text-xs text-gray-400 hover:text-gray-600 underline">Clear all</button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Active filter pills */}
+                    {ovHasActive && !filterMenuOpen && (
+                      <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                        {housingTypeFilter !== 'all' && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-medium border border-blue-200">
+                            {housingTypeFilter === 'house' ? 'House' : housingTypeFilter === 'condo' ? 'Condo' : housingTypeFilter === 'single-family' ? 'Single Family' : '3+ Bed'}
+                            <button onClick={() => setHousingTypeFilter('all')} className="hover:text-blue-900"><svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                          </span>
+                        )}
+                        {areaQualityFilter !== 'all' && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-medium border border-emerald-200">
+                            {areaQualityFilter === 'nice' ? 'Nice' : areaQualityFilter === 'normal' ? 'Normal' : 'Any'}
+                            <button onClick={() => setAreaQualityFilter('all')} className="hover:text-emerald-900"><svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                          </span>
+                        )}
+                        {settingFilter !== 'all' && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-medium border border-amber-200">
+                            {settingFilter === 'urban' ? 'Urban' : settingFilter === 'suburban' ? 'Suburban' : 'Rural'}
+                            <button onClick={() => setSettingFilter('all')} className="hover:text-amber-900"><svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    <SimpleHomeCarousel
+                      key={`ov-${housingTypeFilter}-${areaQualityFilter}-${settingFilter}`}
+                      location={locationName}
+                      targetPrice={ovAdjustedPrice}
+                      priceRange={areaQualityFilter === 'nice' ? 75000 : areaQualityFilter === 'any' ? 40000 : 50000}
+                      filters={ovHasApiFilters ? ovApiFilters : undefined}
+                    />
+                  </div>
+                );
+              })()}
             </div>
           </Section>
 
@@ -958,77 +1203,311 @@ export default function LocationPage() {
             </div>
           </Section>
 
-          {/* ═══ SUGGESTIONS ═══ */}
-          <Section id="suggestions" title="Suggestions">
-            <div className="space-y-4">
-              {calcResult.isViable ? (
-                <>
-                  <p className="text-sm text-gray-600">
-                    Since {locationName} is viable, here are similar locations that may offer even better value:
-                  </p>
-                  {suggestions.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {suggestions.map(s => (
-                        <button
-                          key={s.name}
-                          onClick={() => router.push(`/location/${encodeSlug(s.name)}`)}
-                          className="flex items-center justify-between bg-gray-50 hover:bg-carto-blue-sky rounded-xl p-4 text-left transition-colors"
-                        >
-                          <div>
-                            <p className="font-semibold text-carto-slate">{s.name}</p>
-                            <p className="text-xs text-gray-500">{s.reason}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-lg font-bold text-carto-blue">{s.score.toFixed(1)}</p>
-                            <p className="text-xs text-gray-400">score</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="animate-pulse flex gap-4">
-                      {[1, 2, 3, 4].map(i => <div key={i} className="h-20 bg-gray-100 rounded-xl flex-1" />)}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  <p className="text-sm text-gray-600">
-                    Since {locationName} is not viable, here are better and more optimal locations:
-                  </p>
-                  {suggestions.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {suggestions.map(s => (
-                        <button
-                          key={s.name}
-                          onClick={() => router.push(`/location/${encodeSlug(s.name)}`)}
-                          className="flex items-center justify-between bg-emerald-50 hover:bg-emerald-100 rounded-xl p-4 text-left transition-colors"
-                        >
-                          <div>
-                            <p className="font-semibold text-carto-slate">{s.name}</p>
-                            <p className="text-xs text-emerald-700">{s.reason}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-lg font-bold text-emerald-600">{s.score.toFixed(1)}</p>
-                            <p className="text-xs text-gray-400">score</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="animate-pulse flex gap-4">
-                      {[1, 2, 3, 4].map(i => <div key={i} className="h-20 bg-gray-100 rounded-xl flex-1" />)}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </Section>
+          {/* ═══ WHERE IN STATE (state pages only) ═══ */}
+          {isStatePage && (() => {
+            const filtered = stateSearchQuery
+              ? citiesInState.filter(c => c.name.toLowerCase().includes(stateSearchQuery.toLowerCase()))
+              : citiesInState;
 
-          {/* ═══ QOL DETAILS (In-depth breakdown) ═══ */}
-          <Section id="qol-details" title="Quality of Life — In-Depth">
-            <QoLSection locationName={locationName} annualIncome={userSalaryForQoL || undefined} />
-          </Section>
+            return (
+              <Section id="where-in-state" title={`Where in ${locationName}`} headerRight={
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder={`Search cities in ${locationName}...`}
+                    value={stateSearchQuery}
+                    onChange={e => setStateSearchQuery(e.target.value)}
+                    className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#4A90D9] focus:ring-1 focus:ring-[#4A90D9]/30 w-48"
+                  />
+                  <svg className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+              }>
+                <div className="space-y-3">
+                  {suggestionsLoading ? (
+                    <div className="animate-pulse grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {[1, 2, 3, 4].map(i => <div key={i} className="h-24 bg-gray-100 rounded-xl" />)}
+                    </div>
+                  ) : filtered.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {filtered.map(city => (
+                        <button
+                          key={city.name}
+                          onClick={() => router.push(`/location/${encodeSlug(city.displayName)}`)}
+                          className="flex items-center justify-between bg-gray-50 hover:bg-blue-50 rounded-xl p-4 text-left transition-colors group w-full"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-carto-slate group-hover:text-[#4A90D9] transition-colors truncate">{city.name}</p>
+                            <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-1">
+                              {city.yearsToMortgage < 99 && <span>{city.yearsToMortgage}yr to home</span>}
+                              {city.projectedSqFt > 0 && <><span>·</span><span>{Math.round(city.projectedSqFt).toLocaleString()} sqft</span></>}
+                              {city.qolScore > 0 && <><span>·</span><span>QoL {city.qolScore.toFixed(0)}</span></>}
+                            </div>
+                          </div>
+                          <div className="text-right ml-3 flex-shrink-0">
+                            <p className={`text-xl font-bold ${city.score >= 6 ? 'text-emerald-600' : city.score >= 4 ? 'text-amber-600' : 'text-red-500'}`}>{city.score.toFixed(1)}</p>
+                            <p className="text-[10px] text-gray-400">score</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 py-4 text-center">
+                      {stateSearchQuery ? `No cities matching "${stateSearchQuery}"` : `No city data available for ${locationName}`}
+                    </p>
+                  )}
+                </div>
+              </Section>
+            );
+          })()}
+
+          {/* ═══ BROWSE SIMILAR LOCATIONS ═══ */}
+          {(() => {
+            // Sort suggestions
+            const sortFn = (a: SuggestionItem, b: SuggestionItem): number => {
+              switch (suggestionSort) {
+                case 'most-viable': return b.score - a.score;
+                case 'fastest-home': return a.yearsToMortgage - b.yearsToMortgage;
+                case 'largest-home': return b.projectedSqFt - a.projectedSqFt;
+                case 'best-value': {
+                  const aVal = a.col > 0 ? a.score / (a.col / 30000) : 0;
+                  const bVal = b.col > 0 ? b.score / (b.col / 30000) : 0;
+                  return bVal - aVal;
+                }
+                case 'quality-of-life': return b.qolScore - a.qolScore;
+                case 'most-similar': {
+                  const curQol = qolResult?.objective_qol ?? 50;
+                  const aDist = Math.abs(a.qolScore - curQol);
+                  const bDist = Math.abs(b.qolScore - curQol);
+                  // Sort by QoL similarity, then by viability desc as tiebreaker
+                  if (Math.abs(aDist - bDist) < 3) return b.score - a.score;
+                  return aDist - bDist;
+                }
+                default: return b.score - a.score;
+              }
+            };
+
+            // Filter by region
+            let filtered = [...allSuggestions];
+            if (suggestionRegionFilter !== 'all') {
+              const regionStates = REGIONS[suggestionRegionFilter];
+              if (regionStates) {
+                filtered = filtered.filter(s => {
+                  const sState = s.type === 'state' ? s.name : (ABBREV_TO_STATE[s.state] || '');
+                  return regionStates.includes(sState);
+                });
+              }
+            }
+            // Filter by state
+            if (suggestionStateFilter !== 'all') {
+              filtered = filtered.filter(s => {
+                if (s.type === 'state') return s.name === suggestionStateFilter;
+                return (ABBREV_TO_STATE[s.state] || '') === suggestionStateFilter;
+              });
+            }
+
+            filtered.sort(sortFn);
+            const displayed = filtered.slice(0, 12);
+
+            const sortOptions: { value: SuggestionSortMode; label: string }[] = [
+              { value: 'most-viable', label: 'Most Viable' },
+              { value: 'fastest-home', label: 'Fastest Home Ownership' },
+              { value: 'largest-home', label: 'Largest Projected Home' },
+              { value: 'best-value', label: 'Best Value' },
+              { value: 'quality-of-life', label: 'Highest Quality of Life' },
+              { value: 'most-similar', label: 'Most Similar' },
+            ];
+
+            const regionOptions = Object.keys(REGIONS).filter(r => r !== 'Continental United States' && r !== 'Non-Continental United States');
+
+            // Get unique states from suggestions for the state filter dropdown
+            const availableStates = [...new Set(allSuggestions.map(s => s.type === 'state' ? s.name : (ABBREV_TO_STATE[s.state] || '')).filter(Boolean))].sort();
+
+            const hasActiveFilters = suggestionSort !== 'most-viable' || suggestionRegionFilter !== 'all' || suggestionStateFilter !== 'all';
+            const activeFilterCount = (suggestionSort !== 'most-viable' ? 1 : 0) + (suggestionRegionFilter !== 'all' ? 1 : 0) + (suggestionStateFilter !== 'all' ? 1 : 0);
+
+            const filterBtn = (
+              <div className="relative">
+                <button
+                  onClick={() => setSuggestionFilterOpen(!suggestionFilterOpen)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                    hasActiveFilters
+                      ? 'bg-[#EDE9FE] text-[#7C3AED] border-[#7C3AED]/30'
+                      : 'bg-white text-gray-600 border-gray-200 hover:bg-[#EDE9FE] hover:text-[#7C3AED]'
+                  }`}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+                  </svg>
+                  Filter
+                  {hasActiveFilters && (
+                    <span className="text-[10px] bg-[#7C3AED] text-white rounded-full w-4 h-4 flex items-center justify-center font-bold">{activeFilterCount}</span>
+                  )}
+                  <svg className={`w-3 h-3 transition-transform ${suggestionFilterOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                  </svg>
+                </button>
+
+                {/* Dropdown filter panel */}
+                {suggestionFilterOpen && (
+                  <div className="absolute z-20 right-0 mt-1 w-64 bg-white border border-gray-200 rounded-xl shadow-lg max-h-[420px] overflow-y-auto">
+                    {/* Sort section */}
+                    <div className="sticky top-0 z-10 px-4 py-2 bg-gray-50 border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider">Sort By</div>
+                    {sortOptions.map(opt => (
+                      <button key={opt.value}
+                        onClick={() => setSuggestionSort(opt.value)}
+                        className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center gap-2.5 ${
+                          suggestionSort === opt.value ? 'bg-[#EFF6FF] text-[#4A90D9] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                        }`}>
+                        <span className={`w-3 h-3 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                          suggestionSort === opt.value ? 'border-[#4A90D9]' : 'border-gray-300'
+                        }`}>
+                          {suggestionSort === opt.value && <span className="w-1.5 h-1.5 rounded-full bg-[#4A90D9]" />}
+                        </span>
+                        {opt.label}
+                      </button>
+                    ))}
+
+                    {/* Region section */}
+                    <div className="sticky top-0 z-10 px-4 py-2 bg-gray-50 border-y border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                      <span>Region</span>
+                      {suggestionRegionFilter !== 'all' && (
+                        <button onClick={() => setSuggestionRegionFilter('all')} className="text-[10px] text-[#4A90D9] hover:text-[#4A8FCC] font-semibold">Clear</button>
+                      )}
+                    </div>
+                    <button onClick={() => setSuggestionRegionFilter('all')}
+                      className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center gap-2.5 ${
+                        suggestionRegionFilter === 'all' ? 'bg-[#EFF6FF] text-[#4A90D9] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                      }`}>
+                      <span className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
+                        suggestionRegionFilter === 'all' ? 'bg-[#7C3AED] border-[#7C3AED]' : 'border-gray-300'
+                      }`}>
+                        {suggestionRegionFilter === 'all' && (
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                        )}
+                      </span>
+                      All Regions
+                    </button>
+                    {regionOptions.map(r => (
+                      <button key={r} onClick={() => setSuggestionRegionFilter(r)}
+                        className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center gap-2.5 ${
+                          suggestionRegionFilter === r ? 'bg-[#EFF6FF] text-[#4A90D9] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                        }`}>
+                        <span className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
+                          suggestionRegionFilter === r ? 'bg-[#7C3AED] border-[#7C3AED]' : 'border-gray-300'
+                        }`}>
+                          {suggestionRegionFilter === r && (
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                          )}
+                        </span>
+                        {r}
+                      </button>
+                    ))}
+
+                    {/* State section */}
+                    <div className="sticky top-0 z-10 px-4 py-2 bg-gray-50 border-y border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                      <span>State</span>
+                      {suggestionStateFilter !== 'all' && (
+                        <button onClick={() => setSuggestionStateFilter('all')} className="text-[10px] text-[#4A90D9] hover:text-[#4A8FCC] font-semibold">Clear</button>
+                      )}
+                    </div>
+                    <button onClick={() => setSuggestionStateFilter('all')}
+                      className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center gap-2.5 ${
+                        suggestionStateFilter === 'all' ? 'bg-[#EFF6FF] text-[#4A90D9] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                      }`}>
+                      <span className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
+                        suggestionStateFilter === 'all' ? 'bg-[#7C3AED] border-[#7C3AED]' : 'border-gray-300'
+                      }`}>
+                        {suggestionStateFilter === 'all' && (
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                        )}
+                      </span>
+                      All States
+                    </button>
+                    {availableStates.map(s => (
+                      <button key={s} onClick={() => setSuggestionStateFilter(s)}
+                        className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center gap-2.5 ${
+                          suggestionStateFilter === s ? 'bg-[#EFF6FF] text-[#4A90D9] font-medium' : 'text-gray-700 hover:bg-[#F8FAFB]'
+                        }`}>
+                        <span className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
+                          suggestionStateFilter === s ? 'bg-[#7C3AED] border-[#7C3AED]' : 'border-gray-300'
+                        }`}>
+                          {suggestionStateFilter === s && (
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                          )}
+                        </span>
+                        {s}
+                      </button>
+                    ))}
+
+                    {/* Clear all */}
+                    {hasActiveFilters && (
+                      <div className="sticky bottom-0 border-t border-gray-100 bg-white px-4 py-2.5">
+                        <button
+                          onClick={() => { setSuggestionSort('most-viable'); setSuggestionRegionFilter('all'); setSuggestionStateFilter('all'); }}
+                          className="w-full text-center text-sm font-medium text-red-500 hover:text-red-600 transition-colors"
+                        >
+                          Clear All Filters
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+
+            return (
+              <Section id="browse-similar" title="Browse Similar Locations" headerRight={filterBtn}>
+                <div className="space-y-4">
+
+                  {/* Suggestion cards */}
+                  {suggestionsLoading ? (
+                    <div className="animate-pulse grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {[1, 2, 3, 4].map(i => <div key={i} className="h-24 bg-gray-100 rounded-xl" />)}
+                    </div>
+                  ) : displayed.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {displayed.map(s => {
+                        const scoreColor = s.score >= 6 ? 'text-emerald-600' : s.score >= 4 ? 'text-amber-600' : 'text-red-500';
+                        return (
+                          <button
+                            key={s.name}
+                            onClick={() => router.push(`/location/${encodeSlug(s.type === 'city' ? s.displayName : s.name)}`)}
+                            className="flex items-center justify-between bg-gray-50 hover:bg-blue-50 rounded-xl p-4 text-left transition-colors group w-full"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-carto-slate group-hover:text-[#4A90D9] transition-colors truncate">
+                                {s.type === 'city' ? s.displayName : s.name}
+                              </p>
+                              <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-1">
+                                {s.yearsToMortgage < 99 && <span>{s.yearsToMortgage}yr to home</span>}
+                                {s.projectedSqFt > 0 && <><span>·</span><span>{Math.round(s.projectedSqFt).toLocaleString()} sqft</span></>}
+                                {s.qolScore > 0 && <><span>·</span><span>QoL {s.qolScore.toFixed(0)}</span></>}
+                                {s.region && <><span>·</span><span>{s.region}</span></>}
+                              </div>
+                            </div>
+                            <div className="text-right ml-3 flex-shrink-0">
+                              <p className={`text-xl font-bold ${scoreColor}`}>{s.score.toFixed(1)}</p>
+                              <p className="text-[10px] text-gray-400">/ 10</p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 py-4 text-center">No matching locations found. Try adjusting your filters.</p>
+                  )}
+
+                  {filtered.length > 12 && (
+                    <p className="text-xs text-gray-400 text-center">
+                      Showing top 12 of {filtered.length} locations
+                    </p>
+                  )}
+                </div>
+              </Section>
+            );
+          })()}
 
         </div>
       </div>
@@ -1092,11 +1571,6 @@ export default function LocationPage() {
           <Section id="qol-grades" title="Quality of Life Grades">
             <QoLGradeCard locationName={locationName} annualIncome={userSalaryForQoL || undefined} />
           </Section>
-
-          {/* In-depth QoL */}
-          <Section id="qol-indepth" title="Quality of Life — In-Depth">
-            <QoLSection locationName={locationName} annualIncome={userSalaryForQoL || undefined} />
-          </Section>
         </div>
       )}
 
@@ -1148,33 +1622,296 @@ export default function LocationPage() {
             </div>
           </Section>
 
-          {/* Home Size Calculator */}
-          <Section id="home-size-calc" title="Home Size Calculator">
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600">Based on your financial profile in {locationName}:</p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-carto-blue-sky rounded-xl p-5 text-center">
-                  <p className="text-xs font-medium text-gray-500 uppercase">Affordable Price</p>
-                  <p className="text-2xl font-bold text-carto-slate mt-1">{maxAffordable ? fmtDollars(maxAffordable.maxSustainableHousePrice) : 'N/A'}</p>
+          {/* Viable Homes — real listings with filters */}
+          {maxAffordable && maxAffordable.maxSustainableHousePrice > 0 && (() => {
+            // Build filters for the API call
+            const apiFilters: HomeSearchFilters = {};
+            if (housingTypeFilter === 'house') apiFilters.propertyType = ['single_family'];
+            else if (housingTypeFilter === 'condo') apiFilters.propertyType = ['condo', 'condos'];
+            else if (housingTypeFilter === 'single-family') apiFilters.propertyType = ['single_family'];
+            else if (housingTypeFilter === '3+bed') apiFilters.bedsMin = 3;
+
+            // Area quality adjusts price range
+            let priceMultiplier = 1.0;
+            if (areaQualityFilter === 'nice') priceMultiplier = 1.3;
+            else if (areaQualityFilter === 'any') priceMultiplier = 0.75;
+
+            // Setting filter uses lot size as proxy
+            if (settingFilter === 'urban') {
+              apiFilters.lotSqftMax = 5000;
+            } else if (settingFilter === 'suburban') {
+              apiFilters.lotSqftMin = 3000;
+              apiFilters.lotSqftMax = 43560;
+            } else if (settingFilter === 'rural') {
+              apiFilters.lotSqftMin = 43560;
+            }
+
+            const adjustedPrice = Math.round(maxAffordable.maxSustainableHousePrice * priceMultiplier);
+            const hasActiveFilters = housingTypeFilter !== 'all' || areaQualityFilter !== 'all' || settingFilter !== 'all';
+            const activeFilterCount = [housingTypeFilter, areaQualityFilter, settingFilter].filter(f => f !== 'all').length;
+            const hasApiFilters = Object.keys(apiFilters).length > 0;
+
+            const filterButton = (
+              <button
+                onClick={() => setFilterMenuOpen(!filterMenuOpen)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  hasActiveFilters
+                    ? 'bg-[#4A90D9] text-white border-[#4A90D9]'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-[#4A90D9] hover:text-[#4A90D9]'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+                </svg>
+                Filters
+                {activeFilterCount > 0 && (
+                  <span className="bg-white text-[#4A90D9] text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+            );
+
+            return (
+              <Section id="viable-homes" title={`Viable Homes in ${locationName}`} headerRight={filterButton}>
+                <div className="space-y-4">
+                  {/* Active filter pills */}
+                  {hasActiveFilters && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {housingTypeFilter !== 'all' && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium border border-blue-200">
+                          {housingTypeFilter === 'house' ? 'House' : housingTypeFilter === 'condo' ? 'Condo' : housingTypeFilter === 'single-family' ? 'Single Family' : '3+ Bedrooms'}
+                          <button onClick={() => setHousingTypeFilter('all')} className="hover:text-blue-900">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </span>
+                      )}
+                      {areaQualityFilter !== 'all' && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-200">
+                          {areaQualityFilter === 'nice' ? 'Nice Area' : areaQualityFilter === 'normal' ? 'Normal Area' : 'Any Area'}
+                          <button onClick={() => setAreaQualityFilter('all')} className="hover:text-emerald-900">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </span>
+                      )}
+                      {settingFilter !== 'all' && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-medium border border-amber-200">
+                          {settingFilter === 'urban' ? 'Urban' : settingFilter === 'suburban' ? 'Suburban' : 'Rural'}
+                          <button onClick={() => setSettingFilter('all')} className="hover:text-amber-900">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </span>
+                      )}
+                      <button
+                        onClick={() => { setHousingTypeFilter('all'); setAreaQualityFilter('all'); setSettingFilter('all'); }}
+                        className="text-xs text-gray-400 hover:text-gray-600 underline"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Expandable filter panel */}
+                  {filterMenuOpen && (
+                    <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 space-y-4">
+                      {/* Housing Type */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Housing Type</label>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { value: 'all', label: 'All Types' },
+                            { value: 'house', label: 'House' },
+                            { value: 'condo', label: 'Condo' },
+                            { value: 'single-family', label: 'Single Family' },
+                            { value: '3+bed', label: '3+ Bedrooms' },
+                          ].map(opt => (
+                            <button
+                              key={opt.value}
+                              onClick={() => setHousingTypeFilter(opt.value)}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                housingTypeFilter === opt.value
+                                  ? 'bg-[#4A90D9] text-white'
+                                  : 'bg-white text-gray-600 border border-gray-200 hover:border-[#4A90D9] hover:text-[#4A90D9]'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Area Quality */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Area Quality</label>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { value: 'all', label: 'All Areas' },
+                            { value: 'nice', label: 'Nice Area' },
+                            { value: 'normal', label: 'Normal Area' },
+                            { value: 'any', label: 'Any Area' },
+                          ].map(opt => (
+                            <button
+                              key={opt.value}
+                              onClick={() => setAreaQualityFilter(opt.value)}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                areaQualityFilter === opt.value
+                                  ? 'bg-emerald-500 text-white'
+                                  : 'bg-white text-gray-600 border border-gray-200 hover:border-emerald-400 hover:text-emerald-600'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Setting */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Location Setting</label>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { value: 'all', label: 'All Settings' },
+                            { value: 'urban', label: 'Urban' },
+                            { value: 'suburban', label: 'Suburban' },
+                            { value: 'rural', label: 'Rural' },
+                          ].map(opt => (
+                            <button
+                              key={opt.value}
+                              onClick={() => setSettingFilter(opt.value)}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                settingFilter === opt.value
+                                  ? 'bg-amber-500 text-white'
+                                  : 'bg-white text-gray-600 border border-gray-200 hover:border-amber-400 hover:text-amber-600'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Price context */}
+                  <p className="text-sm text-gray-600">
+                    {areaQualityFilter !== 'all' && areaQualityFilter !== 'normal' ? (
+                      <>Showing homes near <span className="font-semibold">{fmtDollars(adjustedPrice)}</span> ({areaQualityFilter === 'nice' ? 'premium areas — higher price point' : 'budget-friendly areas — lower price point'})</>
+                    ) : (
+                      <>Real listings near your <span className="font-semibold">{fmtDollars(adjustedPrice)}</span> budget</>
+                    )}
+                  </p>
+
+                  {/* Carousel */}
+                  <SimpleHomeCarousel
+                    key={`${housingTypeFilter}-${areaQualityFilter}-${settingFilter}`}
+                    location={locationName}
+                    targetPrice={adjustedPrice}
+                    priceRange={areaQualityFilter === 'nice' ? 75000 : areaQualityFilter === 'any' ? 40000 : 50000}
+                    filters={hasApiFilters ? apiFilters : undefined}
+                  />
                 </div>
-                <div className="bg-carto-blue-sky rounded-xl p-5 text-center">
-                  <p className="text-xs font-medium text-gray-500 uppercase">Estimated Size</p>
-                  <p className="text-2xl font-bold text-carto-slate mt-1">{calcResult.projectedSqFt > 0 ? `${fmtNum(Math.round(calcResult.projectedSqFt))} sqft` : 'N/A'}</p>
-                </div>
-                <div className="bg-carto-blue-sky rounded-xl p-5 text-center">
-                  <p className="text-xs font-medium text-gray-500 uppercase">Home Type</p>
-                  <p className="text-2xl font-bold text-carto-slate mt-1">{calcResult.houseTag || 'N/A'}</p>
-                </div>
-              </div>
-              <div className="bg-gray-50 rounded-xl p-4">
-                <p className="text-sm text-gray-600">
-                  At <span className="font-semibold">{fmtDollars(getPricePerSqft(locationName))}/sqft</span> in {locationName}, your max budget of{' '}
-                  <span className="font-semibold">{maxAffordable ? fmtDollars(maxAffordable.maxSustainableHousePrice) : 'N/A'}</span>{' '}
-                  gets you approximately <span className="font-semibold">{calcResult.projectedSqFt > 0 ? `${fmtNum(Math.round(calcResult.projectedSqFt))} sqft` : 'N/A'}</span>.
-                  {calcResult.projectedSqFt > 0 && calcResult.projectedSqFt < 800 && ' This is a compact space — consider looking at more affordable areas for more room.'}
-                  {calcResult.projectedSqFt >= 2000 && ' This is a spacious home with plenty of room for a family.'}
-                </p>
-              </div>
+              </Section>
+            );
+          })()}
+
+          {/* Home Size Calculator — by Area Quality */}
+          <Section id="home-size-calc" title="What You Can Get in Each Neighborhood">
+            <div className="space-y-6">
+              <p className="text-sm text-gray-600">
+                At <span className="font-semibold">{fmtDollars(getPricePerSqft(locationName))}/sqft</span> in {locationName}, here&apos;s what your budget looks like across different neighborhood tiers:
+              </p>
+
+              {/* Quality tier cards with carousels */}
+              {(() => {
+                const basePrice = maxAffordable?.maxSustainableHousePrice || 0;
+                const tiers = [
+                  { key: 'nice' as const, label: 'Nice Area', sub: 'Premium neighborhoods', multiplier: 1.3, areaFilter: 'nice', color: { text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', accent: '#E8F5E9' } },
+                  { key: 'average' as const, label: 'Average Area', sub: 'Typical neighborhoods', multiplier: 1.0, areaFilter: 'normal', color: { text: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200', accent: '#E3F2FD' } },
+                  { key: 'any' as const, label: 'Budget-Friendly Area', sub: 'More affordable neighborhoods', multiplier: 0.75, areaFilter: 'any', color: { text: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200', accent: '#FFF8E1' } },
+                ];
+
+                return (
+                  <div className="space-y-6">
+                    {tiers.map(tier => {
+                      const sqft = basePrice > 0 ? Math.round(estimateHomeSizeSqft(basePrice / tier.multiplier, locationName)) : 0;
+                      const effectivePrice = basePrice;
+                      const tierTargetPrice = Math.round(basePrice * tier.multiplier);
+                      const tag = sqft >= 2500 ? '3+ BR House' : sqft >= 1500 ? '2-3 BR Home' : sqft >= 800 ? '1-2 BR Condo/Apt' : sqft > 0 ? 'Studio/1 BR' : 'N/A';
+
+                      // Build tier-specific filters
+                      const tierFilters: HomeSearchFilters = {};
+                      if (housingTypeFilter === 'house') tierFilters.propertyType = ['single_family'];
+                      else if (housingTypeFilter === 'condo') tierFilters.propertyType = ['condo', 'condos'];
+                      else if (housingTypeFilter === 'single-family') tierFilters.propertyType = ['single_family'];
+                      else if (housingTypeFilter === '3+bed') tierFilters.bedsMin = 3;
+                      if (settingFilter === 'urban') tierFilters.lotSqftMax = 5000;
+                      else if (settingFilter === 'suburban') { tierFilters.lotSqftMin = 3000; tierFilters.lotSqftMax = 43560; }
+                      else if (settingFilter === 'rural') tierFilters.lotSqftMin = 43560;
+                      const tierHasFilters = Object.keys(tierFilters).length > 0;
+
+                      return (
+                        <div key={tier.key} className={`rounded-xl border ${tier.color.border} ${tier.color.bg} p-5`}>
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className={`font-semibold ${tier.color.text}`}>{tier.label}</h4>
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${tier.color.bg} ${tier.color.text} border ${tier.color.border}`}>
+                              {tier.multiplier > 1 ? `${((tier.multiplier - 1) * 100).toFixed(0)}% premium` : tier.multiplier < 1 ? `${((1 - tier.multiplier) * 100).toFixed(0)}% cheaper` : 'Baseline'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500 mb-3">{tier.sub}</p>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+                            <div className="bg-white/60 rounded-lg p-2 text-center">
+                              <p className="text-xs text-gray-500">Budget</p>
+                              <p className="text-sm font-bold text-carto-slate">{effectivePrice > 0 ? fmtDollars(effectivePrice) : 'N/A'}</p>
+                            </div>
+                            <div className="bg-white/60 rounded-lg p-2 text-center">
+                              <p className="text-xs text-gray-500">Est. Size</p>
+                              <p className="text-sm font-bold text-carto-slate">{sqft > 0 ? `${fmtNum(sqft)} sqft` : 'N/A'}</p>
+                            </div>
+                            <div className="bg-white/60 rounded-lg p-2 text-center">
+                              <p className="text-xs text-gray-500">Home Type</p>
+                              <p className="text-sm font-medium text-gray-700">{tag}</p>
+                            </div>
+                            <div className="bg-white/60 rounded-lg p-2 text-center">
+                              <p className="text-xs text-gray-500">Price/sqft</p>
+                              <p className="text-sm font-medium text-gray-700">{fmtDollars(Math.round(getPricePerSqft(locationName) * tier.multiplier))}</p>
+                            </div>
+                          </div>
+
+                          {/* Mini carousel for this tier */}
+                          {basePrice > 0 && (
+                            <div className="bg-white/50 rounded-xl p-3">
+                              <SimpleHomeCarousel
+                                key={`tier-${tier.key}-${housingTypeFilter}-${settingFilter}`}
+                                location={locationName}
+                                targetPrice={tierTargetPrice}
+                                priceRange={tier.multiplier > 1 ? 75000 : tier.multiplier < 1 ? 40000 : 50000}
+                                filters={tierHasFilters ? tierFilters : undefined}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Summary insight */}
+                    <div className="bg-gray-50 rounded-xl p-4">
+                      <p className="text-sm text-gray-600">
+                        {basePrice > 0 ? (
+                          <>
+                            Your max budget of <span className="font-semibold">{fmtDollars(basePrice)}</span> gets you anywhere from{' '}
+                            <span className="font-semibold">{fmtNum(Math.round(estimateHomeSizeSqft(basePrice / 1.3, locationName)))} sqft</span> in a nice area to{' '}
+                            <span className="font-semibold">{fmtNum(Math.round(estimateHomeSizeSqft(basePrice / 0.75, locationName)))} sqft</span> in a budget-friendly area.
+                            {calcResult.projectedSqFt > 0 && calcResult.projectedSqFt < 800 && ' Consider budget-friendly neighborhoods for more room.'}
+                            {calcResult.projectedSqFt >= 2000 && ' You have great buying power in this market.'}
+                          </>
+                        ) : (
+                          'Complete your financial profile to see personalized home size estimates.'
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </Section>
 
@@ -1313,12 +2050,12 @@ export default function LocationPage() {
                         <td className="px-4 py-2 text-right">{fmtDollars(locData.housing.medianHomeValue)}</td>
                         <td className="px-4 py-2 text-right">{calcResult.projectedSqFt > 0 ? `${fmtNum(Math.round(calcResult.projectedSqFt))} sqft` : 'N/A'}</td>
                       </tr>
-                      {suggestions.slice(0, 5).map(s => {
+                      {allSuggestions.slice(0, 5).map(s => {
                         const sData = getLocationData(s.name);
                         const sSqft = maxAffordable ? estimateHomeSizeSqft(maxAffordable.maxSustainableHousePrice, s.name) : 0;
                         return (
-                          <tr key={s.name} className="border-t border-gray-50 cursor-pointer hover:bg-gray-50" onClick={() => router.push(`/location/${encodeSlug(s.name)}`)}>
-                            <td className="px-4 py-2 text-carto-slate">{s.name}</td>
+                          <tr key={s.name} className="border-t border-gray-50 cursor-pointer hover:bg-gray-50" onClick={() => router.push(`/location/${encodeSlug(s.type === 'city' ? s.displayName : s.name)}`)}>
+                            <td className="px-4 py-2 text-carto-slate">{s.type === 'city' ? s.displayName : s.name}</td>
                             <td className="px-4 py-2 text-right">{s.score.toFixed(1)}</td>
                             <td className="px-4 py-2 text-right">{sData ? fmtDollars(sData.housing.medianHomeValue) : 'N/A'}</td>
                             <td className="px-4 py-2 text-right">{sSqft > 0 ? `${fmtNum(sSqft)} sqft` : 'N/A'}</td>
@@ -1328,7 +2065,7 @@ export default function LocationPage() {
                     </tbody>
                   </table>
                 </div>
-                {suggestions.length === 0 && (
+                {allSuggestions.length === 0 && suggestionsLoading && (
                   <div className="animate-pulse mt-2 h-32 bg-gray-100 rounded-xl" />
                 )}
               </div>

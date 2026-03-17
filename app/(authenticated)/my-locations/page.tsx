@@ -42,7 +42,7 @@ type FilterItem = { value: string; label: string };
 
 const SHOW_OPTIONS: FilterItem[] = [
   { value: 'all', label: 'All Locations' },
-  { value: 'saved', label: 'Your Locations' },
+  { value: 'saved', label: 'Saved' },
   { value: 'other', label: 'Other Locations' },
 ];
 
@@ -829,10 +829,34 @@ export default function MyLocationsPage() {
     }
     // Clear active search filter when user starts a new search
     setActiveSearchLocation(null);
-    const matches = searchLocations(query, 8);
+    let matches = searchLocations(query, 12);
+
+    // When cities filter is active and search matches a state, show cities within that state
+    if (typeFilter === 'cities') {
+      const matchedStates = matches.filter(m => m.type === 'state');
+      if (matchedStates.length > 0) {
+        const allOptions = getAllLocationOptions();
+        const stateCities: typeof matches = [];
+        for (const state of matchedStates) {
+          const stateAbbrev = STATE_TO_ABBREV[state.label];
+          if (stateAbbrev) {
+            const cities = allOptions.filter(o => o.type === 'city' && o.state === stateAbbrev);
+            stateCities.push(...cities);
+          }
+        }
+        // Replace state matches with their cities, keep any direct city matches too
+        const cityMatches = matches.filter(m => m.type === 'city');
+        matches = [...cityMatches, ...stateCities.filter(c => !cityMatches.find(cm => cm.id === c.id))];
+      }
+      matches = matches.filter(m => m.type === 'city');
+    } else if (typeFilter === 'states') {
+      matches = matches.filter(m => m.type === 'state');
+    }
+
+    matches = matches.slice(0, 8);
     setSearchDropdown(matches.map(m => ({ label: m.label, rawName: m.rawName })));
     setShowSearchDropdown(matches.length > 0);
-  }, []);
+  }, [typeFilter]);
 
   const handleSelectSearchResult = useCallback((locationLabel: string) => {
     setShowSearchDropdown(false);
@@ -914,6 +938,10 @@ export default function MyLocationsPage() {
       }, [...userDeduped])
     : userDeduped;
 
+  // Section splits for default view
+  const userLocationNames = new Set(userResults.map(r => r.location));
+  const suggestedLocationNames = new Set(suggestedResults.map(r => r.location));
+
   // Determine active sort mode
   const isActiveSortMode = sortMode !== 'default' && sortMode !== 'saved';
   const hasGeoOrTypeFilter = hasAnyGeoFilter(typeFilter, geoFilters);
@@ -925,10 +953,12 @@ export default function MyLocationsPage() {
   let visibleResults: CalculationResult[] = baseResults;
 
   // Apply show filter (saved/other/all)
+  // "Saved" = hearted locations + onboarding locations (places user considered or lives in)
+  const isSavedLocation = (loc: string) => savedLocationNames.includes(loc) || userLocationNames.has(loc);
   if (showFilter === 'saved') {
-    visibleResults = visibleResults.filter(r => savedLocationNames.includes(r.location));
+    visibleResults = visibleResults.filter(r => isSavedLocation(r.location));
   } else if (showFilter === 'other') {
-    visibleResults = visibleResults.filter(r => !savedLocationNames.includes(r.location));
+    visibleResults = visibleResults.filter(r => !isSavedLocation(r.location));
   }
 
   // Apply type filter (states/cities/all)
@@ -954,7 +984,7 @@ export default function MyLocationsPage() {
 
   let finalResults: CalculationResult[];
   if (sortMode === 'saved') {
-    finalResults = pushNonViableToBottom(visibleResults.filter(r => savedLocationNames.includes(r.location)));
+    finalResults = pushNonViableToBottom(visibleResults.filter(r => isSavedLocation(r.location)));
   } else if (sortMode === 'default') {
     finalResults = pushNonViableToBottom(visibleResults);
   } else {
@@ -973,19 +1003,15 @@ export default function MyLocationsPage() {
 
   // Browse mode: exclude saved locations so you discover new ones
   if (browseAll && allFiltersDefault) {
-    finalResults = finalResults.filter(r => !savedLocationNames.includes(r.location));
+    finalResults = finalResults.filter(r => !isSavedLocation(r.location));
   }
 
   // Always show flat list when 'all' is selected (no saved/other grouping)
   const shouldShowGrouped = false;
 
-  // Grouped section splits: saved = hearted locations, other = everything else from full dataset
-  const savedSorted = finalResults.filter(r => savedLocationNames.includes(r.location));
-  const otherSorted = finalResults.filter(r => !savedLocationNames.includes(r.location));
-
-  // Section splits for default view
-  const userLocationNames = new Set(userResults.map(r => r.location));
-  const suggestedLocationNames = new Set(suggestedResults.map(r => r.location));
+  // Grouped section splits: saved = hearted + onboarding locations
+  const savedSorted = finalResults.filter(r => isSavedLocation(r.location));
+  const otherSorted = finalResults.filter(r => !isSavedLocation(r.location));
 
   // Button active states
   const isAllActive = sortMode === 'default' && allFiltersDefault && !browseAll;
@@ -1364,7 +1390,7 @@ export default function MyLocationsPage() {
           <div className="flex flex-wrap items-center gap-2">
             {/* My Locations Button */}
             <button
-              onClick={() => { setSortMode('default'); setShowFilter('all'); setTypeFilter('all'); setGeoFilters([]); setBrowseAll(false); }}
+              onClick={() => { setSortMode('default'); setShowFilter('all'); setTypeFilter('all'); setGeoFilters([]); setBrowseAll(false); setSearchQuery(''); setActiveSearchLocation(null); setShowSearchDropdown(false); }}
               className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 isAllActive
                   ? 'bg-[#7C3AED] text-white shadow-sm'
@@ -1379,7 +1405,7 @@ export default function MyLocationsPage() {
 
             {/* Browse All Button */}
             <button
-              onClick={() => { setSortMode('default'); setShowFilter('all'); setTypeFilter('all'); setGeoFilters([]); setBrowseAll(true); }}
+              onClick={() => { setSortMode('default'); setShowFilter('all'); setTypeFilter('all'); setGeoFilters([]); setBrowseAll(true); setSearchQuery(''); setActiveSearchLocation(null); setShowSearchDropdown(false); }}
               className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 isBrowseActive
                   ? 'bg-[#7C3AED] text-white shadow-sm'
@@ -1394,7 +1420,7 @@ export default function MyLocationsPage() {
 
             {/* Saved Button */}
             <button
-              onClick={() => { setSortMode('saved'); setShowFilter('all'); setBrowseAll(false); }}
+              onClick={() => { setSortMode('saved'); setShowFilter('all'); setBrowseAll(false); setSearchQuery(''); setActiveSearchLocation(null); setShowSearchDropdown(false); }}
               className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 isSavedActive
                   ? 'bg-[#7C3AED] text-white shadow-sm'
@@ -1404,12 +1430,12 @@ export default function MyLocationsPage() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
               </svg>
-              Saved{savedLocationNames.length > 0 ? ` (${savedLocationNames.length})` : ''}
+              Saved{savedSorted.length > 0 || savedLocationNames.length > 0 ? ` (${new Set([...savedLocationNames, ...userResults.map(r => r.location)]).size})` : ''}
             </button>
 
             {/* Most Recommended Button */}
             <button
-              onClick={() => { setSortMode('most-recommended'); setShowFilter('all'); setBrowseAll(false); }}
+              onClick={() => { setSortMode('most-recommended'); setShowFilter('all'); setBrowseAll(false); setSearchQuery(''); setActiveSearchLocation(null); setShowSearchDropdown(false); }}
               className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 isRecommendedActive
                   ? 'bg-[#7C3AED] text-white shadow-sm'
@@ -1453,6 +1479,7 @@ export default function MyLocationsPage() {
                         setSortMode(option.value);
                         setSortDropdownOpen(false);
                         setBrowseAll(false);
+                        setSearchQuery(''); setActiveSearchLocation(null); setShowSearchDropdown(false);
                         if (option.value === 'default') { setShowFilter('all'); setTypeFilter('all'); setGeoFilters([]); }
                       }}
                       className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between ${

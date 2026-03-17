@@ -25,6 +25,14 @@ const CITY_NAME_KEYS = [
 const CITY_STATE_KEYS = ["State", "state", "State Name", "stateName"];
 
 /**
+ * Display-name overrides for cities whose raw data uses a different label.
+ * Key = raw name (case-insensitive), value = canonical display name.
+ */
+const CITY_DISPLAY_NAMES: Record<string, string> = {
+  'orange county': 'Anaheim',
+};
+
+/**
  * Find the first key in the row that exists in the candidate list.
  * Defensive: JSON keys may differ across sources.
  */
@@ -74,8 +82,11 @@ export function getAllLocationOptions(): LocationOption[] {
 
   const cityRows = getCitiesRows();
   for (const row of cityRows) {
-    const cityRaw = getString(row, CITY_NAME_KEYS);
+    let cityRaw = getString(row, CITY_NAME_KEYS);
     if (!cityRaw) continue;
+    // Apply display-name overrides (e.g. "Orange County" → "Anaheim")
+    const override = CITY_DISPLAY_NAMES[cityRaw.toLowerCase()];
+    if (override) cityRaw = override;
     const stateRaw = getString(row, CITY_STATE_KEYS);
     const label = stateRaw ? `${cityRaw}, ${stateRaw}` : cityRaw;
     const id = stateRaw ? `city:${cityRaw},${stateRaw}` : `city:${cityRaw}`;

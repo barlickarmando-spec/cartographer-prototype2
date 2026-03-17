@@ -226,6 +226,8 @@ function findCityData(cityName: string): LocationData | null {
   const alias = CITY_ALIASES[searchCity.toLowerCase()];
   const tabBName = alias?.tabB || searchCity;
   const tabCName = alias?.tabC || searchCity;
+  // Use the Tab C name as canonical display name (e.g. "Anaheim" instead of "Orange County")
+  const displayCity = alias?.tabC || searchCity;
   if (alias?.state && !parentState) {
     parentState = alias.state;
   }
@@ -269,7 +271,7 @@ function findCityData(cityName: string): LocationData | null {
     return null;
   }
 
-  return buildLocationData(affordabilityData, resolvedHousing, 'city', searchCity, resolvedHousing.State?.trim());
+  return buildLocationData(affordabilityData, resolvedHousing, 'city', displayCity, resolvedHousing.State?.trim());
 }
 
 /**
