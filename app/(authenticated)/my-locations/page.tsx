@@ -795,6 +795,24 @@ export default function MyLocationsPage() {
     setVisibleDefaultCount(6);
   }, [sortMode, showFilter, typeFilter, geoFilters, browseAll]);
 
+  // Re-run search when typeFilter changes so dropdown reflects the new filter.
+  // Also clear activeSearchLocation if it no longer matches the type filter
+  // (e.g. a state was selected but user switched to "Cities Only").
+  useEffect(() => {
+    if (searchQuery.trim().length >= 2) {
+      handleSearchInput(searchQuery);
+    }
+    if (activeSearchLocation) {
+      const isLocCity = isCity(activeSearchLocation);
+      if (typeFilter === 'cities' && !isLocCity && activeSearchLocation !== 'District of Columbia') {
+        setActiveSearchLocation(null);
+      } else if (typeFilter === 'states' && isLocCity && activeSearchLocation !== 'District of Columbia') {
+        setActiveSearchLocation(null);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typeFilter]);
+
   // ===== CLOSE DROPDOWNS ON OUTSIDE CLICK =====
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
