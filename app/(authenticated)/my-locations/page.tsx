@@ -795,24 +795,6 @@ export default function MyLocationsPage() {
     setVisibleDefaultCount(6);
   }, [sortMode, showFilter, typeFilter, geoFilters, browseAll]);
 
-  // Re-run search when typeFilter changes so dropdown reflects the new filter.
-  // Also clear activeSearchLocation if it no longer matches the type filter
-  // (e.g. a state was selected but user switched to "Cities Only").
-  useEffect(() => {
-    if (searchQuery.trim().length >= 2) {
-      handleSearchInput(searchQuery);
-    }
-    if (activeSearchLocation) {
-      const isLocCity = isCity(activeSearchLocation);
-      if (typeFilter === 'cities' && !isLocCity && activeSearchLocation !== 'District of Columbia') {
-        setActiveSearchLocation(null);
-      } else if (typeFilter === 'states' && isLocCity && activeSearchLocation !== 'District of Columbia') {
-        setActiveSearchLocation(null);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [typeFilter]);
-
   // ===== CLOSE DROPDOWNS ON OUTSIDE CLICK =====
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -1204,6 +1186,23 @@ export default function MyLocationsPage() {
 
     if (!searchedResult) return null;
 
+    // When the cities filter is active and a state was searched, show cities within
+    // that state instead of the state card itself.
+    const searchedIsState = !isCity(activeSearchLocation) && activeSearchLocation !== 'District of Columbia';
+    const showCitiesForState = typeFilter === 'cities' && searchedIsState;
+
+    let primaryResults: CalculationResult[];
+    if (showCitiesForState) {
+      const stateAbbrev = STATE_TO_ABBREV[activeSearchLocation];
+      primaryResults = fullDataset.filter(r => {
+        if (!isCity(r.location)) return false;
+        const rState = getLocationState(r.location);
+        return rState === stateAbbrev || rState === activeSearchLocation;
+      });
+    } else {
+      primaryResults = [searchedResult];
+    }
+
     // Determine the state of the searched location for finding similar ones
     const searchedState = getLocationState(activeSearchLocation);
     const searchedFullState = ABBREV_TO_STATE[searchedState] || searchedState;
@@ -1214,8 +1213,11 @@ export default function MyLocationsPage() {
     ).map(([name]) => name);
 
     // Find similar locations: same state first, then same region(s)
+    const primaryLocationSet = new Set(primaryResults.map(r => r.location));
     const sameStateResults = fullDataset.filter(r =>
-      r.location !== activeSearchLocation && (() => {
+      !primaryLocationSet.has(r.location) && (() => {
+        // When showing cities for a state, only show other cities (not the state itself)
+        if (showCitiesForState && !isCity(r.location)) return false;
         const rState = getLocationState(r.location);
         const rFullState = ABBREV_TO_STATE[rState] || rState;
         return rFullState === searchedFullState || rState === searchedFullState;
@@ -1223,9 +1225,10 @@ export default function MyLocationsPage() {
     );
 
     const sameRegionResults = fullDataset.filter(r =>
-      r.location !== activeSearchLocation
+      !primaryLocationSet.has(r.location)
       && !sameStateResults.find(s => s.location === r.location)
       && (() => {
+        if (showCitiesForState && !isCity(r.location)) return false;
         const rState = getLocationState(r.location);
         const rFullState = ABBREV_TO_STATE[rState] || rState;
         return locationRegions.some(region => (REGIONS[region] || []).includes(rFullState));
@@ -1244,7 +1247,9 @@ export default function MyLocationsPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
               </svg>
             </div>
-            <h2 className="text-base font-semibold text-carto-slate">Search Result</h2>
+            <h2 className="text-base font-semibold text-carto-slate">
+              {showCitiesForState ? `Cities in ${activeSearchLocation}` : 'Search Result'}
+            </h2>
             <button
               onClick={clearSearchFilter}
               className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-gray-700 transition-all"
@@ -1256,7 +1261,13 @@ export default function MyLocationsPage() {
             </button>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {renderCard(searchedResult)}
+            {primaryResults.length > 0
+              ? primaryResults.map(renderCard)
+              : (
+                <div className="col-span-full text-center py-8 bg-[#F8FAFB] rounded-xl border border-dashed border-gray-200">
+                  <p className="text-gray-400 text-sm">No cities found for {activeSearchLocation}.</p>
+                </div>
+              )}
           </div>
         </section>
 
