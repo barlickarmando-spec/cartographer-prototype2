@@ -1172,7 +1172,7 @@ export default function MyLocationsPage() {
     );
   };
 
-  // Search result focused view: shows the selected location + similar locations
+  // Search result focused view: shows the selected location + cities within it
   const renderSearchView = () => {
     if (!activeSearchLocation) return null;
 
@@ -1182,120 +1182,150 @@ export default function MyLocationsPage() {
 
     if (!searchedResult) return null;
 
-    // When the cities filter is active and a state was searched, show cities within
-    // that state instead of the state card itself.
     const searchedIsState = !isCity(activeSearchLocation) && activeSearchLocation !== 'District of Columbia';
-    const showCitiesForState = typeFilter === 'cities' && searchedIsState;
 
-    let primaryResults: CalculationResult[];
-    if (showCitiesForState) {
+    // When a state is searched: show state card + cities within that state
+    // When cities filter is active: show only cities (no state card)
+    const hidePrimaryState = typeFilter === 'cities' && searchedIsState;
+
+    // Find cities within this state (if a state was searched)
+    let stateCityResults: CalculationResult[] = [];
+    if (searchedIsState) {
       const stateAbbrev = STATE_TO_ABBREV[activeSearchLocation];
-      primaryResults = fullDataset.filter(r => {
+      stateCityResults = fullDataset.filter(r => {
         if (!isCity(r.location)) return false;
         const rState = getLocationState(r.location);
         return rState === stateAbbrev || rState === activeSearchLocation;
       });
-    } else {
-      primaryResults = [searchedResult];
+      // Apply type filter to city results (should always pass for cities, but respect 'states' filter)
+      if (typeFilter === 'states') {
+        stateCityResults = [];
+      }
+      // Apply geo filters to city results
+      if (hasActiveGeoFilter(geoFilters)) {
+        stateCityResults = stateCityResults.filter(r => matchesGeoFilters(r.location, geoFilters));
+      }
     }
 
-    // Determine the state of the searched location for finding similar ones
-    const searchedState = getLocationState(activeSearchLocation);
-    const searchedFullState = ABBREV_TO_STATE[searchedState] || searchedState;
+    // For non-state searches (city search), find similar locations
+    let similarResults: CalculationResult[] = [];
+    if (!searchedIsState) {
+      const searchedState = getLocationState(activeSearchLocation);
+      const searchedFullState = ABBREV_TO_STATE[searchedState] || searchedState;
+      const locationRegions = Object.entries(REGIONS).filter(([, states]) =>
+        states.includes(searchedFullState)
+      ).map(([name]) => name);
 
-    // Find the region(s) this location belongs to
-    const locationRegions = Object.entries(REGIONS).filter(([, states]) =>
-      states.includes(searchedFullState)
-    ).map(([name]) => name);
+      const sameStateResults = fullDataset.filter(r =>
+        r.location !== activeSearchLocation && (() => {
+          const rState = getLocationState(r.location);
+          const rFullState = ABBREV_TO_STATE[rState] || rState;
+          return rFullState === searchedFullState || rState === searchedFullState;
+        })()
+      );
 
-    // Find similar locations: same state first, then same region(s)
-    const primaryLocationSet = new Set(primaryResults.map(r => r.location));
-    const sameStateResults = fullDataset.filter(r =>
-      !primaryLocationSet.has(r.location) && (() => {
-        // When showing cities for a state, only show other cities (not the state itself)
-        if (showCitiesForState && !isCity(r.location)) return false;
-        const rState = getLocationState(r.location);
-        const rFullState = ABBREV_TO_STATE[rState] || rState;
-        return rFullState === searchedFullState || rState === searchedFullState;
-      })()
-    );
+      const sameRegionResults = fullDataset.filter(r =>
+        r.location !== activeSearchLocation
+        && !sameStateResults.find(s => s.location === r.location)
+        && (() => {
+          const rState = getLocationState(r.location);
+          const rFullState = ABBREV_TO_STATE[rState] || rState;
+          return locationRegions.some(region => (REGIONS[region] || []).includes(rFullState));
+        })()
+      );
 
-    const sameRegionResults = fullDataset.filter(r =>
-      !primaryLocationSet.has(r.location)
-      && !sameStateResults.find(s => s.location === r.location)
-      && (() => {
-        if (showCitiesForState && !isCity(r.location)) return false;
-        const rState = getLocationState(r.location);
-        const rFullState = ABBREV_TO_STATE[rState] || rState;
-        return locationRegions.some(region => (REGIONS[region] || []).includes(rFullState));
-      })()
-    );
-
-    const similarResults = [...sameStateResults, ...sameRegionResults].slice(0, 6);
+      similarResults = [...sameStateResults, ...sameRegionResults].slice(0, 6);
+    }
 
     return (
       <div className="space-y-10">
-        {/* Active Search Result */}
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] flex items-center justify-center">
-              <svg className="w-4 h-4 text-[#4A90D9]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-              </svg>
+        {/* State card (hidden when cities-only filter is active) */}
+        {!hidePrimaryState && (
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] flex items-center justify-center">
+                <svg className="w-4 h-4 text-[#4A90D9]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                </svg>
+              </div>
+              <h2 className="text-base font-semibold text-carto-slate">{activeSearchLocation}</h2>
+              <button
+                onClick={clearSearchFilter}
+                className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-gray-700 transition-all"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Clear search
+              </button>
             </div>
-            <h2 className="text-base font-semibold text-carto-slate">
-              {showCitiesForState ? `Cities in ${activeSearchLocation}` : 'Search Result'}
-            </h2>
-            <button
-              onClick={clearSearchFilter}
-              className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-gray-700 transition-all"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-              Clear search
-            </button>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {primaryResults.length > 0
-              ? primaryResults.map(renderCard)
-              : (
-                <div className="col-span-full text-center py-8 bg-[#F8FAFB] rounded-xl border border-dashed border-gray-200">
-                  <p className="text-gray-400 text-sm">No cities found for {activeSearchLocation}.</p>
-                </div>
-              )}
-          </div>
-        </section>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {renderCard(searchedResult)}
+            </div>
+          </section>
+        )}
 
-        {/* Similar Locations */}
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-lg bg-[#F5F3FF] flex items-center justify-center">
-              <svg className="w-4 h-4 text-[#7C3AED]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
-              </svg>
+        {/* Cities within the state */}
+        {searchedIsState && (
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              {hidePrimaryState && (
+                <button
+                  onClick={clearSearchFilter}
+                  className="mr-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-gray-700 transition-all order-last ml-auto"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Clear search
+                </button>
+              )}
+              <div className="w-8 h-8 rounded-lg bg-[#F5F3FF] flex items-center justify-center">
+                <svg className="w-4 h-4 text-[#7C3AED]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                </svg>
+              </div>
+              <h2 className="text-base font-semibold text-carto-slate">Cities in {activeSearchLocation}</h2>
+              {stateCityResults.length > 0 && (
+                <span className="text-xs text-gray-400 ml-1">({stateCityResults.length})</span>
+              )}
             </div>
-            <h2 className="text-base font-semibold text-carto-slate">Similar Locations</h2>
-            {similarResults.length > 0 && (
-              <span className="text-xs text-gray-400 ml-1">({similarResults.length})</span>
+            {allCalcLoading ? (
+              <div className="flex items-center gap-3 py-12 justify-center">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#7C3AED]"></div>
+                <span className="text-gray-500 text-sm">Calculating cities...</span>
+              </div>
+            ) : stateCityResults.length > 0 ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {stateCityResults.map(renderCard)}
+              </div>
+            ) : (
+              <div className="text-center py-8 bg-[#F8FAFB] rounded-xl border border-dashed border-gray-200">
+                <p className="text-gray-400 text-sm">No city data available for {activeSearchLocation}.</p>
+              </div>
             )}
-          </div>
-          {allCalcLoading ? (
-            <div className="flex items-center gap-3 py-12 justify-center">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#7C3AED]"></div>
-              <span className="text-gray-500 text-sm">Finding similar locations...</span>
+          </section>
+        )}
+
+        {/* Similar Locations (for city searches) */}
+        {!searchedIsState && similarResults.length > 0 && (
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-[#F5F3FF] flex items-center justify-center">
+                <svg className="w-4 h-4 text-[#7C3AED]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                </svg>
+              </div>
+              <h2 className="text-base font-semibold text-carto-slate">Similar Locations</h2>
+              <span className="text-xs text-gray-400 ml-1">({similarResults.length})</span>
             </div>
-          ) : similarResults.length > 0 ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {similarResults.map(renderCard)}
             </div>
-          ) : (
-            <div className="text-center py-8 bg-[#F8FAFB] rounded-xl border border-dashed border-gray-200">
-              <p className="text-gray-400 text-sm">No similar locations found.</p>
-            </div>
-          )}
-        </section>
+          </section>
+        )}
       </div>
     );
   };
