@@ -1237,78 +1237,56 @@ export default function MyLocationsPage() {
       similarResults = [...sameStateResults, ...sameRegionResults].slice(0, 6);
     }
 
+    // Build a single combined list: state first (if not hidden), then cities
+    const combinedResults: CalculationResult[] = [];
+    if (searchedIsState) {
+      if (!hidePrimaryState) combinedResults.push(searchedResult);
+      combinedResults.push(...stateCityResults);
+    } else {
+      combinedResults.push(searchedResult);
+    }
+
     return (
       <div className="space-y-10">
-        {/* State card (hidden when cities-only filter is active) */}
-        {!hidePrimaryState && (
-          <section>
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] flex items-center justify-center">
-                <svg className="w-4 h-4 text-[#4A90D9]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                </svg>
-              </div>
-              <h2 className="text-base font-semibold text-carto-slate">{activeSearchLocation}</h2>
-              <button
-                onClick={clearSearchFilter}
-                className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-gray-700 transition-all"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                Clear search
-              </button>
+        {/* Search Results – single flat section */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] flex items-center justify-center">
+              <svg className="w-4 h-4 text-[#4A90D9]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+              </svg>
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {renderCard(searchedResult)}
-            </div>
-          </section>
-        )}
-
-        {/* Cities within the state */}
-        {searchedIsState && (
-          <section>
-            <div className="flex items-center gap-2 mb-4">
-              {hidePrimaryState && (
-                <button
-                  onClick={clearSearchFilter}
-                  className="mr-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-gray-700 transition-all order-last ml-auto"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  Clear search
-                </button>
-              )}
-              <div className="w-8 h-8 rounded-lg bg-[#F5F3FF] flex items-center justify-center">
-                <svg className="w-4 h-4 text-[#7C3AED]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
-                </svg>
-              </div>
-              <h2 className="text-base font-semibold text-carto-slate">Cities in {activeSearchLocation}</h2>
-              {stateCityResults.length > 0 && (
-                <span className="text-xs text-gray-400 ml-1">({stateCityResults.length})</span>
-              )}
-            </div>
-            {allCalcLoading ? (
-              <div className="flex items-center gap-3 py-12 justify-center">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#7C3AED]"></div>
-                <span className="text-gray-500 text-sm">Calculating cities...</span>
-              </div>
-            ) : stateCityResults.length > 0 ? (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {stateCityResults.map(renderCard)}
-              </div>
-            ) : (
-              <div className="text-center py-8 bg-[#F8FAFB] rounded-xl border border-dashed border-gray-200">
-                <p className="text-gray-400 text-sm">No city data available for {activeSearchLocation}.</p>
-              </div>
+            <h2 className="text-base font-semibold text-carto-slate">Search Result</h2>
+            {combinedResults.length > 1 && (
+              <span className="text-xs text-gray-400 ml-1">({combinedResults.length})</span>
             )}
-          </section>
-        )}
+            <button
+              onClick={clearSearchFilter}
+              className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-gray-700 transition-all"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Clear search
+            </button>
+          </div>
+          {allCalcLoading && searchedIsState ? (
+            <div className="flex items-center gap-3 py-12 justify-center">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#4A90D9]"></div>
+              <span className="text-gray-500 text-sm">Loading results...</span>
+            </div>
+          ) : combinedResults.length > 0 ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {combinedResults.map(renderCard)}
+            </div>
+          ) : (
+            <div className="text-center py-8 bg-[#F8FAFB] rounded-xl border border-dashed border-gray-200">
+              <p className="text-gray-400 text-sm">No results found for {activeSearchLocation}.</p>
+            </div>
+          )}
+        </section>
 
-        {/* Similar Locations (for city searches) */}
+        {/* Similar Locations (for city searches only) */}
         {!searchedIsState && similarResults.length > 0 && (
           <section>
             <div className="flex items-center gap-2 mb-4">
