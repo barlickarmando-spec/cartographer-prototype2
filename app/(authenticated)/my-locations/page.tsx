@@ -622,7 +622,7 @@ export default function MyLocationsPage() {
   const [showFilter, setShowFilter] = useState('all');       // 'all' | 'saved' | 'other'
   const [typeFilter, setTypeFilter] = useState('all');       // 'all' | 'states' | 'cities'
   const [geoFilters, setGeoFilters] = useState<string[]>([]);  // multi-select: ['region:X', 'weather:Y', ...] or [] for all
-  const [browseAll, setBrowseAll] = useState(false);
+  const [browseAll, setBrowseAll] = useState(true);
   const [showStatesInDropdown, setShowStatesInDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchDropdown, setSearchDropdown] = useState<{ label: string; rawName: string }[]>([]);
@@ -953,8 +953,8 @@ export default function MyLocationsPage() {
   let visibleResults: CalculationResult[] = baseResults;
 
   // Apply show filter (saved/other/all)
-  // "Saved" = hearted locations + onboarding locations (places user considered or lives in)
-  const isSavedLocation = (loc: string) => savedLocationNames.includes(loc) || userLocationNames.has(loc);
+  // "Saved" = only explicitly hearted/saved locations (NOT all onboarding results)
+  const isSavedLocation = (loc: string) => savedLocationNames.includes(loc);
   if (showFilter === 'saved') {
     visibleResults = visibleResults.filter(r => isSavedLocation(r.location));
   } else if (showFilter === 'other') {
@@ -1001,10 +1001,7 @@ export default function MyLocationsPage() {
     }
   }
 
-  // Browse mode: exclude saved locations so you discover new ones
-  if (browseAll && allFiltersDefault) {
-    finalResults = finalResults.filter(r => !isSavedLocation(r.location));
-  }
+  // Browse mode: show all locations (saved and unsaved together)
 
   // Always show flat list when 'all' is selected (no saved/other grouping)
   const shouldShowGrouped = false;
@@ -1014,7 +1011,6 @@ export default function MyLocationsPage() {
   const otherSorted = finalResults.filter(r => !isSavedLocation(r.location));
 
   // Button active states
-  const isAllActive = sortMode === 'default' && allFiltersDefault && !browseAll;
   const isBrowseActive = browseAll && sortMode === 'default';
   const isSavedActive = sortMode === 'saved';
   const isRecommendedActive = sortMode === 'most-recommended';
@@ -1417,21 +1413,6 @@ export default function MyLocationsPage() {
         <div className="flex flex-col gap-4">
           {/* Top Row: Quick Buttons + Dropdown Filters */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* My Locations Button */}
-            <button
-              onClick={() => { setSortMode('default'); setShowFilter('all'); setTypeFilter('all'); setGeoFilters([]); setBrowseAll(false); setSearchQuery(''); setActiveSearchLocation(null); setShowSearchDropdown(false); }}
-              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                isAllActive
-                  ? 'bg-[#7C3AED] text-white shadow-sm'
-                  : 'bg-white text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] border border-gray-200'
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-              </svg>
-              My Locations
-            </button>
-
             {/* Browse All Button */}
             <button
               onClick={() => { setSortMode('default'); setShowFilter('all'); setTypeFilter('all'); setGeoFilters([]); setBrowseAll(true); setSearchQuery(''); setActiveSearchLocation(null); setShowSearchDropdown(false); }}
@@ -1459,7 +1440,7 @@ export default function MyLocationsPage() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
               </svg>
-              Saved{savedSorted.length > 0 || savedLocationNames.length > 0 ? ` (${new Set([...savedLocationNames, ...userResults.map(r => r.location)]).size})` : ''}
+              Saved{savedLocationNames.length > 0 ? ` (${savedLocationNames.length})` : ''}
             </button>
 
             {/* Most Recommended Button */}
@@ -1988,9 +1969,7 @@ export default function MyLocationsPage() {
       {/* Results */}
       {activeSearchLocation
         ? renderSearchView()
-        : sortMode === 'default' && allFiltersDefault && !browseAll
-          ? renderSections()
-          : renderFlatGrid()}
+        : renderFlatGrid()}
     </div>
   );
 }
