@@ -831,20 +831,13 @@ export default function MyLocationsPage() {
     setActiveSearchLocation(null);
     let matches = searchLocations(query, 12);
 
-    // When cities filter is active, keep states in the dropdown so users can
-    // search by state name — selecting a state will show its cities in results.
-    // Only filter out states when the states-only filter is active.
-    if (typeFilter === 'cities') {
-      // Keep both cities and states — states act as a shortcut to see their cities
-      matches = matches.filter(m => m.type === 'city' || m.type === 'state');
-    } else if (typeFilter === 'states') {
-      matches = matches.filter(m => m.type === 'state');
-    }
-
+    // Search always shows all matching locations (states + cities) regardless
+    // of the type filter. The type filter only affects the browse grid.
+    // When user searches a state, they can click it to see the state + its cities.
     matches = matches.slice(0, 8);
     setSearchDropdown(matches.map(m => ({ label: m.label, rawName: m.rawName })));
     setShowSearchDropdown(matches.length > 0);
-  }, [typeFilter]);
+  }, []);
 
   const handleSelectSearchResult = useCallback((locationLabel: string) => {
     setShowSearchDropdown(false);
@@ -1160,7 +1153,8 @@ export default function MyLocationsPage() {
     );
   };
 
-  // Search result focused view: shows the selected location + cities within it
+  // Search result focused view: shows the selected location + related locations.
+  // Search view is independent of the type/geo/show filters — those only affect the browse grid.
   const renderSearchView = () => {
     if (!activeSearchLocation) return null;
 
@@ -1172,30 +1166,19 @@ export default function MyLocationsPage() {
 
     const searchedIsState = !isCity(activeSearchLocation) && activeSearchLocation !== 'District of Columbia';
 
-    // When a state is searched: show state card + cities within that state
-    // When cities filter is active: show only cities (no state card)
-    const hidePrimaryState = typeFilter === 'cities' && searchedIsState;
-
-    // Find cities within this state (if a state was searched)
-    let stateCityResults: CalculationResult[] = [];
+    // Build the results list: state card first, then cities within that state
+    const combinedResults: CalculationResult[] = [searchedResult];
     if (searchedIsState) {
       const stateAbbrev = STATE_TO_ABBREV[activeSearchLocation];
-      stateCityResults = fullDataset.filter(r => {
+      const stateCities = fullDataset.filter(r => {
         if (!isCity(r.location)) return false;
         const rState = getLocationState(r.location);
         return rState === stateAbbrev || rState === activeSearchLocation;
       });
-      // Apply type filter to city results (should always pass for cities, but respect 'states' filter)
-      if (typeFilter === 'states') {
-        stateCityResults = [];
-      }
-      // Apply geo filters to city results
-      if (hasActiveGeoFilter(geoFilters)) {
-        stateCityResults = stateCityResults.filter(r => matchesGeoFilters(r.location, geoFilters));
-      }
+      combinedResults.push(...stateCities);
     }
 
-    // For non-state searches (city search), find similar locations
+    // For city searches, find similar locations (same state, then same region)
     let similarResults: CalculationResult[] = [];
     if (!searchedIsState) {
       const searchedState = getLocationState(activeSearchLocation);
@@ -1225,18 +1208,9 @@ export default function MyLocationsPage() {
       similarResults = [...sameStateResults, ...sameRegionResults].slice(0, 6);
     }
 
-    // Build a single combined list: state first (if not hidden), then cities
-    const combinedResults: CalculationResult[] = [];
-    if (searchedIsState) {
-      if (!hidePrimaryState) combinedResults.push(searchedResult);
-      combinedResults.push(...stateCityResults);
-    } else {
-      combinedResults.push(searchedResult);
-    }
-
     return (
       <div className="space-y-10">
-        {/* Search Results – single flat section */}
+        {/* Search Results – flat grid */}
         <section>
           <div className="flex items-center gap-2 mb-4">
             <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] flex items-center justify-center">
@@ -1263,13 +1237,9 @@ export default function MyLocationsPage() {
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#4A90D9]"></div>
               <span className="text-gray-500 text-sm">Loading results...</span>
             </div>
-          ) : combinedResults.length > 0 ? (
+          ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {combinedResults.map(renderCard)}
-            </div>
-          ) : (
-            <div className="text-center py-8 bg-[#F8FAFB] rounded-xl border border-dashed border-gray-200">
-              <p className="text-gray-400 text-sm">No results found for {activeSearchLocation}.</p>
             </div>
           )}
         </section>
@@ -1847,7 +1817,7 @@ export default function MyLocationsPage() {
                   {TYPE_OPTIONS.map(item => (
                     <button
                       key={item.value}
-                      onClick={() => { setTypeFilter(item.value); setStateDropdownOpen(false); }}
+                      onClick={() => { setTypeFilter(item.value); setStateDropdownOpen(false); setActiveSearchLocation(null); setSearchQuery(''); setShowSearchDropdown(false); }}
                       className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between ${
                         typeFilter === item.value ? 'bg-[#EDE9FE] text-[#7C3AED] font-medium' : 'text-gray-700 hover:bg-[#F5F3FF]'
                       }`}
