@@ -622,7 +622,7 @@ export default function MyLocationsPage() {
   const [showFilter, setShowFilter] = useState('all');       // 'all' | 'saved' | 'other'
   const [typeFilter, setTypeFilter] = useState('all');       // 'all' | 'states' | 'cities'
   const [geoFilters, setGeoFilters] = useState<string[]>([]);  // multi-select: ['region:X', 'weather:Y', ...] or [] for all
-  const [browseAll, setBrowseAll] = useState(false);
+  const [browseAll, setBrowseAll] = useState(true);
   const [showStatesInDropdown, setShowStatesInDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchDropdown, setSearchDropdown] = useState<{ label: string; rawName: string }[]>([]);
@@ -831,32 +831,13 @@ export default function MyLocationsPage() {
     setActiveSearchLocation(null);
     let matches = searchLocations(query, 12);
 
-    // When cities filter is active and search matches a state, show cities within that state
-    if (typeFilter === 'cities') {
-      const matchedStates = matches.filter(m => m.type === 'state');
-      if (matchedStates.length > 0) {
-        const allOptions = getAllLocationOptions();
-        const stateCities: typeof matches = [];
-        for (const state of matchedStates) {
-          const stateAbbrev = STATE_TO_ABBREV[state.label];
-          if (stateAbbrev) {
-            const cities = allOptions.filter(o => o.type === 'city' && o.state === stateAbbrev);
-            stateCities.push(...cities);
-          }
-        }
-        // Replace state matches with their cities, keep any direct city matches too
-        const cityMatches = matches.filter(m => m.type === 'city');
-        matches = [...cityMatches, ...stateCities.filter(c => !cityMatches.find(cm => cm.id === c.id))];
-      }
-      matches = matches.filter(m => m.type === 'city');
-    } else if (typeFilter === 'states') {
-      matches = matches.filter(m => m.type === 'state');
-    }
-
+    // Search always shows all matching locations (states + cities) regardless
+    // of the type filter. The type filter only affects the browse grid.
+    // When user searches a state, they can click it to see the state + its cities.
     matches = matches.slice(0, 8);
     setSearchDropdown(matches.map(m => ({ label: m.label, rawName: m.rawName })));
     setShowSearchDropdown(matches.length > 0);
-  }, [typeFilter]);
+  }, []);
 
   const handleSelectSearchResult = useCallback((locationLabel: string) => {
     setShowSearchDropdown(false);
@@ -953,8 +934,8 @@ export default function MyLocationsPage() {
   let visibleResults: CalculationResult[] = baseResults;
 
   // Apply show filter (saved/other/all)
-  // "Saved" = hearted locations + onboarding locations (places user considered or lives in)
-  const isSavedLocation = (loc: string) => savedLocationNames.includes(loc) || userLocationNames.has(loc);
+  // "Saved" = only explicitly hearted/saved locations (NOT all onboarding results)
+  const isSavedLocation = (loc: string) => savedLocationNames.includes(loc);
   if (showFilter === 'saved') {
     visibleResults = visibleResults.filter(r => isSavedLocation(r.location));
   } else if (showFilter === 'other') {
@@ -1001,10 +982,7 @@ export default function MyLocationsPage() {
     }
   }
 
-  // Browse mode: exclude saved locations so you discover new ones
-  if (browseAll && allFiltersDefault) {
-    finalResults = finalResults.filter(r => !isSavedLocation(r.location));
-  }
+  // Browse mode: show all locations (saved and unsaved together)
 
   // Always show flat list when 'all' is selected (no saved/other grouping)
   const shouldShowGrouped = false;
@@ -1014,7 +992,6 @@ export default function MyLocationsPage() {
   const otherSorted = finalResults.filter(r => !isSavedLocation(r.location));
 
   // Button active states
-  const isAllActive = sortMode === 'default' && allFiltersDefault && !browseAll;
   const isBrowseActive = browseAll && sortMode === 'default';
   const isSavedActive = sortMode === 'saved';
   const isRecommendedActive = sortMode === 'most-recommended';
@@ -1176,7 +1153,8 @@ export default function MyLocationsPage() {
     );
   };
 
-  // Search result focused view: shows the selected location + similar locations
+  // Search result focused view: shows the selected location + related locations.
+  // Search view is independent of the type/geo/show filters — those only affect the browse grid.
   const renderSearchView = () => {
     if (!activeSearchLocation) return null;
 
@@ -1186,39 +1164,53 @@ export default function MyLocationsPage() {
 
     if (!searchedResult) return null;
 
-    // Determine the state of the searched location for finding similar ones
-    const searchedState = getLocationState(activeSearchLocation);
-    const searchedFullState = ABBREV_TO_STATE[searchedState] || searchedState;
+    const searchedIsState = !isCity(activeSearchLocation) && activeSearchLocation !== 'District of Columbia';
 
-    // Find the region(s) this location belongs to
-    const locationRegions = Object.entries(REGIONS).filter(([, states]) =>
-      states.includes(searchedFullState)
-    ).map(([name]) => name);
-
-    // Find similar locations: same state first, then same region(s)
-    const sameStateResults = fullDataset.filter(r =>
-      r.location !== activeSearchLocation && (() => {
+    // Build the results list: state card first, then cities within that state
+    const combinedResults: CalculationResult[] = [searchedResult];
+    if (searchedIsState) {
+      const stateAbbrev = STATE_TO_ABBREV[activeSearchLocation];
+      const stateCities = fullDataset.filter(r => {
+        if (!isCity(r.location)) return false;
         const rState = getLocationState(r.location);
-        const rFullState = ABBREV_TO_STATE[rState] || rState;
-        return rFullState === searchedFullState || rState === searchedFullState;
-      })()
-    );
+        return rState === stateAbbrev || rState === activeSearchLocation;
+      });
+      combinedResults.push(...stateCities);
+    }
 
-    const sameRegionResults = fullDataset.filter(r =>
-      r.location !== activeSearchLocation
-      && !sameStateResults.find(s => s.location === r.location)
-      && (() => {
-        const rState = getLocationState(r.location);
-        const rFullState = ABBREV_TO_STATE[rState] || rState;
-        return locationRegions.some(region => (REGIONS[region] || []).includes(rFullState));
-      })()
-    );
+    // For city searches, find similar locations (same state, then same region)
+    let similarResults: CalculationResult[] = [];
+    if (!searchedIsState) {
+      const searchedState = getLocationState(activeSearchLocation);
+      const searchedFullState = ABBREV_TO_STATE[searchedState] || searchedState;
+      const locationRegions = Object.entries(REGIONS).filter(([, states]) =>
+        states.includes(searchedFullState)
+      ).map(([name]) => name);
 
-    const similarResults = [...sameStateResults, ...sameRegionResults].slice(0, 6);
+      const sameStateResults = fullDataset.filter(r =>
+        r.location !== activeSearchLocation && (() => {
+          const rState = getLocationState(r.location);
+          const rFullState = ABBREV_TO_STATE[rState] || rState;
+          return rFullState === searchedFullState || rState === searchedFullState;
+        })()
+      );
+
+      const sameRegionResults = fullDataset.filter(r =>
+        r.location !== activeSearchLocation
+        && !sameStateResults.find(s => s.location === r.location)
+        && (() => {
+          const rState = getLocationState(r.location);
+          const rFullState = ABBREV_TO_STATE[rState] || rState;
+          return locationRegions.some(region => (REGIONS[region] || []).includes(rFullState));
+        })()
+      );
+
+      similarResults = [...sameStateResults, ...sameRegionResults].slice(0, 6);
+    }
 
     return (
       <div className="space-y-10">
-        {/* Active Search Result */}
+        {/* Search Results – flat grid */}
         <section>
           <div className="flex items-center gap-2 mb-4">
             <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] flex items-center justify-center">
@@ -1227,6 +1219,9 @@ export default function MyLocationsPage() {
               </svg>
             </div>
             <h2 className="text-base font-semibold text-carto-slate">Search Result</h2>
+            {combinedResults.length > 1 && (
+              <span className="text-xs text-gray-400 ml-1">({combinedResults.length})</span>
+            )}
             <button
               onClick={clearSearchFilter}
               className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-gray-700 transition-all"
@@ -1237,40 +1232,36 @@ export default function MyLocationsPage() {
               Clear search
             </button>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {renderCard(searchedResult)}
-          </div>
-        </section>
-
-        {/* Similar Locations */}
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-lg bg-[#F5F3FF] flex items-center justify-center">
-              <svg className="w-4 h-4 text-[#7C3AED]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
-              </svg>
-            </div>
-            <h2 className="text-base font-semibold text-carto-slate">Similar Locations</h2>
-            {similarResults.length > 0 && (
-              <span className="text-xs text-gray-400 ml-1">({similarResults.length})</span>
-            )}
-          </div>
-          {allCalcLoading ? (
+          {allCalcLoading && searchedIsState ? (
             <div className="flex items-center gap-3 py-12 justify-center">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#7C3AED]"></div>
-              <span className="text-gray-500 text-sm">Finding similar locations...</span>
-            </div>
-          ) : similarResults.length > 0 ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {similarResults.map(renderCard)}
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#4A90D9]"></div>
+              <span className="text-gray-500 text-sm">Loading results...</span>
             </div>
           ) : (
-            <div className="text-center py-8 bg-[#F8FAFB] rounded-xl border border-dashed border-gray-200">
-              <p className="text-gray-400 text-sm">No similar locations found.</p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {combinedResults.map(renderCard)}
             </div>
           )}
         </section>
+
+        {/* Similar Locations (for city searches only) */}
+        {!searchedIsState && similarResults.length > 0 && (
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-[#F5F3FF] flex items-center justify-center">
+                <svg className="w-4 h-4 text-[#7C3AED]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                </svg>
+              </div>
+              <h2 className="text-base font-semibold text-carto-slate">Similar Locations</h2>
+              <span className="text-xs text-gray-400 ml-1">({similarResults.length})</span>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {similarResults.map(renderCard)}
+            </div>
+          </section>
+        )}
       </div>
     );
   };
@@ -1388,21 +1379,6 @@ export default function MyLocationsPage() {
         <div className="flex flex-col gap-4">
           {/* Top Row: Quick Buttons + Dropdown Filters */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* My Locations Button */}
-            <button
-              onClick={() => { setSortMode('default'); setShowFilter('all'); setTypeFilter('all'); setGeoFilters([]); setBrowseAll(false); setSearchQuery(''); setActiveSearchLocation(null); setShowSearchDropdown(false); }}
-              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                isAllActive
-                  ? 'bg-[#7C3AED] text-white shadow-sm'
-                  : 'bg-white text-gray-600 hover:bg-[#EDE9FE] hover:text-[#7C3AED] border border-gray-200'
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-              </svg>
-              My Locations
-            </button>
-
             {/* Browse All Button */}
             <button
               onClick={() => { setSortMode('default'); setShowFilter('all'); setTypeFilter('all'); setGeoFilters([]); setBrowseAll(true); setSearchQuery(''); setActiveSearchLocation(null); setShowSearchDropdown(false); }}
@@ -1430,7 +1406,7 @@ export default function MyLocationsPage() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
               </svg>
-              Saved{savedSorted.length > 0 || savedLocationNames.length > 0 ? ` (${new Set([...savedLocationNames, ...userResults.map(r => r.location)]).size})` : ''}
+              Saved{savedLocationNames.length > 0 ? ` (${savedLocationNames.length})` : ''}
             </button>
 
             {/* Most Recommended Button */}
@@ -1841,7 +1817,7 @@ export default function MyLocationsPage() {
                   {TYPE_OPTIONS.map(item => (
                     <button
                       key={item.value}
-                      onClick={() => { setTypeFilter(item.value); setStateDropdownOpen(false); }}
+                      onClick={() => { setTypeFilter(item.value); setStateDropdownOpen(false); setActiveSearchLocation(null); setSearchQuery(''); setShowSearchDropdown(false); }}
                       className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between ${
                         typeFilter === item.value ? 'bg-[#EDE9FE] text-[#7C3AED] font-medium' : 'text-gray-700 hover:bg-[#F5F3FF]'
                       }`}
@@ -1959,9 +1935,7 @@ export default function MyLocationsPage() {
       {/* Results */}
       {activeSearchLocation
         ? renderSearchView()
-        : sortMode === 'default' && allFiltersDefault && !browseAll
-          ? renderSections()
-          : renderFlatGrid()}
+        : renderFlatGrid()}
     </div>
   );
 }
