@@ -831,24 +831,12 @@ export default function MyLocationsPage() {
     setActiveSearchLocation(null);
     let matches = searchLocations(query, 12);
 
-    // When cities filter is active and search matches a state, show cities within that state
+    // When cities filter is active, keep states in the dropdown so users can
+    // search by state name — selecting a state will show its cities in results.
+    // Only filter out states when the states-only filter is active.
     if (typeFilter === 'cities') {
-      const matchedStates = matches.filter(m => m.type === 'state');
-      if (matchedStates.length > 0) {
-        const allOptions = getAllLocationOptions();
-        const stateCities: typeof matches = [];
-        for (const state of matchedStates) {
-          const stateAbbrev = STATE_TO_ABBREV[state.label];
-          if (stateAbbrev) {
-            const cities = allOptions.filter(o => o.type === 'city' && o.state === stateAbbrev);
-            stateCities.push(...cities);
-          }
-        }
-        // Replace state matches with their cities, keep any direct city matches too
-        const cityMatches = matches.filter(m => m.type === 'city');
-        matches = [...cityMatches, ...stateCities.filter(c => !cityMatches.find(cm => cm.id === c.id))];
-      }
-      matches = matches.filter(m => m.type === 'city');
+      // Keep both cities and states — states act as a shortcut to see their cities
+      matches = matches.filter(m => m.type === 'city' || m.type === 'state');
     } else if (typeFilter === 'states') {
       matches = matches.filter(m => m.type === 'state');
     }
