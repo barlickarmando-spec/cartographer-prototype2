@@ -1458,51 +1458,44 @@ function calculateNumericScore(
  * @returns Percentage (0-100) rounded to nearest 5%
  */
 function calculateMinimumAllocation(profile: UserProfile, locationData: LocationData): number {
-  // Binary search for minimum viable allocation
-  let low = 5; // Start at 5% (very low)
-  let high = 100;
-  let minViable = 100; // Default to 100% if nothing works
-  
+  // Linear scan in 5% increments to find the lowest allocation that works.
+  // Binary search was unreliable because viability is not strictly monotonic
+  // (edge cases around debt payoff timing can cause lower allocations to fail
+  // while slightly higher ones succeed, then fail again).
+
   // First check if even 100% works
   const maxTest = { ...profile, disposableIncomeAllocation: 100 };
   const maxSim = runYearByYearSimulation(maxTest, locationData, 20);
   const maxYears = findYearWhen(maxSim.snapshots, s => s.hasMortgage);
-  
+
   if (maxYears < 0) {
-    // Even 100% doesn't work - structural problem
-    console.log('calculateMinimumAllocation: Even 100% allocation cannot achieve mortgage');
     return 100;
   }
-  
-  // Binary search
-  let iterations = 0;
-  while (low <= high && iterations < 20) {
-    iterations++;
-    const mid = Math.floor((low + high) / 2);
-    const testProfile = { ...profile, disposableIncomeAllocation: mid };
+
+  // Scan from 5% to 100% in 5% steps — find lowest that achieves mortgage within 20 years
+  for (let alloc = 5; alloc <= 100; alloc += 5) {
+    const testProfile = { ...profile, disposableIncomeAllocation: alloc };
     const testSim = runYearByYearSimulation(testProfile, locationData, 20);
-    
-    // Check if this allocation achieves mortgage in reasonable time
+
     const yearsToMortgage = findYearWhen(testSim.snapshots, s => s.hasMortgage);
 
-    // Consider viable if: gets mortgage within 15 years AND simulation didn't fail structurally.
-    // We do NOT check lastYear.disposableIncome here because post-mortgage DI can go negative
-    // (mortgage payments > rent) which is a structural issue unrelated to allocation percentage.
-    // Checking DI here caused the binary search to return 100% even when lower allocations worked.
+    // Check that savings are actually growing (not stuck at 0)
+    const lastSnapshot = testSim.snapshots[testSim.snapshots.length - 1];
+    const midSnapshot = testSim.snapshots[Math.min(5, testSim.snapshots.length - 1)];
+    const savingsGrowing = lastSnapshot && midSnapshot &&
+      (lastSnapshot.savingsEnd > midSnapshot.savingsEnd || lastSnapshot.hasMortgage);
+
     const isViable = yearsToMortgage > 0 &&
-                     yearsToMortgage <= 15 &&
-                     !testSim.stoppedEarly;
-    
+                     yearsToMortgage <= 20 &&
+                     !testSim.stoppedEarly &&
+                     savingsGrowing;
+
     if (isViable) {
-      minViable = mid;
-      high = mid - 1; // Try lower
-    } else {
-      low = mid + 1; // Need higher
+      return alloc;
     }
   }
-  
-  // Round to nearest 5%
-  return Math.ceil(minViable / 5) * 5;
+
+  return 100;
 }
 
 /**

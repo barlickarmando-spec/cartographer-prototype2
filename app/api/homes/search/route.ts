@@ -55,6 +55,31 @@ const STATE_CAPITALS: Record<string, string> = {
   'WI': 'Milwaukee', 'WY': 'Cheyenne',
 };
 
+// Major cities per state for state-level searches (search 2-3 cities to cover the state)
+const STATE_MAJOR_CITIES: Record<string, string[]> = {
+  'AL': ['Birmingham', 'Huntsville'], 'AK': ['Anchorage'], 'AZ': ['Phoenix', 'Tucson'],
+  'AR': ['Little Rock'], 'CA': ['Los Angeles', 'San Francisco', 'San Diego'],
+  'CO': ['Denver', 'Colorado Springs'], 'CT': ['Hartford', 'New Haven'], 'DE': ['Wilmington'],
+  'FL': ['Miami', 'Orlando', 'Tampa'], 'GA': ['Atlanta', 'Savannah'],
+  'HI': ['Honolulu'], 'ID': ['Boise'], 'IL': ['Chicago', 'Springfield'],
+  'IN': ['Indianapolis', 'Fort Wayne'], 'IA': ['Des Moines', 'Cedar Rapids'],
+  'KS': ['Wichita', 'Kansas City'], 'KY': ['Louisville', 'Lexington'],
+  'LA': ['New Orleans', 'Baton Rouge'], 'ME': ['Portland'], 'MD': ['Baltimore', 'Rockville'],
+  'MA': ['Boston', 'Worcester'], 'MI': ['Detroit', 'Grand Rapids'],
+  'MN': ['Minneapolis', 'Saint Paul'], 'MS': ['Jackson'], 'MO': ['Kansas City', 'St. Louis'],
+  'MT': ['Billings', 'Missoula'], 'NE': ['Omaha', 'Lincoln'], 'NV': ['Las Vegas', 'Reno'],
+  'NH': ['Manchester', 'Nashua'], 'NJ': ['Newark', 'Jersey City'],
+  'NM': ['Albuquerque', 'Santa Fe'], 'NY': ['New York', 'Buffalo'],
+  'NC': ['Charlotte', 'Raleigh'], 'ND': ['Fargo', 'Bismarck'],
+  'OH': ['Columbus', 'Cleveland', 'Cincinnati'], 'OK': ['Oklahoma City', 'Tulsa'],
+  'OR': ['Portland', 'Eugene'], 'PA': ['Philadelphia', 'Pittsburgh'],
+  'RI': ['Providence'], 'SC': ['Charleston', 'Columbia'],
+  'SD': ['Sioux Falls'], 'TN': ['Nashville', 'Memphis'], 'TX': ['Houston', 'Dallas', 'Austin'],
+  'UT': ['Salt Lake City', 'Provo'], 'VT': ['Burlington'],
+  'VA': ['Virginia Beach', 'Richmond'], 'WA': ['Seattle', 'Tacoma'],
+  'WV': ['Charleston', 'Huntington'], 'WI': ['Milwaukee', 'Madison'], 'WY': ['Cheyenne'],
+};
+
 // ── City → State lookup from local database ─────────────────────────
 // Build a map of lowercase city name → state code(s) from the local 151-city DB.
 // This enables resolving cities that aren't state capitals.
@@ -570,7 +595,42 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Strategy 5: If auto-complete failed but we can extract a zip from the location, try postal_code
+      // Strategy 5: State-level multi-city search — search major cities in the state
+      if (listings.length === 0 && stateCode && !city) {
+        const majorCities = STATE_MAJOR_CITIES[stateCode];
+        if (majorCities && majorCities.length > 0) {
+          console.log(`[homes/search] State-level search: trying ${majorCities.length} cities in ${stateCode}`);
+          const allStateListings: any[] = [];
+          let stateTotalAvailable = 0;
+          // Search up to 3 major cities in the state (limit API calls)
+          for (const majorCity of majorCities.slice(0, 3)) {
+            const result = await searchListings(
+              { city: majorCity, state_code: stateCode },
+              minPrice, maxPrice,
+              hasFilters ? searchFilters : undefined
+            );
+            if (result && result.listings.length > 0) {
+              allStateListings.push(...result.listings);
+              stateTotalAvailable += result.totalAvailable;
+            }
+          }
+          if (allStateListings.length > 0) {
+            // Deduplicate by property_id
+            const seen = new Set<string>();
+            listings = allStateListings.filter(l => {
+              const id = l.property_id || l.listing_id || '';
+              if (!id || seen.has(id)) return false;
+              seen.add(id);
+              return true;
+            }).slice(0, MAX_LISTINGS);
+            totalAvailable = stateTotalAvailable;
+            debug.searchMethod = 'state_multi_city';
+            debug.citiesSearched = majorCities.slice(0, 3);
+          }
+        }
+      }
+
+      // Strategy 6: If auto-complete failed but we can extract a zip from the location, try postal_code
       if (listings.length === 0 && !isZipCode) {
         const zipMatch = location.match(/\b(\d{5})\b/);
         if (zipMatch) {
@@ -600,6 +660,15 @@ export async function POST(request: NextRequest) {
     // Normalize all listings
     let homes = listings.map(normalizeProperty);
     debug.normalizedCount = homes.length;
+
+    // Filter out "Land" listings — these are not homes
+    const EXCLUDED_TYPES = ['land', 'vacant land', 'lots and land', 'farm'];
+    homes = homes.filter(h => {
+      const typeLower = h.homeType.toLowerCase();
+      return !EXCLUDED_TYPES.some(t => typeLower.includes(t));
+    });
+    debug.afterLandFilter = homes.length;
+
     debug.withPhotos = homes.filter(h => h.photoUrl).length;
 
     // Price filter with graceful degradation for mismatched markets
@@ -609,12 +678,12 @@ export async function POST(request: NextRequest) {
       return h.price >= minPrice && h.price <= maxPrice;
     });
 
-    const MIN_RESULTS = 6;
-    if (strictFiltered.length >= MIN_RESULTS) {
+    // Always use strict price filter first; only expand if we get zero results
+    if (strictFiltered.length > 0) {
       homes = strictFiltered;
       debug.priceFilterMode = 'strict';
     } else {
-      // Expand range by ±50%
+      // Zero results in range — try expanded ±50%
       const range = maxPrice - minPrice;
       const expandedMin = Math.max(0, minPrice - range * 0.5);
       const expandedMax = maxPrice + range * 0.5;
@@ -623,7 +692,7 @@ export async function POST(request: NextRequest) {
         return h.price >= expandedMin && h.price <= expandedMax;
       });
 
-      if (expandedFiltered.length >= MIN_RESULTS) {
+      if (expandedFiltered.length > 0) {
         homes = expandedFiltered;
         debug.priceFilterMode = 'expanded';
         debug.expandedRange = { min: expandedMin, max: expandedMax };
