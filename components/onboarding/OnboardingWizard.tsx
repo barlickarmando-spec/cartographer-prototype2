@@ -702,11 +702,16 @@ function Step3AgeOccupation({ answers, updateAnswer }: StepProps) {
                 className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all bg-white"
               >
                 <option value="">Select occupation...</option>
+                <option value="doesnt-work">Doesn&apos;t work</option>
                 {occupations.map(occ => (
                   <option key={occ} value={occ}>{occ}</option>
                 ))}
               </select>
-
+              {answers.partnerOccupation === 'doesnt-work' && (
+                <p className="mt-2 text-xs text-[#9CA3AF]">
+                  Your household will be calculated as a single-earner household.
+                </p>
+              )}
             </div>
           </>
         )}
@@ -745,8 +750,12 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
                   <input
                     type="number"
                     min="0"
-                    value={answers.userStudentLoanDebt || ''}
-                    onChange={(e) => updateAnswer('userStudentLoanDebt', parseInt(e.target.value) || 0)}
+                    value={answers.userStudentLoanDebt != null && answers.userStudentLoanDebt !== 0 ? answers.userStudentLoanDebt : ''}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      const parsed = raw === '' ? 0 : Math.round(parseFloat(raw));
+                      updateAnswer('userStudentLoanDebt', isNaN(parsed) ? 0 : parsed);
+                    }}
                     className="w-full pl-8 pr-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
                     placeholder="0"
                   />
@@ -762,8 +771,12 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
                   min="0"
                   max="100"
                   step="0.1"
-                  value={answers.userStudentLoanRate ? answers.userStudentLoanRate * 100 : ''}
-                  onChange={(e) => updateAnswer('userStudentLoanRate', (parseFloat(e.target.value) || 0) / 100)}
+                  value={answers.userStudentLoanRate != null && answers.userStudentLoanRate > 0 ? (answers.userStudentLoanRate * 100).toFixed(1).replace(/\.0$/, '') : ''}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    const parsed = raw === '' ? 0 : parseFloat(raw) / 100;
+                    updateAnswer('userStudentLoanRate', isNaN(parsed) ? 0 : parsed);
+                  }}
                   className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
                   placeholder="6.5"
                 />
@@ -780,8 +793,12 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
                       <input
                         type="number"
                         min="0"
-                        value={answers.partnerStudentLoanDebt || ''}
-                        onChange={(e) => updateAnswer('partnerStudentLoanDebt', parseInt(e.target.value) || 0)}
+                        value={answers.partnerStudentLoanDebt != null && answers.partnerStudentLoanDebt !== 0 ? answers.partnerStudentLoanDebt : ''}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          const parsed = raw === '' ? 0 : Math.round(parseFloat(raw));
+                          updateAnswer('partnerStudentLoanDebt', isNaN(parsed) ? 0 : parsed);
+                        }}
                         className="w-full pl-8 pr-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
                         placeholder="0"
                       />
@@ -797,8 +814,12 @@ function Step4FinancialPortfolio({ answers, updateAnswer }: StepProps) {
                       min="0"
                       max="100"
                       step="0.1"
-                      value={answers.partnerStudentLoanRate ? answers.partnerStudentLoanRate * 100 : ''}
-                      onChange={(e) => updateAnswer('partnerStudentLoanRate', (parseFloat(e.target.value) || 0) / 100)}
+                      value={answers.partnerStudentLoanRate != null && answers.partnerStudentLoanRate > 0 ? (answers.partnerStudentLoanRate * 100).toFixed(1).replace(/\.0$/, '') : ''}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const parsed = raw === '' ? 0 : parseFloat(raw) / 100;
+                        updateAnswer('partnerStudentLoanRate', isNaN(parsed) ? 0 : parsed);
+                      }}
                       className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] focus:border-[#5BA4E5] focus:ring-2 focus:ring-[#5BA4E5] focus:ring-opacity-20 outline-none transition-all"
                       placeholder="6.5"
                     />
@@ -1834,8 +1855,11 @@ function Step7Confirmation({ answers, onEditStep }: { answers: Partial<Onboardin
         {/* Income */}
         <Section title="Income" step={3}>
           <p>Occupation: <span className="text-[#2C3E50] font-medium">{answers.userOccupation || 'Not set'}</span></p>
-          {answers.partnerOccupation && (
+          {answers.partnerOccupation && answers.partnerOccupation !== 'doesnt-work' && (
             <p>Partner: <span className="text-[#2C3E50] font-medium">{answers.partnerOccupation}</span></p>
+          )}
+          {answers.partnerOccupation === 'doesnt-work' && (
+            <p>Partner: <span className="text-[#2C3E50] font-medium">Doesn&apos;t work (single earner household)</span></p>
           )}
           {answers.relationshipStatus === 'linked' && !answers.partnerOccupation && !answers.partnerSalary && (
             <p className="text-xs italic">Partner income: doubled from your salary</p>

@@ -292,8 +292,26 @@ function applySortMode(results: CalculationResult[], mode: SortMode, colKey: str
 
   switch (mode) {
     case 'most-viable':
-    case 'most-recommended':
       return [...results].sort(viableFirst(sortByViability));
+    case 'most-recommended': {
+      // Combined formula: 40% Quality of Life + 30% Viability Score + 30% Home Value potential
+      // QoL: 0-100 score normalized to 0-10
+      // Viability: 0-10 numericScore (already on 0-10 scale)
+      // Home Value: projected affordable home price normalized against max across results
+      const maxHomePrice = Math.max(1, ...results.map(r => {
+        const proj = r.houseProjections.maxAffordable || r.houseProjections.fifteenYears || r.houseProjections.tenYears;
+        return proj?.maxSustainableHousePrice ?? 0;
+      }));
+      const getRecommendedScore = (r: CalculationResult): number => {
+        const qolScore = getQualityOfLifeLabel(r.location, r.yearByYear[0]?.totalIncome).score / 10; // 0-10
+        const viabilityScore = r.numericScore ?? 0; // 0-10
+        const proj = r.houseProjections.maxAffordable || r.houseProjections.fifteenYears || r.houseProjections.tenYears;
+        const homePrice = proj?.maxSustainableHousePrice ?? 0;
+        const homeValueScore = (homePrice / maxHomePrice) * 10; // 0-10
+        return (qolScore * 0.4) + (viabilityScore * 0.3) + (homeValueScore * 0.3);
+      };
+      return [...results].sort(viableFirst((a, b) => getRecommendedScore(b) - getRecommendedScore(a)));
+    }
     case 'most-affordable':
       return [...results].sort(viableFirst((a, b) => {
         const aCOL = (a.locationData.adjustedCOL as Record<string, number>)[colKey] || 0;

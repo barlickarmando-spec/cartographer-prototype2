@@ -56,13 +56,20 @@ export default function OnboardingPage() {
         // No saved locations for "no idea" users
         setSavedLocations([]);
       } else {
-        // Resolve locations from specific selections + region/climate filters
-        const resolved = resolveLocationFilters({
-          states: profile.selectedLocations,
-          regions: profile.locationRegions,
-          climates: profile.locationClimate,
-        });
-        locations = resolved.length > 0 ? resolved : profile.selectedLocations;
+        // Use explicitly selected locations only — do NOT auto-expand regions
+        // Regions and climate filters are only used when the user has no specific selections
+        // (e.g. "deciding-between" with only region/climate filters checked)
+        if (profile.selectedLocations.length > 0) {
+          locations = [...profile.selectedLocations];
+        } else {
+          // No specific locations selected — use region/climate to build the pool
+          const resolved = resolveLocationFilters({
+            states: [],
+            regions: profile.locationRegions,
+            climates: profile.locationClimate,
+          });
+          locations = resolved;
+        }
 
         // If still empty after filtering, fall back to all locations
         if (locations.length === 0) {

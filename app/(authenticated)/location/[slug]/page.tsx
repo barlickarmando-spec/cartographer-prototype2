@@ -11,12 +11,14 @@ import { getOnboardingAnswers, getSavedLocations, setSavedLocations } from '@/li
 import { getStateFlagPath, STATE_CODES, getStateNameFromLocation } from '@/lib/state-flags';
 import { formatCurrency, formatYears, cn } from '@/lib/utils';
 import type { OnboardingAnswers, UserProfile } from '@/lib/onboarding/types';
+import { HouseholdTypeEnum, getRentType, getAdjustedCOLKey } from '@/lib/onboarding/types';
 import { REGIONS, STATE_TO_ABBREV, ABBREV_TO_STATE } from '@/lib/location-filters';
 import QoLGradeCard from '@/components/QoLGradeCard';
 import { getPersonalizedQoL, getObjectiveQoL } from '@/lib/qol-engine';
 import LocationHeroCarousel from '@/components/LocationHeroCarousel';
 import SimpleHomeCarousel, { HomeSearchFilters } from '@/components/SimpleHomeCarousel';
 import { getLocationImages, LocationImage } from '@/lib/location-images';
+import StateHeatMap, { CityHeatData } from '@/components/StateHeatMap';
 
 // ─── Helpers ────────────────────────────────────────────────────────
 function fmtNum(n: number): string {
@@ -75,11 +77,10 @@ function MetricCard({ label, value, sub, accent }: { label: string; value: strin
 
 // ─── Filter Nav ─────────────────────────────────────────────────────
 const SECTIONS = [
-  { id: 'overview', label: 'Overview' },
   { id: 'overall', label: 'Overview' },
+  { id: 'housing', label: 'Your Home' },
   { id: 'job-market', label: 'Job Market' },
   { id: 'quality-of-life', label: 'Quality of Life' },
-  { id: 'housing', label: 'Housing' },
   { id: 'allocation', label: 'Allocation Strategy' },
   { id: 'cost-of-living', label: 'Cost of Living' },
   { id: 'wealth', label: 'Wealth Generation' },
@@ -106,6 +107,9 @@ export default function LocationPage() {
   const [compareIndustry, setCompareIndustry] = useState<string>('');
   const [allocationMode, setAllocationMode] = useState<'conservative' | 'balanced' | 'aggressive'>('balanced');
   const [loading, setLoading] = useState(true);
+
+  // Learn more (pros/cons) toggle
+  const [learnMoreOpen, setLearnMoreOpen] = useState(false);
 
   // Housing tab filters
   const [housingTypeFilter, setHousingTypeFilter] = useState<string>('all');
@@ -335,6 +339,149 @@ export default function LocationPage() {
     });
   }, [calcResult, allocationMultiplier]);
 
+  // Heat map city data for state pages (must be before early returns)
+  const heatMapCities = useMemo<CityHeatData[]>(() => {
+    if (!citiesInState || citiesInState.length === 0 || !profile) return [];
+    return citiesInState.map(c => ({
+      name: c.name,
+      displayName: c.displayName,
+      score: c.score,
+      salary: getSalary(c.name, profile.userOccupation, profile.userSalary),
+      projectedSqFt: c.projectedSqFt,
+      disposableIncome: c.col > 0 ? Math.max(0, getSalary(c.name, profile.userOccupation, profile.userSalary) - c.col) : 0,
+      yearsToMortgage: c.yearsToMortgage,
+      qolScore: c.qolScore,
+      minAllocation: 0,
+    }));
+  }, [citiesInState, profile]);
+
+  // For city pages, compute heat map for sister cities in same state
+  const cityPageHeatMapCities = useMemo<CityHeatData[]>(() => {
+    if (!calcResult || !profile) return [];
+    const stateName = getStateNameFromLocation(locationName);
+    if (!stateName) return [];
+    const stateAbbrev = STATE_TO_ABBREV[stateName] || '';
+    if (!stateAbbrev || !allSuggestions || allSuggestions.length === 0) return [];
+    if (!!STATE_CODES[locationName]) return []; // skip if this is a state page
+    const sistersInState = allSuggestions.filter(s => s.type === 'city' && s.state === stateAbbrev);
+    const curSal = getSalary(locationName, profile.userOccupation, profile.userSalary);
+    const currentCityData: CityHeatData = {
+      name: locationName,
+      displayName: locationName + (stateAbbrev ? `, ${stateAbbrev}` : ''),
+      score: calcResult.numericScore,
+      salary: curSal,
+      projectedSqFt: calcResult.projectedSqFt,
+      disposableIncome: calcResult.yearByYear[0]?.disposableIncome || 0,
+      yearsToMortgage: calcResult.yearsToMortgage >= 0 ? calcResult.yearsToMortgage : 99,
+      qolScore: 0,
+      minAllocation: calcResult.minimumAllocationRequired,
+    };
+    const mapped = sistersInState.map(c => ({
+      name: c.name,
+      displayName: c.displayName,
+      score: c.score,
+      salary: getSalary(c.name, profile.userOccupation, profile.userSalary),
+      projectedSqFt: c.projectedSqFt,
+      disposableIncome: c.col > 0 ? Math.max(0, getSalary(c.name, profile.userOccupation, profile.userSalary) - c.col) : 0,
+      yearsToMortgage: c.yearsToMortgage,
+      qolScore: c.qolScore,
+      minAllocation: 0,
+    }));
+    return [currentCityData, ...mapped];
+  }, [calcResult, allSuggestions, locationName, profile]);
+
+  // Cross-location comparison: how does this occupation perform here vs other locations?
+  const crossLocationStats = useMemo(() => {
+    if (!profile?.userOccupation || !calcResult) return null;
+    const allLocs = getAllLocations();
+    const salaries: { name: string; salary: number; score: number; type: 'state' | 'city'; state: string }[] = [];
+    for (const loc of allLocs) {
+      const sal = getSalary(loc.name, profile.userOccupation);
+      if (sal > 0) {
+        const suggestion = allSuggestions.find(s => s.name === loc.name);
+        // Determine state abbreviation for city locations
+        let locState = '';
+        if (loc.type === 'city') {
+          const parts = loc.displayName.split(', ');
+          locState = parts.length >= 2 ? parts[parts.length - 1].trim() : '';
+        }
+        salaries.push({
+          name: loc.name,
+          salary: sal,
+          score: loc.name === locationName ? calcResult.numericScore : (suggestion?.score ?? 0),
+          type: loc.type,
+          state: locState,
+        });
+      }
+    }
+    if (salaries.length === 0) return null;
+
+    // Overall rankings (all locations)
+    const sorted = [...salaries].sort((a, b) => b.salary - a.salary);
+    const salaryRank = sorted.findIndex(s => s.name === locationName) + 1;
+    const avgSalary = Math.round(salaries.reduce((sum, s) => sum + s.salary, 0) / salaries.length);
+    const scoreSorted = [...salaries].sort((a, b) => b.score - a.score);
+    const viabilityRank = scoreSorted.findIndex(s => s.name === locationName) + 1;
+
+    // State-only rankings (out of 51: 50 states + DC)
+    const statesOnly = salaries.filter(s => s.type === 'state');
+    const statesSortedByScore = [...statesOnly].sort((a, b) => b.score - a.score);
+    const statesSortedBySalary = [...statesOnly].sort((a, b) => b.salary - a.salary);
+    const stateViabilityRank = isStatePage ? statesSortedByScore.findIndex(s => s.name === locationName) + 1 : 0;
+    const stateSalaryRank = isStatePage ? statesSortedBySalary.findIndex(s => s.name === locationName) + 1 : 0;
+    const totalStates = statesOnly.length; // should be ~51
+
+    // City-within-state rankings
+    let cityInStateViabilityRank = 0;
+    let cityInStateSalaryRank = 0;
+    let totalCitiesInState = 0;
+    let cityInStateQolRank = 0;
+    let cityInStateYearsRank = 0;
+    if (!isStatePage) {
+      const currentStateAbbrev = STATE_TO_ABBREV[currentStateName] || '';
+      if (currentStateAbbrev) {
+        const citiesInSameState = salaries.filter(s => s.type === 'city' && s.state === currentStateAbbrev);
+        totalCitiesInState = citiesInSameState.length;
+        const citiesByScore = [...citiesInSameState].sort((a, b) => b.score - a.score);
+        const citiesBySalary = [...citiesInSameState].sort((a, b) => b.salary - a.salary);
+        cityInStateViabilityRank = citiesByScore.findIndex(s => s.name === locationName) + 1;
+        cityInStateSalaryRank = citiesBySalary.findIndex(s => s.name === locationName) + 1;
+
+        // QoL and Years rankings from allSuggestions (has richer data)
+        const suggestionsInState = allSuggestions.filter(s => s.type === 'city' && s.state === currentStateAbbrev);
+        if (suggestionsInState.length > 0) {
+          const byQol = [...suggestionsInState].sort((a, b) => b.qolScore - a.qolScore);
+          const byYears = [...suggestionsInState].sort((a, b) => {
+            const aY = a.yearsToMortgage > 0 && a.yearsToMortgage < 99 ? a.yearsToMortgage : 999;
+            const bY = b.yearsToMortgage > 0 && b.yearsToMortgage < 99 ? b.yearsToMortgage : 999;
+            return aY - bY;
+          });
+          cityInStateQolRank = byQol.findIndex(s => s.name === locationName) + 1;
+          cityInStateYearsRank = byYears.findIndex(s => s.name === locationName) + 1;
+        }
+      }
+    }
+
+    return {
+      salaryRank,
+      viabilityRank,
+      totalLocations: salaries.length,
+      avgSalary,
+      salaryPercentile: salaryRank > 0 ? Math.round((1 - (salaryRank - 1) / salaries.length) * 100) : 0,
+      viabilityPercentile: viabilityRank > 0 ? Math.round((1 - (viabilityRank - 1) / salaries.length) * 100) : 0,
+      // State rankings
+      stateViabilityRank,
+      stateSalaryRank,
+      totalStates,
+      // City-in-state rankings
+      cityInStateViabilityRank,
+      cityInStateSalaryRank,
+      cityInStateQolRank,
+      cityInStateYearsRank,
+      totalCitiesInState,
+    };
+  }, [profile, locationName, allSuggestions, calcResult, isStatePage, currentStateName]);
+
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto py-12">
@@ -372,6 +519,57 @@ export default function LocationPage() {
   const colWithOneKid = locData.adjustedCOL.singleParentOneKid || locData.adjustedCOL.familyThreeOneWorker;
   const colWithTwoKids = locData.adjustedCOL.singleParentTwoKids || locData.adjustedCOL.familyFourOneWorker;
 
+  // Household-aware calculations
+  const householdType = profile?.householdType || HouseholdTypeEnum.OnePerson;
+  const kidsPlan = profile?.kidsPlan;
+  const numKids = profile?.numKids || 0;
+  const declaredKidCount = profile?.declaredKidCount || 0;
+  const isLinked = profile?.relationshipStatus === 'linked';
+  const plansKids = kidsPlan === 'yes' || kidsPlan === 'unsure';
+
+  // For long-term planning: if they plan kids, use family sizing even if no kids yet
+  const effectivePeopleCount = (() => {
+    const base = isLinked ? 2 : 1;
+    const currentKids = numKids;
+    const plannedKids = plansKids ? Math.max(declaredKidCount, 1) : 0;
+    return base + Math.max(currentKids, plannedKids);
+  })();
+
+  // Household-appropriate COL key
+  const householdCOLKey = profile ? getAdjustedCOLKey(householdType) : 'onePerson';
+  const householdCOL = locData.adjustedCOL[householdCOLKey] || colOnePerson;
+
+  // Household label for COL display
+  const householdCOLLabel = (() => {
+    if (!profile) return 'Annual, single person';
+    if (isLinked && effectivePeopleCount > 2) return `Annual, ${effectivePeopleCount} people (${effectivePeopleCount - 2} kid${effectivePeopleCount - 2 > 1 ? 's' : ''})`;
+    if (isLinked) return 'Annual, 2 people';
+    if (effectivePeopleCount > 1) return `Annual, single parent + ${effectivePeopleCount - 1} kid${effectivePeopleCount - 1 > 1 ? 's' : ''}`;
+    return 'Annual, single person';
+  })();
+
+  // Household-aware rent: bedroom count based on effective people count
+  const effectiveRentBedrooms: '1br' | '2br' | '3br' = (() => {
+    if (effectivePeopleCount >= 3) return '3br';
+    if (effectivePeopleCount === 2) return '2br';
+    return '1br';
+  })();
+  const householdRentAnnual = effectiveRentBedrooms === '3br'
+    ? locData.rent.threeBedroomAnnual
+    : effectiveRentBedrooms === '2br'
+      ? locData.rent.twoBedroomAnnual
+      : locData.rent.oneBedroomAnnual;
+  const householdRentLabel = effectiveRentBedrooms === '3br' ? '3-bedroom' : effectiveRentBedrooms === '2br' ? '2-bedroom' : '1-bedroom';
+
+  // Household-aware home sizing (sqft targets from user spec)
+  const targetHomeSqft = (() => {
+    if (effectivePeopleCount >= 3) return 2200; // 2 people + any kids
+    if (effectivePeopleCount === 2) return 1800; // 2 people
+    return 1600; // 1 person
+  })();
+  const pricePerSqft = getPricePerSqft(locationName);
+  const householdHomeValue = Math.round(targetHomeSqft * pricePerSqft);
+
   // Disposable income
   const yearByYear = calcResult.yearByYear;
   const firstYear = yearByYear[0];
@@ -380,8 +578,8 @@ export default function LocationPage() {
   // Minimum allocation
   const minAllocation = calcResult.minimumAllocationRequired;
 
-  // Rent
-  const medianRent = locData.rent.twoBedroomAnnual > 0 ? Math.round(locData.rent.twoBedroomAnnual / 12) : 0;
+  // Rent (household-aware)
+  const medianRent = householdRentAnnual > 0 ? Math.round(householdRentAnnual / 12) : 0;
 
   // Kid viability
   const kv = calcResult.kidViability;
@@ -395,6 +593,10 @@ export default function LocationPage() {
 
   // Job ranking
   const userSalary = profile ? getSalary(locationName, profile.userOccupation, profile.userSalary) : 0;
+  const partnerSalary = profile?.partnerOccupation
+    ? getSalary(locationName, profile.partnerOccupation, profile.partnerSalary)
+    : profile?.usePartnerIncomeDoubling ? userSalary : 0;
+  const totalSalary = userSalary + partnerSalary;
   const userIndustryRank = jobMarketData.findIndex(j =>
     j.name.toLowerCase().includes((profile?.userOccupation || '').toLowerCase().split(' ')[0])
   ) + 1;
@@ -537,27 +739,25 @@ export default function LocationPage() {
               <div>
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Key Metrics</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <MetricCard
-                    label="Your Salary"
-                    value={userSalary > 0 ? fmtDollars(userSalary) : 'N/A'}
-                    sub={profile?.userOccupation || 'Your industry'}
-                    accent="#E8F2FB"
-                  />
-                  <MetricCard
-                    label="Cost of Living"
-                    value={fmtDollars(colOnePerson)}
-                    sub="Annual, single person"
-                  />
-                  <MetricCard
-                    label="Median Rent"
-                    value={medianRent > 0 ? `${fmtDollars(medianRent)}/mo` : 'N/A'}
-                    sub="2-bedroom"
-                  />
-                  <MetricCard
-                    label="Typical Home Value"
-                    value={fmtDollars(locData.housing.medianHomeValue)}
-                    sub={`${fmtDollars(getPricePerSqft(locationName))}/sqft`}
-                  />
+                  <div className="rounded-xl p-4" style={{ backgroundColor: '#E8F2FB' }}>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Projected Total Salary</p>
+                    <p className="text-xl font-bold text-carto-slate mt-1">{totalSalary > 0 ? fmtDollars(totalSalary) : 'N/A'}</p>
+                  </div>
+                  <div className="rounded-xl p-4" style={{ backgroundColor: '#F0F7FF' }}>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Cost of Living</p>
+                    <p className="text-xl font-bold text-carto-slate mt-1">{fmtDollars(householdCOL + householdRentAnnual)}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{householdCOLLabel}</p>
+                  </div>
+                  <div className="rounded-xl p-4" style={{ backgroundColor: '#F0F7FF' }}>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Median Rent</p>
+                    <p className="text-xl font-bold text-carto-slate mt-1">{medianRent > 0 ? `${fmtDollars(medianRent)}/mo` : 'N/A'}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{householdRentLabel}</p>
+                  </div>
+                  <div className="rounded-xl p-4" style={{ backgroundColor: '#F0F7FF' }}>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Typical Home Value</p>
+                    <p className="text-xl font-bold text-carto-slate mt-1">{fmtDollars(householdHomeValue)}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{fmtNum(targetHomeSqft)} sqft</p>
+                  </div>
                 </div>
               </div>
 
@@ -571,9 +771,9 @@ export default function LocationPage() {
                     sub={calcResult.yearsToMortgage > 0 ? `Age ${calcResult.ageMortgageAcquired}` : 'May not be viable'}
                   />
                   <MetricCard
-                    label="Affordable Home"
+                    label="Projected Home Size"
                     value={calcResult.projectedSqFt > 0 ? `${fmtNum(Math.round(calcResult.projectedSqFt))} sqft` : 'N/A'}
-                    sub={calcResult.houseTag}
+                    sub={calcResult.projectedSqFt > 0 ? fmtDollars(Math.round(calcResult.projectedSqFt * pricePerSqft)) : undefined}
                   />
                   <MetricCard
                     label="Debt-Free"
@@ -589,32 +789,45 @@ export default function LocationPage() {
                 </div>
               </div>
 
-              {/* Pros & Cons — horizontal side-by-side below */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-emerald-50 rounded-xl p-4">
-                  <h3 className="font-semibold text-emerald-800 mb-3">Pros</h3>
-                  <ul className="space-y-2 text-sm text-emerald-900">
-                    {calcResult.isViable && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Viable path to homeownership in {calcResult.yearsToMortgage > 0 ? formatYears(calcResult.yearsToMortgage) : 'this location'}</li>}
-                    {colOnePerson < 35000 && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Below-average cost of living ({fmtDollars(colOnePerson)}/yr)</li>}
-                    {userSalary > locData.salaries.overallAverage && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Your industry pays above local average</li>}
-                    {kv.firstKid.isViable && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Can afford kids (first viable at age {kv.firstKid.minimumAge})</li>}
-                    {locData.housing.appreciationRate > 0.04 && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Strong home appreciation ({fmtPct(locData.housing.appreciationRate)}/yr)</li>}
-                    {minAllocation <= 40 && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Low minimum allocation needed ({minAllocation.toFixed(0)}%)</li>}
-                    {medianRent > 0 && medianRent < 1200 && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Affordable rent while saving ({fmtDollars(medianRent)}/mo)</li>}
-                  </ul>
-                </div>
-                <div className="bg-red-50 rounded-xl p-4">
-                  <h3 className="font-semibold text-red-800 mb-3">Cons</h3>
-                  <ul className="space-y-2 text-sm text-red-900">
-                    {!calcResult.isViable && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>No viable path to homeownership</li>}
-                    {colOnePerson > 45000 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Above-average cost of living ({fmtDollars(colOnePerson)}/yr)</li>}
-                    {minAllocation > 60 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Requires aggressive savings ({minAllocation.toFixed(0)}% allocation)</li>}
-                    {calcResult.yearsToMortgage > 10 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Long time to homeownership ({formatYears(calcResult.yearsToMortgage)})</li>}
-                    {!kv.firstKid.isViable && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Having kids may not be financially viable here</li>}
-                    {locData.housing.medianHomeValue > 500000 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>High home prices ({fmtDollars(locData.housing.medianHomeValue)} median)</li>}
-                    {medianRent > 2000 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Expensive rent ({fmtDollars(medianRent)}/mo) slows savings</li>}
-                  </ul>
-                </div>
+              {/* Learn More dropdown — Pros & Cons */}
+              <div>
+                <button
+                  onClick={() => setLearnMoreOpen(!learnMoreOpen)}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors text-sm font-semibold text-carto-slate w-full"
+                >
+                  <svg className={`w-4 h-4 transition-transform ${learnMoreOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                  </svg>
+                  Learn more
+                </button>
+                {learnMoreOpen && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                    <div className="bg-emerald-50 rounded-xl p-4">
+                      <h3 className="font-semibold text-emerald-800 mb-3">Pros</h3>
+                      <ul className="space-y-2 text-sm text-emerald-900">
+                        {calcResult.isViable && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Viable path to homeownership in {calcResult.yearsToMortgage > 0 ? formatYears(calcResult.yearsToMortgage) : 'this location'}</li>}
+                        {colOnePerson < 35000 && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Below-average cost of living ({fmtDollars(colOnePerson)}/yr)</li>}
+                        {userSalary > locData.salaries.overallAverage && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Your industry pays above local average</li>}
+                        {kv.firstKid.isViable && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Can afford kids (first viable at age {kv.firstKid.minimumAge})</li>}
+                        {locData.housing.appreciationRate > 0.04 && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Strong home appreciation ({fmtPct(locData.housing.appreciationRate)}/yr)</li>}
+                        {minAllocation <= 40 && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Low minimum allocation needed ({minAllocation.toFixed(0)}%)</li>}
+                        {medianRent > 0 && medianRent < 1200 && <li className="flex gap-2"><span className="text-emerald-500 mt-0.5">+</span>Affordable rent while saving ({fmtDollars(medianRent)}/mo)</li>}
+                      </ul>
+                    </div>
+                    <div className="bg-red-50 rounded-xl p-4">
+                      <h3 className="font-semibold text-red-800 mb-3">Cons</h3>
+                      <ul className="space-y-2 text-sm text-red-900">
+                        {!calcResult.isViable && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>No viable path to homeownership</li>}
+                        {colOnePerson > 45000 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Above-average cost of living ({fmtDollars(colOnePerson)}/yr)</li>}
+                        {minAllocation > 60 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Requires aggressive savings ({minAllocation.toFixed(0)}% allocation)</li>}
+                        {calcResult.yearsToMortgage > 10 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Long time to homeownership ({formatYears(calcResult.yearsToMortgage)})</li>}
+                        {!kv.firstKid.isViable && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Having kids may not be financially viable here</li>}
+                        {locData.housing.medianHomeValue > 500000 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>High home prices ({fmtDollars(locData.housing.medianHomeValue)} median)</li>}
+                        {medianRent > 2000 && <li className="flex gap-2"><span className="text-red-500 mt-0.5">-</span>Expensive rent ({fmtDollars(medianRent)}/mo) slows savings</li>}
+                      </ul>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </Section>
@@ -638,8 +851,8 @@ export default function LocationPage() {
                 />
                 <MetricCard
                   label="Typical Home Value"
-                  value={fmtDollars(locData.housing.medianHomeValue)}
-                  sub={`${fmtDollars(getPricePerSqft(locationName))}/sqft`}
+                  value={fmtDollars(householdHomeValue)}
+                  sub={`${fmtNum(targetHomeSqft)} sqft${plansKids && numKids === 0 ? ' (sized for planned family)' : ''}`}
                 />
                 <MetricCard
                   label="Down Payment"
@@ -773,65 +986,188 @@ export default function LocationPage() {
           {/* ═══ JOB MARKET ═══ */}
           <Section id="job-market" title="Job Market">
             <div className="space-y-4">
-              {/* User's industry */}
+              {/* Salary headline */}
               {profile?.userOccupation && (
                 <div className="bg-carto-blue-sky rounded-xl p-4">
-                  <p className="text-sm font-medium text-carto-steel">Your Industry</p>
-                  <p className="text-lg font-bold text-carto-slate">{profile.userOccupation}</p>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Average salary: <span className="font-semibold">{fmtDollars(userSalary)}</span>
-                    {userIndustryRank > 0 && <span className="ml-2 text-gray-400">Rank #{userIndustryRank} of {jobMarketData.length}</span>}
-                  </p>
+                  <div className="flex items-baseline justify-between flex-wrap gap-2">
+                    <div>
+                      <p className="text-sm font-medium text-carto-steel">{profile.userOccupation} in {locationName}</p>
+                      <p className="text-2xl font-bold text-carto-slate mt-1">{fmtDollars(userSalary)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-500">vs. National Avg</p>
+                      <p className={`text-lg font-bold ${crossLocationStats && userSalary >= crossLocationStats.avgSalary ? 'text-emerald-700' : 'text-red-600'}`}>
+                        {crossLocationStats
+                          ? `${userSalary >= crossLocationStats.avgSalary ? '+' : ''}${fmtDollars(userSalary - crossLocationStats.avgSalary)}`
+                          : 'N/A'}
+                      </p>
+                      <p className="text-xs text-gray-400">{crossLocationStats ? `Avg: ${fmtDollars(crossLocationStats.avgSalary)}` : ''}</p>
+                    </div>
+                  </div>
                 </div>
               )}
 
-              {/* Compare dropdown */}
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">Compare with another industry</label>
-                <select
-                  value={compareIndustry}
-                  onChange={e => setCompareIndustry(e.target.value)}
-                  className="w-full max-w-md px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                >
-                  <option value="">Select an industry...</option>
-                  {getOccupationList().map(occ => (
-                    <option key={occ} value={occ}>{occ}</option>
-                  ))}
-                </select>
-                {compareIndustry && (
-                  <div className="mt-2 bg-gray-50 rounded-lg p-3">
-                    <p className="text-sm"><span className="font-medium">{compareIndustry}:</span> {fmtDollars(getSalary(locationName, compareIndustry))}/yr</p>
-                  </div>
-                )}
+              {/* Viability metrics — large cards */}
+              <div className="grid grid-cols-3 gap-3">
+                <MetricCard
+                  label="Viability Score"
+                  value={score.toFixed(1) + ' / 10'}
+                  sub={viability.label}
+                  accent={score >= 6 ? '#E8F5E9' : score >= 4 ? '#FFF8E1' : '#FFEBEE'}
+                />
+                <MetricCard
+                  label="Years to Home"
+                  value={calcResult.yearsToMortgage > 0 ? formatYears(calcResult.yearsToMortgage) : 'N/A'}
+                  sub={calcResult.yearsToMortgage > 0 ? `Age ${calcResult.ageMortgageAcquired}` : 'May not be viable'}
+                />
+                <MetricCard
+                  label="Min Allocation"
+                  value={`${minAllocation.toFixed(0)}%`}
+                  sub="Of disposable income"
+                  accent={minAllocation > 60 ? '#FFF3E0' : '#E8F5E9'}
+                />
               </div>
 
-              {/* All industries ranked */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-2">All Industries — Ranked by Salary</h3>
-                <div className="max-h-80 overflow-y-auto rounded-lg border border-gray-100">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50 sticky top-0">
-                      <tr>
-                        <th className="text-left px-4 py-2 font-medium text-gray-500">#</th>
-                        <th className="text-left px-4 py-2 font-medium text-gray-500">Industry</th>
-                        <th className="text-right px-4 py-2 font-medium text-gray-500">Avg Salary</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {jobMarketData.map((j, i) => {
-                        const isUser = profile?.userOccupation && j.name.toLowerCase().includes(profile.userOccupation.toLowerCase().split(' ')[0]);
-                        return (
-                          <tr key={j.name} className={cn('border-t border-gray-50', isUser && 'bg-carto-blue-sky/50 font-semibold')}>
-                            <td className="px-4 py-2 text-gray-400">{i + 1}</td>
-                            <td className="px-4 py-2 text-carto-slate">{j.name}</td>
-                            <td className="px-4 py-2 text-right text-carto-slate">{fmtDollars(j.salary)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+              {/* Rankings — context-aware: state vs city */}
+              {crossLocationStats && (
+                <div className="bg-white border border-gray-200 rounded-xl p-4">
+                  <h3 className="font-semibold text-carto-slate text-sm mb-3">
+                    {isStatePage
+                      ? `${locationName} — State Rankings`
+                      : `${locationName} — Rankings in ${currentStateName || 'State'}`}
+                  </h3>
+
+                  {/* State page: rank out of 51 states */}
+                  {isStatePage && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Viability Rank</p>
+                        <p className="text-xl font-bold text-carto-slate">
+                          {crossLocationStats.stateViabilityRank > 0
+                            ? `#${crossLocationStats.stateViabilityRank}`
+                            : 'N/A'}
+                        </p>
+                        <p className="text-[11px] text-gray-400">of {crossLocationStats.totalStates} states</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Salary Rank</p>
+                        <p className="text-xl font-bold text-carto-slate">
+                          {crossLocationStats.stateSalaryRank > 0
+                            ? `#${crossLocationStats.stateSalaryRank}`
+                            : 'N/A'}
+                        </p>
+                        <p className="text-[11px] text-gray-400">of {crossLocationStats.totalStates} states</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Disposable Income</p>
+                        <p className="text-lg font-bold text-carto-slate">{fmtDollars(disposableIncome)}</p>
+                        <p className="text-[11px] text-gray-400">Year 1</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Salary Percentile</p>
+                        <p className="text-lg font-bold text-carto-slate">
+                          {crossLocationStats.salaryPercentile > 0
+                            ? `Top ${crossLocationStats.salaryPercentile}%`
+                            : 'N/A'}
+                        </p>
+                        <p className="text-[11px] text-gray-400">All locations</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* City page: rank among cities in the state */}
+                  {!isStatePage && crossLocationStats.totalCitiesInState > 0 && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Viability Rank</p>
+                        <p className="text-xl font-bold text-carto-slate">
+                          {crossLocationStats.cityInStateViabilityRank > 0
+                            ? `#${crossLocationStats.cityInStateViabilityRank}`
+                            : 'N/A'}
+                        </p>
+                        <p className="text-[11px] text-gray-400">of {crossLocationStats.totalCitiesInState} cities in {currentStateName}</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Salary Rank</p>
+                        <p className="text-xl font-bold text-carto-slate">
+                          {crossLocationStats.cityInStateSalaryRank > 0
+                            ? `#${crossLocationStats.cityInStateSalaryRank}`
+                            : 'N/A'}
+                        </p>
+                        <p className="text-[11px] text-gray-400">of {crossLocationStats.totalCitiesInState} cities in {currentStateName}</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Quality of Life</p>
+                        <p className="text-xl font-bold text-carto-slate">
+                          {crossLocationStats.cityInStateQolRank > 0
+                            ? `#${crossLocationStats.cityInStateQolRank}`
+                            : 'N/A'}
+                        </p>
+                        <p className="text-[11px] text-gray-400">of {crossLocationStats.totalCitiesInState} cities in {currentStateName}</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Years to Home</p>
+                        <p className="text-xl font-bold text-carto-slate">
+                          {crossLocationStats.cityInStateYearsRank > 0
+                            ? `#${crossLocationStats.cityInStateYearsRank}`
+                            : 'N/A'}
+                        </p>
+                        <p className="text-[11px] text-gray-400">of {crossLocationStats.totalCitiesInState} cities in {currentStateName}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Disposable income + percentile for city pages */}
+                  {!isStatePage && (
+                    <div className="grid grid-cols-2 gap-3 mt-3">
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Disposable Income</p>
+                        <p className="text-lg font-bold text-carto-slate">{fmtDollars(disposableIncome)}</p>
+                        <p className="text-[11px] text-gray-400">Year 1</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Salary Percentile</p>
+                        <p className="text-lg font-bold text-carto-slate">
+                          {crossLocationStats.salaryPercentile > 0
+                            ? `Top ${crossLocationStats.salaryPercentile}%`
+                            : 'N/A'}
+                        </p>
+                        <p className="text-[11px] text-gray-400">All locations nationally</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
+
+              {/* State Heat Map — shows where in the state an occupation is most viable */}
+              {isStatePage && heatMapCities.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                    Where in {locationName} is {profile?.userOccupation || 'your occupation'} most viable?
+                  </h3>
+                  <StateHeatMap
+                    stateName={locationName}
+                    cities={heatMapCities}
+                    userOccupation={profile?.userOccupation}
+                    onCityClick={(name) => router.push(`/location/${encodeSlug(name)}`)}
+                  />
+                </div>
+              )}
+
+              {/* City page: state heat map showing viability across the state */}
+              {!isStatePage && currentStateName && cityPageHeatMapCities.length > 1 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                    Viability across {currentStateName}
+                  </h3>
+                  <StateHeatMap
+                    stateName={currentStateName}
+                    cities={cityPageHeatMapCities}
+                    userOccupation={profile?.userOccupation}
+                    onCityClick={(name) => router.push(`/location/${encodeSlug(name)}`)}
+                  />
+                </div>
+              )}
             </div>
           </Section>
 
@@ -1121,28 +1457,51 @@ export default function LocationPage() {
           {/* ═══ JOB OVERVIEW ═══ */}
           <Section id="job-overview" title="Job Overview">
             <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-emerald-50 rounded-xl p-4">
-                  <h3 className="font-semibold text-emerald-800 mb-2">Most Viable Industries</h3>
-                  <ul className="space-y-1 text-sm">
-                    {jobMarketData.slice(0, 5).map((j, i) => (
-                      <li key={j.name} className="flex justify-between">
-                        <span className="text-emerald-900">{i + 1}. {j.name}</span>
-                        <span className="font-medium">{fmtDollars(j.salary)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="bg-red-50 rounded-xl p-4">
-                  <h3 className="font-semibold text-red-800 mb-2">Least Viable Industries</h3>
-                  <ul className="space-y-1 text-sm">
-                    {jobMarketData.slice(-5).reverse().map((j, i) => (
-                      <li key={j.name} className="flex justify-between">
-                        <span className="text-red-900">{jobMarketData.length - 4 + i}. {j.name}</span>
-                        <span className="font-medium">{fmtDollars(j.salary)}</span>
-                      </li>
-                    ))}
-                  </ul>
+              {/* Compare dropdown */}
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Compare with another industry</label>
+                <select
+                  value={compareIndustry}
+                  onChange={e => setCompareIndustry(e.target.value)}
+                  className="w-full max-w-md px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                >
+                  <option value="">Select an industry...</option>
+                  {getOccupationList().map(occ => (
+                    <option key={occ} value={occ}>{occ}</option>
+                  ))}
+                </select>
+                {compareIndustry && (
+                  <div className="mt-2 bg-gray-50 rounded-lg p-3">
+                    <p className="text-sm"><span className="font-medium">{compareIndustry}:</span> {fmtDollars(getSalary(locationName, compareIndustry))}/yr</p>
+                  </div>
+                )}
+              </div>
+
+              {/* All industries ranked */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">All Industries — Ranked by Salary</h3>
+                <div className="max-h-80 overflow-y-auto rounded-lg border border-gray-100">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th className="text-left px-4 py-2 font-medium text-gray-500">#</th>
+                        <th className="text-left px-4 py-2 font-medium text-gray-500">Industry</th>
+                        <th className="text-right px-4 py-2 font-medium text-gray-500">Avg Salary</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {jobMarketData.map((j, i) => {
+                        const isUser = profile?.userOccupation && j.name.toLowerCase().includes(profile.userOccupation.toLowerCase().split(' ')[0]);
+                        return (
+                          <tr key={j.name} className={cn('border-t border-gray-50', isUser && 'bg-carto-blue-sky/50 font-semibold')}>
+                            <td className="px-4 py-2 text-gray-400">{i + 1}</td>
+                            <td className="px-4 py-2 text-carto-slate">{j.name}</td>
+                            <td className="px-4 py-2 text-right text-carto-slate">{fmtDollars(j.salary)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>

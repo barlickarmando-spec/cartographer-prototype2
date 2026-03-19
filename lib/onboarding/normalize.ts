@@ -28,7 +28,8 @@ export function normalizeOnboardingAnswers(answers: OnboardingAnswers): UserProf
 
   // === Household ===
   const relationshipStatus = answers.relationshipStatus;
-  const numEarners: 1 | 2 = relationshipStatus === 'linked' ? 2 : 1;
+  const partnerDoesntWork = answers.partnerOccupation === 'doesnt-work';
+  const numEarners: 1 | 2 = (relationshipStatus === 'linked' && !partnerDoesntWork) ? 2 : 1;
   const numKids = answers.kidsPlan === 'have-kids' ? (answers.numKids || 0) : 0;
 
   const householdType = determineHouseholdType(relationshipStatus, numEarners, numKids);
@@ -96,11 +97,13 @@ export function normalizeOnboardingAnswers(answers: OnboardingAnswers): UserProf
   // === Income ===
   const userOccupation = answers.userOccupation || 'Management';
   const userSalary = answers.userSalary;
-  const partnerOccupation = answers.partnerOccupation;
-  const partnerSalary = answers.partnerSalary;
+  // If partner "doesn't work", treat as no partner occupation/salary
+  const partnerOccupation = partnerDoesntWork ? undefined : answers.partnerOccupation;
+  const partnerSalary = partnerDoesntWork ? undefined : answers.partnerSalary;
 
+  // Only double income if linked AND no partner info provided AND partner does work
   const usePartnerIncomeDoubling =
-    relationshipStatus === 'linked' && !partnerOccupation && !partnerSalary;
+    relationshipStatus === 'linked' && !partnerDoesntWork && !partnerOccupation && !partnerSalary;
 
   // Salary override for current location
   // Derive currentSalaryLocation from the user's selected location
@@ -110,10 +113,15 @@ export function normalizeOnboardingAnswers(answers: OnboardingAnswers): UserProf
     || answers.exactLocation;
 
   // === Debt ===
-  const userLoanDebt = answers.userStudentLoanDebt || 0;
-  const userLoanRate = answers.userStudentLoanRate || 0.05;
-  const partnerLoanDebt = answers.partnerStudentLoanDebt || 0;
-  const partnerLoanRate = answers.partnerStudentLoanRate || 0.05;
+  // Use exact user-provided values; only default rate when debt exists but rate is missing
+  const userLoanDebt = typeof answers.userStudentLoanDebt === 'number' ? answers.userStudentLoanDebt : 0;
+  const userLoanRate = typeof answers.userStudentLoanRate === 'number' && answers.userStudentLoanRate > 0
+    ? answers.userStudentLoanRate
+    : (userLoanDebt > 0 ? 0.05 : 0);
+  const partnerLoanDebt = typeof answers.partnerStudentLoanDebt === 'number' ? answers.partnerStudentLoanDebt : 0;
+  const partnerLoanRate = typeof answers.partnerStudentLoanRate === 'number' && answers.partnerStudentLoanRate > 0
+    ? answers.partnerStudentLoanRate
+    : (partnerLoanDebt > 0 ? 0.05 : 0);
 
   // Combined student loan debt (weighted average rate)
   const totalLoanDebt = userLoanDebt + partnerLoanDebt;

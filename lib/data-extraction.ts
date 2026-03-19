@@ -195,8 +195,8 @@ function findStateData(stateName: string): LocationData | null {
  * Format: { displayName: { tabB: 'Tab B name', tabC: 'Tab C name' } }
  */
 const CITY_ALIASES: Record<string, { tabB?: string; tabC?: string; state?: string }> = {
-  'anaheim':        { tabB: 'Orange County',      tabC: 'Anaheim',        state: 'CA' },
-  'orange county':  { tabB: 'Orange County',      tabC: 'Anaheim',        state: 'CA' },
+  'anaheim':        { tabB: 'Anaheim',             tabC: 'Anaheim',        state: 'CA' },
+  'orange county':  { tabB: 'Anaheim',             tabC: 'Anaheim',        state: 'CA' },
   'fort lauderdale':{ tabB: 'Broward/Palm Beach',  tabC: 'Fort Lauderdale', state: 'FL' },
   'broward':        { tabB: 'Broward/Palm Beach',  tabC: 'Fort Lauderdale', state: 'FL' },
   'broward/palm beach': { tabB: 'Broward/Palm Beach', tabC: 'Fort Lauderdale', state: 'FL' },
