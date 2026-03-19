@@ -394,24 +394,74 @@ export default function LocationPage() {
   const crossLocationStats = useMemo(() => {
     if (!profile?.userOccupation || !calcResult) return null;
     const allLocs = getAllLocations();
-    const salaries: { name: string; salary: number; score: number }[] = [];
+    const salaries: { name: string; salary: number; score: number; type: 'state' | 'city'; state: string }[] = [];
     for (const loc of allLocs) {
       const sal = getSalary(loc.name, profile.userOccupation);
       if (sal > 0) {
         const suggestion = allSuggestions.find(s => s.name === loc.name);
+        // Determine state abbreviation for city locations
+        let locState = '';
+        if (loc.type === 'city') {
+          const parts = loc.displayName.split(', ');
+          locState = parts.length >= 2 ? parts[parts.length - 1].trim() : '';
+        }
         salaries.push({
           name: loc.name,
           salary: sal,
           score: loc.name === locationName ? calcResult.numericScore : (suggestion?.score ?? 0),
+          type: loc.type,
+          state: locState,
         });
       }
     }
     if (salaries.length === 0) return null;
+
+    // Overall rankings (all locations)
     const sorted = [...salaries].sort((a, b) => b.salary - a.salary);
     const salaryRank = sorted.findIndex(s => s.name === locationName) + 1;
     const avgSalary = Math.round(salaries.reduce((sum, s) => sum + s.salary, 0) / salaries.length);
     const scoreSorted = [...salaries].sort((a, b) => b.score - a.score);
     const viabilityRank = scoreSorted.findIndex(s => s.name === locationName) + 1;
+
+    // State-only rankings (out of 51: 50 states + DC)
+    const statesOnly = salaries.filter(s => s.type === 'state');
+    const statesSortedByScore = [...statesOnly].sort((a, b) => b.score - a.score);
+    const statesSortedBySalary = [...statesOnly].sort((a, b) => b.salary - a.salary);
+    const stateViabilityRank = isStatePage ? statesSortedByScore.findIndex(s => s.name === locationName) + 1 : 0;
+    const stateSalaryRank = isStatePage ? statesSortedBySalary.findIndex(s => s.name === locationName) + 1 : 0;
+    const totalStates = statesOnly.length; // should be ~51
+
+    // City-within-state rankings
+    let cityInStateViabilityRank = 0;
+    let cityInStateSalaryRank = 0;
+    let totalCitiesInState = 0;
+    let cityInStateQolRank = 0;
+    let cityInStateYearsRank = 0;
+    if (!isStatePage) {
+      const currentStateAbbrev = STATE_TO_ABBREV[currentStateName] || '';
+      if (currentStateAbbrev) {
+        const citiesInSameState = salaries.filter(s => s.type === 'city' && s.state === currentStateAbbrev);
+        totalCitiesInState = citiesInSameState.length;
+        const citiesByScore = [...citiesInSameState].sort((a, b) => b.score - a.score);
+        const citiesBySalary = [...citiesInSameState].sort((a, b) => b.salary - a.salary);
+        cityInStateViabilityRank = citiesByScore.findIndex(s => s.name === locationName) + 1;
+        cityInStateSalaryRank = citiesBySalary.findIndex(s => s.name === locationName) + 1;
+
+        // QoL and Years rankings from allSuggestions (has richer data)
+        const suggestionsInState = allSuggestions.filter(s => s.type === 'city' && s.state === currentStateAbbrev);
+        if (suggestionsInState.length > 0) {
+          const byQol = [...suggestionsInState].sort((a, b) => b.qolScore - a.qolScore);
+          const byYears = [...suggestionsInState].sort((a, b) => {
+            const aY = a.yearsToMortgage > 0 && a.yearsToMortgage < 99 ? a.yearsToMortgage : 999;
+            const bY = b.yearsToMortgage > 0 && b.yearsToMortgage < 99 ? b.yearsToMortgage : 999;
+            return aY - bY;
+          });
+          cityInStateQolRank = byQol.findIndex(s => s.name === locationName) + 1;
+          cityInStateYearsRank = byYears.findIndex(s => s.name === locationName) + 1;
+        }
+      }
+    }
+
     return {
       salaryRank,
       viabilityRank,
@@ -419,8 +469,18 @@ export default function LocationPage() {
       avgSalary,
       salaryPercentile: salaryRank > 0 ? Math.round((1 - (salaryRank - 1) / salaries.length) * 100) : 0,
       viabilityPercentile: viabilityRank > 0 ? Math.round((1 - (viabilityRank - 1) / salaries.length) * 100) : 0,
+      // State rankings
+      stateViabilityRank,
+      stateSalaryRank,
+      totalStates,
+      // City-in-state rankings
+      cityInStateViabilityRank,
+      cityInStateSalaryRank,
+      cityInStateQolRank,
+      cityInStateYearsRank,
+      totalCitiesInState,
     };
-  }, [profile, locationName, allSuggestions, calcResult]);
+  }, [profile, locationName, allSuggestions, calcResult, isStatePage, currentStateName]);
 
   if (loading) {
     return (
@@ -926,45 +986,28 @@ export default function LocationPage() {
           {/* ═══ JOB MARKET ═══ */}
           <Section id="job-market" title="Job Market">
             <div className="space-y-4">
-              {/* User's occupation — cross-location comparison */}
+              {/* Salary headline */}
               {profile?.userOccupation && (
                 <div className="bg-carto-blue-sky rounded-xl p-4">
-                  <p className="text-sm font-medium text-carto-steel">{profile.userOccupation} in {locationName}</p>
-                  <p className="text-2xl font-bold text-carto-slate mt-1">{fmtDollars(userSalary)}</p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+                  <div className="flex items-baseline justify-between flex-wrap gap-2">
                     <div>
-                      <p className="text-xs text-gray-500">National Average</p>
-                      <p className="text-sm font-semibold text-carto-slate">{crossLocationStats ? fmtDollars(crossLocationStats.avgSalary) : 'N/A'}</p>
+                      <p className="text-sm font-medium text-carto-steel">{profile.userOccupation} in {locationName}</p>
+                      <p className="text-2xl font-bold text-carto-slate mt-1">{fmtDollars(userSalary)}</p>
                     </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Salary Rank</p>
-                      <p className="text-sm font-semibold text-carto-slate">
-                        {crossLocationStats && crossLocationStats.salaryRank > 0
-                          ? `#${crossLocationStats.salaryRank} of ${crossLocationStats.totalLocations}`
-                          : 'N/A'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Viability Rank</p>
-                      <p className="text-sm font-semibold text-carto-slate">
-                        {crossLocationStats && crossLocationStats.viabilityRank > 0
-                          ? `#${crossLocationStats.viabilityRank} of ${crossLocationStats.totalLocations}`
-                          : 'N/A'}
-                      </p>
-                    </div>
-                    <div>
+                    <div className="text-right">
                       <p className="text-xs text-gray-500">vs. National Avg</p>
-                      <p className={`text-sm font-semibold ${crossLocationStats && userSalary >= crossLocationStats.avgSalary ? 'text-emerald-700' : 'text-red-600'}`}>
+                      <p className={`text-lg font-bold ${crossLocationStats && userSalary >= crossLocationStats.avgSalary ? 'text-emerald-700' : 'text-red-600'}`}>
                         {crossLocationStats
                           ? `${userSalary >= crossLocationStats.avgSalary ? '+' : ''}${fmtDollars(userSalary - crossLocationStats.avgSalary)}`
                           : 'N/A'}
                       </p>
+                      <p className="text-xs text-gray-400">{crossLocationStats ? `Avg: ${fmtDollars(crossLocationStats.avgSalary)}` : ''}</p>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Viability metrics for user's job */}
+              {/* Viability metrics — large cards */}
               <div className="grid grid-cols-3 gap-3">
                 <MetricCard
                   label="Viability Score"
@@ -985,41 +1028,116 @@ export default function LocationPage() {
                 />
               </div>
 
-              {/* Cross-location comparison */}
-              <div className="bg-gray-50 rounded-xl p-4">
-                <h3 className="font-semibold text-gray-700 mb-2">
-                  {isStatePage
-                    ? `How ${locationName} Compares Nationally`
-                    : currentStateName
-                      ? `How ${locationName} Compares`
-                      : 'Location Comparison'}
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  <div>
-                    <p className="text-xs text-gray-500">Viability</p>
-                    <p className="text-sm font-semibold text-carto-slate">{viability.label} ({score.toFixed(1)}/10)</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {crossLocationStats && crossLocationStats.viabilityRank > 0
-                        ? `Top ${crossLocationStats.viabilityPercentile}% of locations`
-                        : isStatePage ? 'vs. national average' : 'vs. other locations'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Disposable Income</p>
-                    <p className="text-sm font-semibold text-carto-slate">{fmtDollars(disposableIncome)}/yr</p>
-                    <p className="text-xs text-gray-400 mt-0.5">Year 1</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Salary Percentile</p>
-                    <p className="text-sm font-semibold text-carto-slate">
-                      {crossLocationStats && crossLocationStats.salaryPercentile > 0
-                        ? `Top ${crossLocationStats.salaryPercentile}%`
-                        : 'N/A'}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">For {profile?.userOccupation || 'your occupation'}</p>
-                  </div>
+              {/* Rankings — context-aware: state vs city */}
+              {crossLocationStats && (
+                <div className="bg-white border border-gray-200 rounded-xl p-4">
+                  <h3 className="font-semibold text-carto-slate text-sm mb-3">
+                    {isStatePage
+                      ? `${locationName} — State Rankings`
+                      : `${locationName} — Rankings in ${currentStateName || 'State'}`}
+                  </h3>
+
+                  {/* State page: rank out of 51 states */}
+                  {isStatePage && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Viability Rank</p>
+                        <p className="text-xl font-bold text-carto-slate">
+                          {crossLocationStats.stateViabilityRank > 0
+                            ? `#${crossLocationStats.stateViabilityRank}`
+                            : 'N/A'}
+                        </p>
+                        <p className="text-[11px] text-gray-400">of {crossLocationStats.totalStates} states</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Salary Rank</p>
+                        <p className="text-xl font-bold text-carto-slate">
+                          {crossLocationStats.stateSalaryRank > 0
+                            ? `#${crossLocationStats.stateSalaryRank}`
+                            : 'N/A'}
+                        </p>
+                        <p className="text-[11px] text-gray-400">of {crossLocationStats.totalStates} states</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Disposable Income</p>
+                        <p className="text-lg font-bold text-carto-slate">{fmtDollars(disposableIncome)}</p>
+                        <p className="text-[11px] text-gray-400">Year 1</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Salary Percentile</p>
+                        <p className="text-lg font-bold text-carto-slate">
+                          {crossLocationStats.salaryPercentile > 0
+                            ? `Top ${crossLocationStats.salaryPercentile}%`
+                            : 'N/A'}
+                        </p>
+                        <p className="text-[11px] text-gray-400">All locations</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* City page: rank among cities in the state */}
+                  {!isStatePage && crossLocationStats.totalCitiesInState > 0 && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Viability Rank</p>
+                        <p className="text-xl font-bold text-carto-slate">
+                          {crossLocationStats.cityInStateViabilityRank > 0
+                            ? `#${crossLocationStats.cityInStateViabilityRank}`
+                            : 'N/A'}
+                        </p>
+                        <p className="text-[11px] text-gray-400">of {crossLocationStats.totalCitiesInState} cities in {currentStateName}</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Salary Rank</p>
+                        <p className="text-xl font-bold text-carto-slate">
+                          {crossLocationStats.cityInStateSalaryRank > 0
+                            ? `#${crossLocationStats.cityInStateSalaryRank}`
+                            : 'N/A'}
+                        </p>
+                        <p className="text-[11px] text-gray-400">of {crossLocationStats.totalCitiesInState} cities in {currentStateName}</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Quality of Life</p>
+                        <p className="text-xl font-bold text-carto-slate">
+                          {crossLocationStats.cityInStateQolRank > 0
+                            ? `#${crossLocationStats.cityInStateQolRank}`
+                            : 'N/A'}
+                        </p>
+                        <p className="text-[11px] text-gray-400">of {crossLocationStats.totalCitiesInState} cities in {currentStateName}</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Years to Home</p>
+                        <p className="text-xl font-bold text-carto-slate">
+                          {crossLocationStats.cityInStateYearsRank > 0
+                            ? `#${crossLocationStats.cityInStateYearsRank}`
+                            : 'N/A'}
+                        </p>
+                        <p className="text-[11px] text-gray-400">of {crossLocationStats.totalCitiesInState} cities in {currentStateName}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Disposable income + percentile for city pages */}
+                  {!isStatePage && (
+                    <div className="grid grid-cols-2 gap-3 mt-3">
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Disposable Income</p>
+                        <p className="text-lg font-bold text-carto-slate">{fmtDollars(disposableIncome)}</p>
+                        <p className="text-[11px] text-gray-400">Year 1</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Salary Percentile</p>
+                        <p className="text-lg font-bold text-carto-slate">
+                          {crossLocationStats.salaryPercentile > 0
+                            ? `Top ${crossLocationStats.salaryPercentile}%`
+                            : 'N/A'}
+                        </p>
+                        <p className="text-[11px] text-gray-400">All locations nationally</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
 
               {/* State Heat Map — shows where in the state an occupation is most viable */}
               {isStatePage && heatMapCities.length > 0 && (
