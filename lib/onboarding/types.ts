@@ -276,17 +276,24 @@ export function getAdjustedCOLKey(householdType: HouseholdTypeEnum): keyof impor
  * Get rent type (1br, 2br, 3br) based on household type
  */
 export function getRentType(householdType: HouseholdTypeEnum): '1br' | '2br' | '3br' {
-  if (householdType === HouseholdTypeEnum.OnePerson ||
-      householdType === HouseholdTypeEnum.OneWorkerOneAdult ||
-      householdType === HouseholdTypeEnum.TwoEarners) {
+  // 1 person = 1 bedroom
+  if (householdType === HouseholdTypeEnum.OnePerson) {
     return '1br';
   }
-  
+
+  // 2 people (no kids) = 2 bedrooms
+  if (householdType === HouseholdTypeEnum.OneWorkerOneAdult ||
+      householdType === HouseholdTypeEnum.TwoEarners) {
+    return '2br';
+  }
+
+  // 3 people = 2 bedrooms
   if (householdType === HouseholdTypeEnum.SingleParentOneKid ||
       householdType === HouseholdTypeEnum.FamilyThreeOneWorker ||
       householdType === HouseholdTypeEnum.FamilyThreeTwoWorkers) {
     return '2br';
   }
-  
+
+  // 4+ people = 3 bedrooms
   return '3br';
 }
