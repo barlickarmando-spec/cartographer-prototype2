@@ -650,23 +650,11 @@ export default function LocationPage() {
                   <div className="rounded-xl p-4" style={{ backgroundColor: '#E8F2FB' }}>
                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Projected Total Salary</p>
                     <p className="text-xl font-bold text-carto-slate mt-1">{totalSalary > 0 ? fmtDollars(totalSalary) : 'N/A'}</p>
-                    <div className="mt-1 space-y-0.5">
-                      {profile?.userOccupation && (
-                        <p className="text-xs text-gray-500">{profile.userOccupation}: {fmtDollars(userSalary)}</p>
-                      )}
-                      {partnerSalary > 0 && profile?.partnerOccupation && (
-                        <p className="text-xs text-gray-500">{profile.partnerOccupation}: {fmtDollars(partnerSalary)}</p>
-                      )}
-                      {partnerSalary > 0 && !profile?.partnerOccupation && profile?.usePartnerIncomeDoubling && (
-                        <p className="text-xs text-gray-500">Partner (est.): {fmtDollars(partnerSalary)}</p>
-                      )}
-                    </div>
                   </div>
                   <div className="rounded-xl p-4" style={{ backgroundColor: '#F0F7FF' }}>
                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Cost of Living</p>
-                    <p className="text-xl font-bold text-carto-slate mt-1">{fmtDollars(householdCOL)}</p>
+                    <p className="text-xl font-bold text-carto-slate mt-1">{fmtDollars(householdCOL + householdRentAnnual)}</p>
                     <p className="text-xs text-gray-500 mt-0.5">{householdCOLLabel}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">+ {fmtDollars(householdRentAnnual)}/yr rent ({householdRentLabel})</p>
                   </div>
                   <div className="rounded-xl p-4" style={{ backgroundColor: '#F0F7FF' }}>
                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Median Rent</p>
@@ -677,9 +665,6 @@ export default function LocationPage() {
                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Typical Home Value</p>
                     <p className="text-xl font-bold text-carto-slate mt-1">{fmtDollars(householdHomeValue)}</p>
                     <p className="text-xs text-gray-500 mt-0.5">{fmtNum(targetHomeSqft)} sqft</p>
-                    {plansKids && numKids === 0 && (
-                      <p className="text-xs text-blue-500 mt-0.5">Sized for planned family</p>
-                    )}
                   </div>
                 </div>
               </div>
@@ -694,9 +679,9 @@ export default function LocationPage() {
                     sub={calcResult.yearsToMortgage > 0 ? `Age ${calcResult.ageMortgageAcquired}` : 'May not be viable'}
                   />
                   <MetricCard
-                    label="Affordable Home"
+                    label="Projected Home Size"
                     value={calcResult.projectedSqFt > 0 ? `${fmtNum(Math.round(calcResult.projectedSqFt))} sqft` : 'N/A'}
-                    sub={calcResult.houseTag}
+                    sub={calcResult.projectedSqFt > 0 ? fmtDollars(Math.round(calcResult.projectedSqFt * pricePerSqft)) : undefined}
                   />
                   <MetricCard
                     label="Debt-Free"
