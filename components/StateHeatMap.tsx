@@ -262,36 +262,112 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
   const zoomRatio = defaultVB.w / vb.w;
   const labelSize = Math.max(3, 6 / Math.max(zoomRatio, 1));
 
+  const metricIcons: Record<HeatMapMetric, React.ReactNode> = {
+    'most-recommended': (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+      </svg>
+    ),
+    'financial-stability': (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+    'projected-home-size': (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+      </svg>
+    ),
+    'projected-salary': (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
+      </svg>
+    ),
+    'job-opportunity': (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 00.75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 00-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0112 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 01-.673-.38m0 0A2.18 2.18 0 013 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 013.413-.387m7.5 0V5.25A2.25 2.25 0 0013.5 3h-3a2.25 2.25 0 00-2.25 2.25v.894m7.5 0a48.667 48.667 0 00-7.5 0" />
+      </svg>
+    ),
+    'quality-of-life': (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm-.375 0h.008v.015h-.008V9.75zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75zm-.375 0h.008v.015h-.008V9.75z" />
+      </svg>
+    ),
+  };
+
   const mapContent = (
     <div className={cn('relative', isFullscreen && 'h-full flex flex-col')}>
-      {/* Metric filter buttons */}
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {METRIC_OPTIONS.map(opt => (
-          <button
-            key={opt.value}
-            onClick={() => setMetric(opt.value)}
-            className={cn(
-              'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors',
-              metric === opt.value
-                ? 'bg-[#4A90D9] text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            )}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
+      {/* Centered title */}
+      <h3 className="text-center font-heading text-xl font-bold text-carto-blue mb-4">
+        Viability Across {stateName}
+      </h3>
 
-      {/* SVG Map — full US with focused state zoomed in */}
-      <div
-        className={cn(
-          'relative bg-gray-50 rounded-xl overflow-hidden border border-gray-200 select-none',
-          isFullscreen ? 'flex-1' : '',
-          isPanningRef.current ? 'cursor-grabbing' : 'cursor-grab'
-        )}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={() => { isPanningRef.current = false; setTooltip(null); }}
-      >
+      <div className="flex gap-4">
+        {/* Left sidebar: metric filters + legend */}
+        <div className="flex-shrink-0 w-[170px] space-y-2">
+          {METRIC_OPTIONS.map(opt => {
+            const isActive = metric === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => setMetric(opt.value)}
+                className={cn(
+                  'w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold transition-all text-left',
+                  isActive
+                    ? 'bg-carto-blue text-white shadow-md shadow-carto-blue/25'
+                    : 'bg-carto-blue-sky text-carto-slate hover:bg-carto-blue-pale/60 hover:text-carto-blue border border-carto-blue-pale/40'
+                )}
+              >
+                <span className={cn('flex-shrink-0', isActive ? 'text-white' : 'text-carto-blue')}>
+                  {metricIcons[opt.value]}
+                </span>
+                {opt.label}
+              </button>
+            );
+          })}
+
+          {/* Legend */}
+          <div className="pt-3 mt-2 border-t border-carto-blue-pale/40">
+            <p className="text-xs font-semibold text-carto-steel mb-2 uppercase tracking-wide">Legend</p>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 rounded-full shadow-sm" style={{ background: 'rgb(210, 75, 80)' }} />
+                <span className="text-xs font-medium text-carto-slate">Low</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 rounded-full shadow-sm" style={{ background: 'rgb(250, 220, 70)' }} />
+                <span className="text-xs font-medium text-carto-slate">Medium</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 rounded-full shadow-sm" style={{ background: 'rgb(45, 155, 70)' }} />
+                <span className="text-xs font-medium text-carto-slate">High</span>
+              </div>
+            </div>
+            <div className="mt-3 space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-3.5 h-3.5 border-2 border-gray-800 rounded-sm" />
+                <span className="text-xs font-medium text-carto-slate">City</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-3.5 h-3.5 border border-gray-400 rounded-sm" />
+                <span className="text-xs font-medium text-carto-slate">County</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Map area */}
+        <div className="flex-1 min-w-0">
+          {/* SVG Map — full US with focused state zoomed in */}
+          <div
+            className={cn(
+              'relative bg-gray-50 rounded-xl overflow-hidden border border-gray-200 select-none',
+              isFullscreen ? 'flex-1' : '',
+              isPanningRef.current ? 'cursor-grabbing' : 'cursor-grab'
+            )}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={() => { isPanningRef.current = false; setTooltip(null); }}
+          >
         <svg
           ref={svgRef}
           viewBox={viewBoxStr}
@@ -513,22 +589,9 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
         </div>
       )}
 
-      {/* Legend */}
-      <div className="flex items-center justify-between mt-2 text-[10px] text-gray-400">
-        <div className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded-full" style={{ background: 'rgb(210, 75, 80)' }} />
-          <span>Low</span>
-          <span className="w-3 h-3 rounded-full ml-2" style={{ background: 'rgb(250, 220, 70)' }} />
-          <span>Medium</span>
-          <span className="w-3 h-3 rounded-full ml-2" style={{ background: 'rgb(45, 155, 70)' }} />
-          <span>High</span>
-          <span className="mx-2">|</span>
-          <span className="inline-block w-3 h-3 border-2 border-gray-800 rounded-sm mr-0.5" />
-          <span>City</span>
-          <span className="inline-block w-3 h-3 border border-gray-400 rounded-sm ml-1.5 mr-0.5" />
-          <span>County</span>
+          {/* Map interaction hint */}
+          <p className="text-center text-xs text-carto-steel mt-2">Scroll to zoom · Drag to pan · Click a city</p>
         </div>
-        <span>Scroll to zoom &middot; Drag to pan &middot; Click a city</span>
       </div>
     </div>
   );
@@ -550,9 +613,9 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
 
         <div className="fixed inset-0 z-50 bg-white flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <h2 className="text-xl font-bold text-carto-slate">
-              {stateName} — {METRIC_OPTIONS.find(m => m.value === metric)?.label || 'Heat Map'}
-              {userOccupation && <span className="text-sm font-normal text-gray-500 ml-2">({userOccupation})</span>}
+            <h2 className="text-xl font-bold font-heading text-carto-blue">
+              Viability Across {stateName}
+              {userOccupation && <span className="text-sm font-normal text-carto-steel ml-2">({userOccupation})</span>}
             </h2>
             <button
               onClick={() => { setIsFullscreen(false); setViewBoxState(null); }}

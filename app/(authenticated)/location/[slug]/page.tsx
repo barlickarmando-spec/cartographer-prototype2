@@ -1244,9 +1244,6 @@ export default function LocationPage() {
               {/* State Heat Map — shows where in the state an occupation is most viable */}
               {isStatePage && heatMapCities.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                    Where in {locationName} is {profile?.userOccupation || 'your occupation'} most viable?
-                  </h3>
                   <StateHeatMap
                     stateName={locationName}
                     stateAbbrev={heatMapStateAbbrev}
@@ -1261,9 +1258,6 @@ export default function LocationPage() {
               {/* City page: state heat map showing viability across the state */}
               {!isStatePage && currentStateName && cityPageHeatMapCities.length > 1 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                    Viability across {currentStateName}
-                  </h3>
                   <StateHeatMap
                     stateName={currentStateName}
                     stateAbbrev={heatMapStateAbbrev}
