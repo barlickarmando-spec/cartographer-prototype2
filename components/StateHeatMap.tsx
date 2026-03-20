@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { cn } from '@/lib/utils';
+import { interpolateRatingColor } from '@/lib/color-scale';
 import { resolveCountyCityName } from '@/lib/city-name-aliases';
 import countyPathsRaw from '@/lib/us-county-paths.json';
 import statePathsRaw from '@/lib/us-atlas-state-paths.json';
@@ -73,10 +74,12 @@ function getMetricValue(city: CityHeatData, metric: HeatMapMetric): number {
 }
 
 function getHeatColor(value: number, isCity: boolean): string {
-  const r = value < 0.5 ? 220 : Math.round(220 - (value - 0.5) * 2 * 180);
-  const g = value < 0.5 ? Math.round(60 + value * 2 * 160) : 200;
-  const b = 60;
-  const alpha = isCity ? 0.75 : 0.45;
+  const hex = interpolateRatingColor(value);
+  // Convert hex to rgba for alpha support
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const alpha = isCity ? 0.85 : 0.55;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
@@ -513,11 +516,11 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
       {/* Legend */}
       <div className="flex items-center justify-between mt-2 text-[10px] text-gray-400">
         <div className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded-full" style={{ background: 'rgb(220, 60, 60)' }} />
+          <span className="w-3 h-3 rounded-full" style={{ background: 'rgb(210, 75, 80)' }} />
           <span>Low</span>
-          <span className="w-3 h-3 rounded-full ml-2" style={{ background: 'rgb(220, 220, 60)' }} />
+          <span className="w-3 h-3 rounded-full ml-2" style={{ background: 'rgb(250, 220, 70)' }} />
           <span>Medium</span>
-          <span className="w-3 h-3 rounded-full ml-2" style={{ background: 'rgb(40, 200, 60)' }} />
+          <span className="w-3 h-3 rounded-full ml-2" style={{ background: 'rgb(45, 155, 70)' }} />
           <span>High</span>
           <span className="mx-2">|</span>
           <span className="inline-block w-3 h-3 border-2 border-gray-800 rounded-sm mr-0.5" />
