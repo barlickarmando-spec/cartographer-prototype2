@@ -391,6 +391,54 @@ export default function LocationPage() {
     return [currentCityData, ...mapped];
   }, [calcResult, allSuggestions, locationName, profile]);
 
+  // State-level heat data for non-city counties (fallback)
+  const stateHeatData = useMemo<CityHeatData | null>(() => {
+    if (!calcResult || !profile) return null;
+    // For state pages, use state calcResult directly
+    if (isStatePage) {
+      const sal = getSalary(locationName, profile.userOccupation, profile.userSalary);
+      return {
+        name: locationName,
+        displayName: locationName,
+        score: calcResult.numericScore,
+        salary: sal,
+        projectedSqFt: calcResult.projectedSqFt,
+        disposableIncome: calcResult.yearByYear[0]?.disposableIncome || 0,
+        yearsToMortgage: calcResult.yearsToMortgage >= 0 ? calcResult.yearsToMortgage : 99,
+        qolScore: 0,
+        minAllocation: calcResult.minimumAllocationRequired,
+      };
+    }
+    // For city pages, compute state data
+    const sName = getStateNameFromLocation(locationName);
+    if (!sName) return null;
+    try {
+      const stateCalc = calculateAutoApproach(profile, sName, 30);
+      if (!stateCalc) return null;
+      const sal = getSalary(sName, profile.userOccupation, profile.userSalary);
+      return {
+        name: sName,
+        displayName: sName,
+        score: stateCalc.numericScore,
+        salary: sal,
+        projectedSqFt: stateCalc.projectedSqFt,
+        disposableIncome: stateCalc.yearByYear[0]?.disposableIncome || 0,
+        yearsToMortgage: stateCalc.yearsToMortgage >= 0 ? stateCalc.yearsToMortgage : 99,
+        qolScore: 0,
+        minAllocation: stateCalc.minimumAllocationRequired,
+      };
+    } catch {
+      return null;
+    }
+  }, [calcResult, profile, locationName, isStatePage]);
+
+  // State abbreviation for heat map county filtering
+  const heatMapStateAbbrev = useMemo(() => {
+    if (isStatePage) return STATE_CODES[locationName] || STATE_TO_ABBREV[locationName] || '';
+    const sName = getStateNameFromLocation(locationName);
+    return sName ? (STATE_TO_ABBREV[sName] || '') : '';
+  }, [locationName, isStatePage]);
+
   // Cross-location comparison: how does this occupation perform here vs other locations?
   const crossLocationStats = useMemo(() => {
     if (!profile?.userOccupation || !calcResult) return null;
@@ -1201,7 +1249,9 @@ export default function LocationPage() {
                   </h3>
                   <StateHeatMap
                     stateName={locationName}
+                    stateAbbrev={heatMapStateAbbrev}
                     cities={heatMapCities}
+                    stateData={stateHeatData}
                     userOccupation={profile?.userOccupation}
                     onCityClick={(name) => router.push(`/location/${encodeSlug(name)}`)}
                   />
@@ -1216,7 +1266,9 @@ export default function LocationPage() {
                   </h3>
                   <StateHeatMap
                     stateName={currentStateName}
+                    stateAbbrev={heatMapStateAbbrev}
                     cities={cityPageHeatMapCities}
+                    stateData={stateHeatData}
                     userOccupation={profile?.userOccupation}
                     onCityClick={(name) => router.push(`/location/${encodeSlug(name)}`)}
                   />
