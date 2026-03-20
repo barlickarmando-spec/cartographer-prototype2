@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { CITY_COORDINATES } from '@/lib/us-city-coordinates';
 import { cn } from '@/lib/utils';
 import countyPathsRaw from '@/lib/us-county-paths.json';
@@ -23,7 +23,7 @@ interface StateHeatMapProps {
   stateName: string;
   stateAbbrev: string;
   cities: CityHeatData[];
-  stateData?: CityHeatData | null; // state-level fallback data for non-city counties
+  stateData?: CityHeatData | null;
   userOccupation?: string;
   onCityClick?: (cityName: string) => void;
 }
@@ -69,7 +69,6 @@ function getMetricValue(city: CityHeatData, metric: HeatMapMetric): number {
 }
 
 function getHeatColor(value: number, isCity: boolean): string {
-  // Smooth gradient: red -> yellow -> green
   const r = value < 0.5 ? 220 : Math.round(220 - (value - 0.5) * 2 * 180);
   const g = value < 0.5 ? Math.round(60 + value * 2 * 160) : 200;
   const b = 60;
@@ -87,7 +86,7 @@ function getHeatColorSolid(value: number): string {
 function fmtNum(n: number): string { return Math.round(n).toLocaleString(); }
 function fmtDollars(n: number): string { return '$' + fmtNum(n); }
 
-// Parse SVG path d attribute to compute bounding box
+// Parse SVG path to compute bounding box
 function pathBBox(d: string): { minX: number; minY: number; maxX: number; maxY: number } {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   const nums = d.match(/-?\d+(?:\.\d+)?/g);
@@ -103,18 +102,23 @@ function pathBBox(d: string): { minX: number; minY: number; maxX: number; maxY: 
   return { minX, minY, maxX, maxY };
 }
 
+// Tooltip data for hover
+interface TooltipState {
+  data: CityHeatData;
+  isCity: boolean;
+  position: { x: number; y: number };
+}
+
 export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData, userOccupation, onCityClick }: StateHeatMapProps) {
   const [metric, setMetric] = useState<HeatMapMetric>('most-recommended');
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [hoveredCounty, setHoveredCounty] = useState<{ data: CityHeatData; isCity: boolean; countyFips: string } | null>(null);
-  const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
 
-  // Zoom/pan state
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
-  const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
-  const svgContainerRef = useRef<HTMLDivElement>(null);
+  // ViewBox-based zoom/pan (like USHeatMap - much more stable than CSS transforms)
+  const svgRef = useRef<SVGSVGElement>(null);
+  const isPanningRef = useRef(false);
+  const panStartRef = useRef({ x: 0, y: 0, vbX: 0, vbY: 0 });
+  const [viewBoxState, setViewBoxState] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
 
   // Filter county paths for this state
   const stateCounties = useMemo(() => {
@@ -131,9 +135,9 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
     return map;
   }, [cities]);
 
-  // Compute bounding box of all state counties
-  const viewBox = useMemo(() => {
-    if (stateCounties.length === 0) return '0 0 960 600';
+  // Compute default bounding box of all state counties
+  const defaultVB = useMemo(() => {
+    if (stateCounties.length === 0) return { x: 0, y: 0, w: 960, h: 600 };
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const county of stateCounties) {
       const bb = pathBBox(county.d);
@@ -142,100 +146,120 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
       if (bb.maxX > maxX) maxX = bb.maxX;
       if (bb.maxY > maxY) maxY = bb.maxY;
     }
-    const pad = Math.max((maxX - minX), (maxY - minY)) * 0.05;
-    return `${minX - pad} ${minY - pad} ${maxX - minX + pad * 2} ${maxY - minY + pad * 2}`;
+    const w = maxX - minX;
+    const h = maxY - minY;
+    const pad = Math.max(w, h) * 0.05;
+    // Maintain aspect ratio (target ~3:2)
+    const targetAspect = 3 / 2;
+    let vw = w + pad * 2;
+    let vh = h + pad * 2;
+    const currentAspect = vw / vh;
+    if (currentAspect > targetAspect) {
+      vh = vw / targetAspect;
+    } else {
+      vw = vh * targetAspect;
+    }
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    return { x: cx - vw / 2, y: cy - vh / 2, w: vw, h: vh };
   }, [stateCounties]);
 
-  // Map city coordinates to Albers projection positions (for labels)
-  // The county paths are already in Albers projection (960x600), so we need city positions in same space
+  const vb = viewBoxState || defaultVB;
+  const viewBoxStr = `${vb.x} ${vb.y} ${vb.w} ${vb.h}`;
+
+  // City label positions (centroid of matching county)
   const cityLabelPositions = useMemo(() => {
     const positions: { city: CityHeatData; x: number; y: number }[] = [];
-    // For each city, find its county and compute centroid from the county path
     for (const city of cities) {
       const baseName = city.name.split(',')[0].trim();
       const countyMatch = stateCounties.find(c => c.cityName === baseName);
       if (countyMatch) {
         const bb = pathBBox(countyMatch.d);
-        positions.push({
-          city,
-          x: (bb.minX + bb.maxX) / 2,
-          y: (bb.minY + bb.maxY) / 2,
-        });
+        positions.push({ city, x: (bb.minX + bb.maxX) / 2, y: (bb.minY + bb.maxY) / 2 });
       } else {
-        // Fallback: use raw coordinates projected roughly
         const coords = CITY_COORDINATES[baseName];
         if (coords) {
-          // rough mercator-like projection - won't be perfect but ok as fallback
-          positions.push({
-            city,
-            x: (coords[0] + 130) * 7,
-            y: (52 - coords[1]) * 8.5,
-          });
+          positions.push({ city, x: (coords[0] + 130) * 7, y: (52 - coords[1]) * 8.5 });
         }
       }
     }
     return positions;
   }, [cities, stateCounties]);
 
-  // Zoom handlers
+  // Zoom via viewBox (scroll zooms into/out of cursor position)
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.15 : 0.15;
-    setZoom(z => Math.max(0.5, Math.min(8, z + delta * z)));
-  }, []);
+    e.stopPropagation();
+    const svg = svgRef.current;
+    if (!svg) return;
 
+    const rect = svg.getBoundingClientRect();
+    // Fraction of mouse within the SVG element
+    const fx = (e.clientX - rect.left) / rect.width;
+    const fy = (e.clientY - rect.top) / rect.height;
+
+    // Zoom factor - gentler sensitivity
+    const direction = e.deltaY > 0 ? 1 : -1;
+    const factor = 1 + direction * 0.12;
+
+    setViewBoxState(prev => {
+      const cur = prev || defaultVB;
+      const newW = Math.max(cur.w * factor, defaultVB.w * 0.05); // min zoom: 20x
+      const newH = Math.max(cur.h * factor, defaultVB.h * 0.05);
+      // Clamp: don't zoom out beyond default
+      if (newW >= defaultVB.w && newH >= defaultVB.h) {
+        return null; // reset to default
+      }
+      // Keep the point under the cursor fixed
+      const newX = cur.x + (cur.w - newW) * fx;
+      const newY = cur.y + (cur.h - newH) * fy;
+      return { x: newX, y: newY, w: newW, h: newH };
+    });
+  }, [defaultVB]);
+
+  // Pan via viewBox
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
-    setIsPanning(true);
-    panStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
-  }, [pan]);
+    isPanningRef.current = true;
+    panStartRef.current = { x: e.clientX, y: e.clientY, vbX: vb.x, vbY: vb.y };
+  }, [vb]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (isPanning) {
-      const dx = e.clientX - panStart.current.x;
-      const dy = e.clientY - panStart.current.y;
-      setPan({ x: panStart.current.panX + dx, y: panStart.current.panY + dy });
+    // Update tooltip position
+    if (tooltip) {
+      setTooltip(prev => prev ? { ...prev, position: { x: e.clientX, y: e.clientY } } : null);
     }
-  }, [isPanning]);
+
+    if (!isPanningRef.current) return;
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    // Convert pixel drag to viewBox units
+    const dx = (e.clientX - panStartRef.current.x) / rect.width * vb.w;
+    const dy = (e.clientY - panStartRef.current.y) / rect.height * vb.h;
+    setViewBoxState({
+      x: panStartRef.current.vbX - dx,
+      y: panStartRef.current.vbY - dy,
+      w: vb.w,
+      h: vb.h,
+    });
+  }, [vb, tooltip]);
 
   const handleMouseUp = useCallback(() => {
-    setIsPanning(false);
+    isPanningRef.current = false;
   }, []);
 
-  // Reset zoom
   const resetView = useCallback(() => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
+    setViewBoxState(null);
   }, []);
 
-  // Handle county hover
-  const handleCountyHover = useCallback((e: React.MouseEvent, county: CountyPath) => {
-    if (isPanning) return;
-    const rect = svgContainerRef.current?.getBoundingClientRect();
-    if (rect) {
-      setHoverPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-    }
+  // County hover
+  const handleCountyEnter = useCallback((e: React.MouseEvent, county: CountyPath) => {
     const cityData = county.cityName ? cityDataMap[county.cityName] : null;
-    if (cityData) {
-      setHoveredCounty({ data: cityData, isCity: true, countyFips: county.fips });
-    } else if (stateData) {
-      setHoveredCounty({ data: stateData, isCity: false, countyFips: county.fips });
-    }
-  }, [cityDataMap, stateData, isPanning]);
-
-  const handleCountyMouseMove = useCallback((e: React.MouseEvent) => {
-    if (isPanning) return;
-    const rect = svgContainerRef.current?.getBoundingClientRect();
-    if (rect) {
-      setHoverPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-    }
-  }, [isPanning]);
-
-  // Reset zoom/pan when switching fullscreen
-  useEffect(() => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-  }, [isFullscreen]);
+    const data = cityData || stateData;
+    if (!data) return;
+    setTooltip({ data, isCity: !!cityData, position: { x: e.clientX, y: e.clientY } });
+  }, [cityDataMap, stateData]);
 
   if (stateCounties.length === 0) {
     return (
@@ -244,6 +268,11 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
       </div>
     );
   }
+
+  // Font size scales inversely with zoom so labels stay readable
+  const zoomRatio = defaultVB.w / vb.w; // >1 when zoomed in
+  const labelSize = Math.max(3, 6 / Math.max(zoomRatio, 1));
+  const dotR = Math.max(1.5, 3 / Math.max(zoomRatio, 1));
 
   const mapContent = (
     <div className={cn('relative', isFullscreen && 'h-full flex flex-col')}>
@@ -267,113 +296,125 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
 
       {/* SVG County Map */}
       <div
-        ref={svgContainerRef}
         className={cn(
           'relative bg-gray-50 rounded-xl overflow-hidden border border-gray-200 select-none',
           isFullscreen ? 'flex-1' : '',
-          isPanning ? 'cursor-grabbing' : 'cursor-grab'
+          isPanningRef.current ? 'cursor-grabbing' : 'cursor-grab'
         )}
-        onWheel={handleWheel}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        onMouseLeave={() => { setIsPanning(false); setHoveredCounty(null); }}
+        onMouseLeave={() => { isPanningRef.current = false; setTooltip(null); }}
       >
         <svg
-          viewBox={viewBox}
-          className="w-full"
+          ref={svgRef}
+          viewBox={viewBoxStr}
+          className="w-full transition-[viewBox] duration-100 ease-out"
           style={{ minHeight: isFullscreen ? '60vh' : '320px' }}
+          onWheel={handleWheel}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
         >
-          <g transform={`translate(${pan.x / (isFullscreen ? 1 : 2)}, ${pan.y / (isFullscreen ? 1 : 2)}) scale(${zoom})`}
-             style={{ transformOrigin: 'center center' }}>
-            {/* County shapes */}
-            {stateCounties.map(county => {
-              const cityData = county.cityName ? cityDataMap[county.cityName] : null;
-              const dataForColor = cityData || stateData;
-              const val = dataForColor ? getMetricValue(dataForColor, metric) : 0.3;
-              const isCity = !!cityData;
-              const fillColor = dataForColor ? getHeatColor(val, isCity) : 'rgba(200, 200, 200, 0.3)';
-              const isHovered = hoveredCounty?.countyFips === county.fips;
+          {/* County shapes */}
+          {stateCounties.map(county => {
+            const cityData = county.cityName ? cityDataMap[county.cityName] : null;
+            const dataForColor = cityData || stateData;
+            const val = dataForColor ? getMetricValue(dataForColor, metric) : 0.3;
+            const isCity = !!cityData;
+            const fillColor = dataForColor ? getHeatColor(val, isCity) : 'rgba(200, 200, 200, 0.3)';
+            const strokeW = isCity ? Math.max(0.8, 1.2 / Math.max(zoomRatio, 1)) : Math.max(0.2, 0.5 / Math.max(zoomRatio, 1));
 
+            return (
+              <path
+                key={county.fips}
+                d={county.d}
+                fill={fillColor}
+                stroke={isCity ? '#555' : '#999'}
+                strokeWidth={strokeW}
+                onMouseEnter={(e) => handleCountyEnter(e, county)}
+                onMouseLeave={() => setTooltip(null)}
+                onClick={() => {
+                  if (cityData && onCityClick) {
+                    onCityClick(cityData.displayName);
+                  }
+                }}
+              />
+            );
+          })}
+
+          {/* City county outlines (thicker border to emphasize) */}
+          {stateCounties
+            .filter(c => c.cityName && cityDataMap[c.cityName])
+            .map(county => {
+              const outlineW = Math.max(1, 2 / Math.max(zoomRatio, 1));
               return (
-                <path
-                  key={county.fips}
-                  d={county.d}
-                  fill={fillColor}
-                  stroke={isCity ? '#555' : '#999'}
-                  strokeWidth={isCity ? 1.2 : 0.5}
-                  opacity={isHovered ? 1 : undefined}
-                  className="transition-opacity duration-100"
-                  style={isHovered ? { filter: 'brightness(1.15)' } : undefined}
-                  onMouseEnter={(e) => handleCountyHover(e, county)}
-                  onMouseMove={handleCountyMouseMove}
-                  onMouseLeave={() => setHoveredCounty(null)}
-                  onClick={() => {
-                    if (cityData && onCityClick) {
-                      onCityClick(cityData.displayName);
-                    }
-                  }}
-                />
-              );
-            })}
-
-            {/* City county outlines (thicker border to emphasize) */}
-            {stateCounties
-              .filter(c => c.cityName && cityDataMap[c.cityName])
-              .map(county => (
                 <path
                   key={county.fips + '-outline'}
                   d={county.d}
                   fill="none"
                   stroke="#333"
-                  strokeWidth={2}
+                  strokeWidth={outlineW}
                   pointerEvents="none"
                 />
-              ))
-            }
-
-            {/* City labels */}
-            {cityLabelPositions.map(({ city, x, y }) => {
-              const val = getMetricValue(city, metric);
-              const textSize = zoom > 2 ? 4 : zoom > 1.5 ? 5 : 6;
-              const dotR = zoom > 2 ? 2 : 3;
-              return (
-                <g key={city.name + '-label'} pointerEvents="none">
-                  <circle
-                    cx={x}
-                    cy={y}
-                    r={dotR}
-                    fill={getHeatColorSolid(val)}
-                    stroke="white"
-                    strokeWidth={1.5}
-                  />
-                  <text
-                    x={x}
-                    y={y - dotR - 3}
-                    textAnchor="middle"
-                    fill="#1e293b"
-                    fontSize={textSize}
-                    fontWeight={700}
-                    style={{ textShadow: '0 0 3px white, 0 0 3px white, 0 0 3px white' }}
-                  >
-                    {city.name.split(',')[0].trim()}
-                  </text>
-                </g>
               );
-            })}
-          </g>
+            })
+          }
+
+          {/* City labels */}
+          {cityLabelPositions.map(({ city, x, y }) => {
+            const val = getMetricValue(city, metric);
+            return (
+              <g key={city.name + '-label'} pointerEvents="none">
+                <circle
+                  cx={x} cy={y} r={dotR}
+                  fill={getHeatColorSolid(val)}
+                  stroke="white"
+                  strokeWidth={dotR * 0.5}
+                />
+                <text
+                  x={x} y={y - dotR - labelSize * 0.4}
+                  textAnchor="middle"
+                  fill="#1e293b"
+                  fontSize={labelSize}
+                  fontWeight={700}
+                  style={{ textShadow: '0 0 3px white, 0 0 3px white, 0 0 3px white' }}
+                >
+                  {city.name.split(',')[0].trim()}
+                </text>
+              </g>
+            );
+          })}
         </svg>
 
         {/* Zoom controls */}
         <div className="absolute bottom-3 right-3 flex flex-col gap-1">
           <button
-            onClick={() => setZoom(z => Math.min(8, z * 1.3))}
+            onClick={() => {
+              setViewBoxState(prev => {
+                const cur = prev || defaultVB;
+                const factor = 0.75;
+                const newW = Math.max(cur.w * factor, defaultVB.w * 0.05);
+                const newH = Math.max(cur.h * factor, defaultVB.h * 0.05);
+                const cx = cur.x + cur.w / 2;
+                const cy = cur.y + cur.h / 2;
+                return { x: cx - newW / 2, y: cy - newH / 2, w: newW, h: newH };
+              });
+            }}
             className="w-7 h-7 bg-white border border-gray-300 rounded-lg flex items-center justify-center text-gray-600 hover:bg-gray-50 text-sm font-bold shadow-sm"
           >
             +
           </button>
           <button
-            onClick={() => setZoom(z => Math.max(0.5, z / 1.3))}
+            onClick={() => {
+              setViewBoxState(prev => {
+                if (!prev) return null;
+                const factor = 1.35;
+                const newW = prev.w * factor;
+                const newH = prev.h * factor;
+                if (newW >= defaultVB.w) return null;
+                const cx = prev.x + prev.w / 2;
+                const cy = prev.y + prev.h / 2;
+                return { x: cx - newW / 2, y: cy - newH / 2, w: newW, h: newH };
+              });
+            }}
             className="w-7 h-7 bg-white border border-gray-300 rounded-lg flex items-center justify-center text-gray-600 hover:bg-gray-50 text-sm font-bold shadow-sm"
           >
             -
@@ -388,49 +429,65 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
             </svg>
           </button>
         </div>
-
-        {/* Hover tooltip */}
-        {hoveredCounty && (
-          <div
-            className="absolute z-30 bg-white border border-gray-200 rounded-xl shadow-lg p-3 pointer-events-none"
-            style={{
-              left: Math.min(hoverPos.x + 12, (isFullscreen ? window.innerWidth - 280 : 320)),
-              top: Math.max(hoverPos.y - 10, 10),
-              minWidth: 210,
-            }}
-          >
-            <p className="font-semibold text-carto-slate text-sm">
-              {hoveredCounty.isCity ? hoveredCounty.data.name : stateName}
-            </p>
-            {!hoveredCounty.isCity && (
-              <p className="text-[10px] text-gray-400 mb-1">State average</p>
-            )}
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-1.5 text-xs">
-              <span className="text-gray-500">Viability</span>
-              <span className="font-medium text-right">{hoveredCounty.data.score.toFixed(1)}/10</span>
-              <span className="text-gray-500">Salary</span>
-              <span className="font-medium text-right">{fmtDollars(hoveredCounty.data.salary)}</span>
-              <span className="text-gray-500">DI</span>
-              <span className="font-medium text-right">{fmtDollars(hoveredCounty.data.disposableIncome)}</span>
-              <span className="text-gray-500">Home Size</span>
-              <span className="font-medium text-right">{fmtNum(hoveredCounty.data.projectedSqFt)} sqft</span>
-              <span className="text-gray-500">Years to Home</span>
-              <span className="font-medium text-right">
-                {hoveredCounty.data.yearsToMortgage > 0 && hoveredCounty.data.yearsToMortgage < 99
-                  ? `${hoveredCounty.data.yearsToMortgage} yrs` : 'N/A'}
-              </span>
-              {hoveredCounty.data.qolScore > 0 && (
-                <>
-                  <span className="text-gray-500">QoL</span>
-                  <span className="font-medium text-right">{hoveredCounty.data.qolScore.toFixed(0)}</span>
-                </>
-              )}
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Legend + instructions */}
+      {/* Tooltip - fixed position, matching USHeatMap/HeatMapTooltip style */}
+      {tooltip && (
+        <div
+          className="fixed z-50 pointer-events-none shadow-2xl min-w-[340px] bg-[#4A90D9]"
+          style={{
+            left: tooltip.position.x + 16,
+            top: tooltip.position.y - 12,
+            transform: tooltip.position.x > (typeof window !== 'undefined' ? window.innerWidth : 1200) - 380 ? 'translateX(-110%)' : undefined,
+          }}
+        >
+          <div className="px-7 py-6">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/30">
+              <p className="font-bold text-white text-lg">
+                {tooltip.isCity ? tooltip.data.name : stateName}
+              </p>
+              <span className="text-base font-bold px-3 py-1 bg-white/20 text-white">
+                {tooltip.data.score.toFixed(1)}/10
+              </span>
+            </div>
+
+            <div className="space-y-3 text-base">
+              <div className="flex justify-between gap-8">
+                <span className="text-white/80">Projected Salary</span>
+                <span className="font-semibold text-white">{fmtDollars(tooltip.data.salary)}</span>
+              </div>
+              <div className="flex justify-between gap-8">
+                <span className="text-white/80">Disposable Income</span>
+                <span className="font-semibold text-white">{fmtDollars(tooltip.data.disposableIncome)}</span>
+              </div>
+              <div className="flex justify-between gap-8">
+                <span className="text-white/80">Affordable Home Size</span>
+                <span className="font-semibold text-white">{fmtNum(tooltip.data.projectedSqFt)} sqft</span>
+              </div>
+              <div className="flex justify-between gap-8">
+                <span className="text-white/80">Time to Own</span>
+                <span className="font-semibold text-white">
+                  {tooltip.data.yearsToMortgage > 0 && tooltip.data.yearsToMortgage < 99
+                    ? `${tooltip.data.yearsToMortgage} years` : 'N/A'}
+                </span>
+              </div>
+            </div>
+
+            {tooltip.data.qolScore > 0 && (
+              <div className="flex justify-between gap-8 mt-3 pt-3 border-t border-white/30">
+                <span className="text-white/80">Quality of Life</span>
+                <span className="font-semibold text-white">{tooltip.data.qolScore.toFixed(0)}/100</span>
+              </div>
+            )}
+
+            {!tooltip.isCity && (
+              <p className="text-base text-white/90 mt-3 pt-3 border-t border-white/30 font-medium">State average</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Legend */}
       <div className="flex items-center justify-between mt-2 text-[10px] text-gray-400">
         <div className="flex items-center gap-1">
           <span className="w-3 h-3 rounded-full" style={{ background: 'rgb(220, 60, 60)' }} />
@@ -450,7 +507,6 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
     </div>
   );
 
-  // Fullscreen modal
   if (isFullscreen) {
     return (
       <>
@@ -473,7 +529,7 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
               {userOccupation && <span className="text-sm font-normal text-gray-500 ml-2">({userOccupation})</span>}
             </h2>
             <button
-              onClick={() => setIsFullscreen(false)}
+              onClick={() => { setIsFullscreen(false); setViewBoxState(null); }}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
