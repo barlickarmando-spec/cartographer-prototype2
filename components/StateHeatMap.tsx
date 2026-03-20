@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { CITY_COORDINATES } from '@/lib/us-city-coordinates';
 import { cn } from '@/lib/utils';
+import { resolveCountyCityName } from '@/lib/city-name-aliases';
 import countyPathsRaw from '@/lib/us-county-paths.json';
 
 export type HeatMapMetric = 'most-recommended' | 'financial-stability' | 'projected-home-size' | 'projected-salary' | 'job-opportunity' | 'quality-of-life';
@@ -172,7 +173,7 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
     const positions: { city: CityHeatData; x: number; y: number }[] = [];
     for (const city of cities) {
       const baseName = city.name.split(',')[0].trim();
-      const countyMatch = stateCounties.find(c => c.cityName === baseName);
+      const countyMatch = stateCounties.find(c => resolveCountyCityName(c.cityName) === baseName);
       if (countyMatch) {
         const bb = pathBBox(countyMatch.d);
         positions.push({ city, x: (bb.minX + bb.maxX) / 2, y: (bb.minY + bb.maxY) / 2 });
@@ -255,7 +256,8 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
 
   // County hover
   const handleCountyEnter = useCallback((e: React.MouseEvent, county: CountyPath) => {
-    const cityData = county.cityName ? cityDataMap[county.cityName] : null;
+    const resolvedName = county.cityName ? resolveCountyCityName(county.cityName) : '';
+    const cityData = resolvedName ? cityDataMap[resolvedName] : null;
     const data = cityData || stateData;
     if (!data) return;
     setTooltip({ data, isCity: !!cityData, position: { x: e.clientX, y: e.clientY } });
@@ -315,7 +317,8 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
         >
           {/* County shapes */}
           {stateCounties.map(county => {
-            const cityData = county.cityName ? cityDataMap[county.cityName] : null;
+            const resolvedName = county.cityName ? resolveCountyCityName(county.cityName) : '';
+            const cityData = resolvedName ? cityDataMap[resolvedName] : null;
             const dataForColor = cityData || stateData;
             const val = dataForColor ? getMetricValue(dataForColor, metric) : 0.3;
             const isCity = !!cityData;
@@ -342,7 +345,7 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
 
           {/* City county outlines (thicker border to emphasize) */}
           {stateCounties
-            .filter(c => c.cityName && cityDataMap[c.cityName])
+            .filter(c => c.cityName && cityDataMap[resolveCountyCityName(c.cityName)])
             .map(county => {
               const outlineW = Math.max(1, 2 / Math.max(zoomRatio, 1));
               return (
