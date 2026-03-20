@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useMemo, useCallback, useRef } from 'react';
-import { CITY_COORDINATES } from '@/lib/us-city-coordinates';
 import { cn } from '@/lib/utils';
 import { resolveCountyCityName } from '@/lib/city-name-aliases';
 import countyPathsRaw from '@/lib/us-county-paths.json';
+import statePathsRaw from '@/lib/us-atlas-state-paths.json';
+import nationPathRaw from '@/lib/us-nation-path.json';
 
 export type HeatMapMetric = 'most-recommended' | 'financial-stability' | 'projected-home-size' | 'projected-salary' | 'job-opportunity' | 'quality-of-life';
 
@@ -37,6 +38,8 @@ interface CountyPath {
 }
 
 const countyPaths = countyPathsRaw as CountyPath[];
+const statePaths = statePathsRaw as { fips: string; name: string; d: string }[];
+const nationPath = nationPathRaw as { d: string };
 
 const METRIC_OPTIONS: { value: HeatMapMetric; label: string }[] = [
   { value: 'most-recommended', label: 'Most Recommended' },
@@ -77,13 +80,6 @@ function getHeatColor(value: number, isCity: boolean): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function getHeatColorSolid(value: number): string {
-  const r = value < 0.5 ? 220 : Math.round(220 - (value - 0.5) * 2 * 180);
-  const g = value < 0.5 ? Math.round(60 + value * 2 * 160) : 200;
-  const b = 60;
-  return `rgb(${r}, ${g}, ${b})`;
-}
-
 function fmtNum(n: number): string { return Math.round(n).toLocaleString(); }
 function fmtDollars(n: number): string { return '$' + fmtNum(n); }
 
@@ -115,13 +111,13 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
 
-  // ViewBox-based zoom/pan (like USHeatMap - much more stable than CSS transforms)
+  // ViewBox-based zoom/pan
   const svgRef = useRef<SVGSVGElement>(null);
   const isPanningRef = useRef(false);
   const panStartRef = useRef({ x: 0, y: 0, vbX: 0, vbY: 0 });
   const [viewBoxState, setViewBoxState] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
 
-  // Filter county paths for this state
+  // All counties for the focused state
   const stateCounties = useMemo(() => {
     return countyPaths.filter(c => c.stateAbbrev === stateAbbrev);
   }, [stateAbbrev]);
@@ -136,7 +132,7 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
     return map;
   }, [cities]);
 
-  // Compute default bounding box of all state counties
+  // Compute zoomed-in bounding box from the focused state's counties
   const defaultVB = useMemo(() => {
     if (stateCounties.length === 0) return { x: 0, y: 0, w: 960, h: 600 };
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -149,8 +145,7 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
     }
     const w = maxX - minX;
     const h = maxY - minY;
-    const pad = Math.max(w, h) * 0.05;
-    // Maintain aspect ratio (target ~3:2)
+    const pad = Math.max(w, h) * 0.15; // extra padding to show surrounding context
     const targetAspect = 3 / 2;
     let vw = w + pad * 2;
     let vh = h + pad * 2;
@@ -177,17 +172,12 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
       if (countyMatch) {
         const bb = pathBBox(countyMatch.d);
         positions.push({ city, x: (bb.minX + bb.maxX) / 2, y: (bb.minY + bb.maxY) / 2 });
-      } else {
-        const coords = CITY_COORDINATES[baseName];
-        if (coords) {
-          positions.push({ city, x: (coords[0] + 130) * 7, y: (52 - coords[1]) * 8.5 });
-        }
       }
     }
     return positions;
   }, [cities, stateCounties]);
 
-  // Zoom via viewBox (scroll zooms into/out of cursor position)
+  // Zoom via viewBox
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -195,23 +185,19 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
     if (!svg) return;
 
     const rect = svg.getBoundingClientRect();
-    // Fraction of mouse within the SVG element
     const fx = (e.clientX - rect.left) / rect.width;
     const fy = (e.clientY - rect.top) / rect.height;
 
-    // Zoom factor - gentler sensitivity
     const direction = e.deltaY > 0 ? 1 : -1;
     const factor = 1 + direction * 0.12;
 
     setViewBoxState(prev => {
       const cur = prev || defaultVB;
-      const newW = Math.max(cur.w * factor, defaultVB.w * 0.05); // min zoom: 20x
+      const newW = Math.max(cur.w * factor, defaultVB.w * 0.05);
       const newH = Math.max(cur.h * factor, defaultVB.h * 0.05);
-      // Clamp: don't zoom out beyond default
       if (newW >= defaultVB.w && newH >= defaultVB.h) {
-        return null; // reset to default
+        return null;
       }
-      // Keep the point under the cursor fixed
       const newX = cur.x + (cur.w - newW) * fx;
       const newY = cur.y + (cur.h - newH) * fy;
       return { x: newX, y: newY, w: newW, h: newH };
@@ -226,7 +212,6 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
   }, [vb]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    // Update tooltip position
     if (tooltip) {
       setTooltip(prev => prev ? { ...prev, position: { x: e.clientX, y: e.clientY } } : null);
     }
@@ -235,7 +220,6 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
     const svg = svgRef.current;
     if (!svg) return;
     const rect = svg.getBoundingClientRect();
-    // Convert pixel drag to viewBox units
     const dx = (e.clientX - panStartRef.current.x) / rect.width * vb.w;
     const dy = (e.clientY - panStartRef.current.y) / rect.height * vb.h;
     setViewBoxState({
@@ -272,9 +256,8 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
   }
 
   // Font size scales inversely with zoom so labels stay readable
-  const zoomRatio = defaultVB.w / vb.w; // >1 when zoomed in
+  const zoomRatio = defaultVB.w / vb.w;
   const labelSize = Math.max(3, 6 / Math.max(zoomRatio, 1));
-  const dotR = Math.max(1.5, 3 / Math.max(zoomRatio, 1));
 
   const mapContent = (
     <div className={cn('relative', isFullscreen && 'h-full flex flex-col')}>
@@ -296,7 +279,7 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
         ))}
       </div>
 
-      {/* SVG County Map */}
+      {/* SVG Map — full US with focused state zoomed in */}
       <div
         className={cn(
           'relative bg-gray-50 rounded-xl overflow-hidden border border-gray-200 select-none',
@@ -315,7 +298,27 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
         >
-          {/* County shapes */}
+          <defs>
+            <filter id="blur-bg">
+              <feGaussianBlur stdDeviation="3" />
+            </filter>
+          </defs>
+
+          {/* Background: all non-focused states — blurred and dimmed */}
+          <g filter="url(#blur-bg)" opacity={0.35}>
+            {statePaths.map((state, i) => (
+              <path
+                key={`bg-state-${i}`}
+                d={state.d}
+                fill={state.name === stateName ? 'none' : '#d1d5db'}
+                stroke="#FFFFFF"
+                strokeWidth={0.5}
+                pointerEvents="none"
+              />
+            ))}
+          </g>
+
+          {/* Focused state: county shapes with heat colors */}
           {stateCounties.map(county => {
             const resolvedName = county.cityName ? resolveCountyCityName(county.cityName) : '';
             const cityData = resolvedName ? cityDataMap[resolvedName] : null;
@@ -330,7 +333,7 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
                 key={county.fips}
                 d={county.d}
                 fill={fillColor}
-                stroke={isCity ? '#555' : '#999'}
+                stroke={isCity ? '#333' : '#999'}
                 strokeWidth={strokeW}
                 onMouseEnter={(e) => handleCountyEnter(e, county)}
                 onMouseLeave={() => setTooltip(null)}
@@ -353,7 +356,7 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
                   key={county.fips + '-outline'}
                   d={county.d}
                   fill="none"
-                  stroke="#333"
+                  stroke="#1a1a1a"
                   strokeWidth={outlineW}
                   pointerEvents="none"
                 />
@@ -361,30 +364,47 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
             })
           }
 
-          {/* City labels */}
-          {cityLabelPositions.map(({ city, x, y }) => {
-            const val = getMetricValue(city, metric);
-            return (
-              <g key={city.name + '-label'} pointerEvents="none">
-                <circle
-                  cx={x} cy={y} r={dotR}
-                  fill={getHeatColorSolid(val)}
-                  stroke="white"
-                  strokeWidth={dotR * 0.5}
-                />
-                <text
-                  x={x} y={y - dotR - labelSize * 0.4}
-                  textAnchor="middle"
-                  fill="#1e293b"
-                  fontSize={labelSize}
-                  fontWeight={700}
-                  style={{ textShadow: '0 0 3px white, 0 0 3px white, 0 0 3px white' }}
-                >
-                  {city.name.split(',')[0].trim()}
-                </text>
-              </g>
-            );
-          })}
+          {/* Nation outline */}
+          <path
+            d={nationPath.d}
+            fill="none"
+            stroke="#000000"
+            strokeWidth={1}
+            strokeLinejoin="round"
+            pointerEvents="none"
+            opacity={0.3}
+          />
+
+          {/* Focused state border highlight */}
+          {statePaths.filter(s => s.name === stateName).map((state, i) => (
+            <path
+              key={`focus-border-${i}`}
+              d={state.d}
+              fill="none"
+              stroke="#4A90D9"
+              strokeWidth={Math.max(1.5, 2.5 / Math.max(zoomRatio, 1))}
+              strokeLinejoin="round"
+              pointerEvents="none"
+            />
+          ))}
+
+          {/* City labels — text only, no circles */}
+          {cityLabelPositions.map(({ city, x, y }) => (
+            <text
+              key={city.name + '-label'}
+              x={x}
+              y={y}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill="#1e293b"
+              fontSize={labelSize}
+              fontWeight={700}
+              pointerEvents="none"
+              style={{ textShadow: '0 0 3px white, 0 0 3px white, 0 0 3px white' }}
+            >
+              {city.name.split(',')[0].trim()}
+            </text>
+          ))}
         </svg>
 
         {/* Zoom controls */}
@@ -434,7 +454,7 @@ export default function StateHeatMap({ stateName, stateAbbrev, cities, stateData
         </div>
       </div>
 
-      {/* Tooltip - fixed position, matching USHeatMap/HeatMapTooltip style */}
+      {/* Tooltip */}
       {tooltip && (
         <div
           className="fixed z-50 pointer-events-none shadow-2xl min-w-[340px] bg-[#4A90D9]"
