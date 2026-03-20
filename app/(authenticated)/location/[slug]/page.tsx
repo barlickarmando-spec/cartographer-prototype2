@@ -116,6 +116,7 @@ export default function LocationPage() {
   const [areaQualityFilter, setAreaQualityFilter] = useState<string>('all');
   const [settingFilter, setSettingFilter] = useState<string>('all');
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [salaryView, setSalaryView] = useState<'nominal' | 'rpp'>('nominal');
 
   // Browse Similar Locations filters
   type SuggestionSortMode = 'most-viable' | 'fastest-home' | 'best-value' | 'quality-of-life' | 'most-similar' | 'largest-home';
@@ -389,6 +390,54 @@ export default function LocationPage() {
     }));
     return [currentCityData, ...mapped];
   }, [calcResult, allSuggestions, locationName, profile]);
+
+  // State-level heat data for non-city counties (fallback)
+  const stateHeatData = useMemo<CityHeatData | null>(() => {
+    if (!calcResult || !profile) return null;
+    // For state pages, use state calcResult directly
+    if (isStatePage) {
+      const sal = getSalary(locationName, profile.userOccupation, profile.userSalary);
+      return {
+        name: locationName,
+        displayName: locationName,
+        score: calcResult.numericScore,
+        salary: sal,
+        projectedSqFt: calcResult.projectedSqFt,
+        disposableIncome: calcResult.yearByYear[0]?.disposableIncome || 0,
+        yearsToMortgage: calcResult.yearsToMortgage >= 0 ? calcResult.yearsToMortgage : 99,
+        qolScore: 0,
+        minAllocation: calcResult.minimumAllocationRequired,
+      };
+    }
+    // For city pages, compute state data
+    const sName = getStateNameFromLocation(locationName);
+    if (!sName) return null;
+    try {
+      const stateCalc = calculateAutoApproach(profile, sName, 30);
+      if (!stateCalc) return null;
+      const sal = getSalary(sName, profile.userOccupation, profile.userSalary);
+      return {
+        name: sName,
+        displayName: sName,
+        score: stateCalc.numericScore,
+        salary: sal,
+        projectedSqFt: stateCalc.projectedSqFt,
+        disposableIncome: stateCalc.yearByYear[0]?.disposableIncome || 0,
+        yearsToMortgage: stateCalc.yearsToMortgage >= 0 ? stateCalc.yearsToMortgage : 99,
+        qolScore: 0,
+        minAllocation: stateCalc.minimumAllocationRequired,
+      };
+    } catch {
+      return null;
+    }
+  }, [calcResult, profile, locationName, isStatePage]);
+
+  // State abbreviation for heat map county filtering
+  const heatMapStateAbbrev = useMemo(() => {
+    if (isStatePage) return STATE_CODES[locationName] || STATE_TO_ABBREV[locationName] || '';
+    const sName = getStateNameFromLocation(locationName);
+    return sName ? (STATE_TO_ABBREV[sName] || '') : '';
+  }, [locationName, isStatePage]);
 
   // Cross-location comparison: how does this occupation perform here vs other locations?
   const crossLocationStats = useMemo(() => {
@@ -986,26 +1035,79 @@ export default function LocationPage() {
           {/* ═══ JOB MARKET ═══ */}
           <Section id="job-market" title="Job Market">
             <div className="space-y-4">
-              {/* Salary headline */}
-              {profile?.userOccupation && (
-                <div className="bg-carto-blue-sky rounded-xl p-4">
-                  <div className="flex items-baseline justify-between flex-wrap gap-2">
-                    <div>
-                      <p className="text-sm font-medium text-carto-steel">{profile.userOccupation} in {locationName}</p>
-                      <p className="text-2xl font-bold text-carto-slate mt-1">{fmtDollars(userSalary)}</p>
+              {/* Centered header + tab toggle */}
+              {profile?.userOccupation && crossLocationStats && (() => {
+                const natAvg = crossLocationStats.avgSalary;
+                const rppFactor = getRppFactor(locationName);
+                const isRpp = salaryView === 'rpp';
+                const displaySalary = isRpp ? Math.round(userSalary / rppFactor) : userSalary;
+                const displayNatAvg = Math.round(natAvg);
+                const diff = displaySalary - displayNatAvg;
+                const pctDiff = displayNatAvg > 0 ? (diff / displayNatAvg) * 100 : 0;
+                return (
+                  <>
+                    {/* Section header */}
+                    <h3 className="text-lg font-bold text-carto-slate text-center">
+                      {profile.userOccupation} in {locationName}
+                    </h3>
+
+                    {/* Nominal / RPP tab toggle */}
+                    <div className="flex justify-center">
+                      <div className="inline-flex bg-gray-100 rounded-lg p-0.5">
+                        <button
+                          onClick={() => setSalaryView('nominal')}
+                          className={cn(
+                            'px-4 py-1.5 rounded-md text-xs font-medium transition-colors',
+                            salaryView === 'nominal'
+                              ? 'bg-white text-carto-slate shadow-sm'
+                              : 'text-gray-500 hover:text-gray-700'
+                          )}
+                        >
+                          Nominal
+                        </button>
+                        <button
+                          onClick={() => setSalaryView('rpp')}
+                          className={cn(
+                            'px-4 py-1.5 rounded-md text-xs font-medium transition-colors',
+                            salaryView === 'rpp'
+                              ? 'bg-white text-carto-slate shadow-sm'
+                              : 'text-gray-500 hover:text-gray-700'
+                          )}
+                        >
+                          RPP-Adjusted
+                        </button>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs text-gray-500">vs. National Avg</p>
-                      <p className={`text-lg font-bold ${crossLocationStats && userSalary >= crossLocationStats.avgSalary ? 'text-emerald-700' : 'text-red-600'}`}>
-                        {crossLocationStats
-                          ? `${userSalary >= crossLocationStats.avgSalary ? '+' : ''}${fmtDollars(userSalary - crossLocationStats.avgSalary)}`
-                          : 'N/A'}
-                      </p>
-                      <p className="text-xs text-gray-400">{crossLocationStats ? `Avg: ${fmtDollars(crossLocationStats.avgSalary)}` : ''}</p>
+
+                    {/* Salary cards row */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                        <p className="text-xs text-gray-500 font-medium mb-1">Projected Salary</p>
+                        <p className="text-2xl font-bold text-carto-slate">{fmtDollars(displaySalary)}</p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {isRpp ? `RPP ${rppFactor.toFixed(2)}` : 'in ' + locationName}
+                        </p>
+                      </div>
+                      <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                        <p className="text-xs text-gray-500 font-medium mb-1">National Average</p>
+                        <p className="text-2xl font-bold text-carto-slate">{fmtDollars(displayNatAvg)}</p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {isRpp ? 'Baseline (RPP 1.00)' : 'All locations'}
+                        </p>
+                      </div>
+                      <div className={`rounded-xl p-4 border ${diff >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                        <p className="text-xs text-gray-500 font-medium mb-1">vs. National Avg</p>
+                        <p className={`text-2xl font-bold ${diff >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                          {diff >= 0 ? '+' : ''}{pctDiff.toFixed(1)}%
+                        </p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {diff >= 0 ? '+' : ''}{fmtDollars(diff)}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              )}
+                  </>
+                );
+              })()}
 
               {/* Viability metrics — large cards */}
               <div className="grid grid-cols-3 gap-3">
@@ -1033,15 +1135,15 @@ export default function LocationPage() {
                 <div className="bg-white border border-gray-200 rounded-xl p-4">
                   <h3 className="font-semibold text-carto-slate text-sm mb-3">
                     {isStatePage
-                      ? `${locationName} — State Rankings`
-                      : `${locationName} — Rankings in ${currentStateName || 'State'}`}
+                      ? `${locationName} State Rankings`
+                      : `${locationName} Rankings in ${currentStateName || 'State'}`}
                   </h3>
 
                   {/* State page: rank out of 51 states */}
                   {isStatePage && (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      <div className="bg-gray-50 rounded-lg p-3 text-center">
-                        <p className="text-xs text-gray-500 mb-1">Viability Rank</p>
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 font-medium mb-1">Viability Rank</p>
                         <p className="text-xl font-bold text-carto-slate">
                           {crossLocationStats.stateViabilityRank > 0
                             ? `#${crossLocationStats.stateViabilityRank}`
@@ -1049,8 +1151,8 @@ export default function LocationPage() {
                         </p>
                         <p className="text-[11px] text-gray-400">of {crossLocationStats.totalStates} states</p>
                       </div>
-                      <div className="bg-gray-50 rounded-lg p-3 text-center">
-                        <p className="text-xs text-gray-500 mb-1">Salary Rank</p>
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 font-medium mb-1">Salary Rank</p>
                         <p className="text-xl font-bold text-carto-slate">
                           {crossLocationStats.stateSalaryRank > 0
                             ? `#${crossLocationStats.stateSalaryRank}`
@@ -1058,13 +1160,13 @@ export default function LocationPage() {
                         </p>
                         <p className="text-[11px] text-gray-400">of {crossLocationStats.totalStates} states</p>
                       </div>
-                      <div className="bg-gray-50 rounded-lg p-3 text-center">
-                        <p className="text-xs text-gray-500 mb-1">Disposable Income</p>
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 font-medium mb-1">Disposable Income</p>
                         <p className="text-lg font-bold text-carto-slate">{fmtDollars(disposableIncome)}</p>
                         <p className="text-[11px] text-gray-400">Year 1</p>
                       </div>
-                      <div className="bg-gray-50 rounded-lg p-3 text-center">
-                        <p className="text-xs text-gray-500 mb-1">Salary Percentile</p>
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 font-medium mb-1">Salary Percentile</p>
                         <p className="text-lg font-bold text-carto-slate">
                           {crossLocationStats.salaryPercentile > 0
                             ? `Top ${crossLocationStats.salaryPercentile}%`
@@ -1078,8 +1180,8 @@ export default function LocationPage() {
                   {/* City page: rank among cities in the state */}
                   {!isStatePage && crossLocationStats.totalCitiesInState > 0 && (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      <div className="bg-gray-50 rounded-lg p-3 text-center">
-                        <p className="text-xs text-gray-500 mb-1">Viability Rank</p>
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 font-medium mb-1">Viability Rank</p>
                         <p className="text-xl font-bold text-carto-slate">
                           {crossLocationStats.cityInStateViabilityRank > 0
                             ? `#${crossLocationStats.cityInStateViabilityRank}`
@@ -1087,8 +1189,8 @@ export default function LocationPage() {
                         </p>
                         <p className="text-[11px] text-gray-400">of {crossLocationStats.totalCitiesInState} cities in {currentStateName}</p>
                       </div>
-                      <div className="bg-gray-50 rounded-lg p-3 text-center">
-                        <p className="text-xs text-gray-500 mb-1">Salary Rank</p>
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 font-medium mb-1">Salary Rank</p>
                         <p className="text-xl font-bold text-carto-slate">
                           {crossLocationStats.cityInStateSalaryRank > 0
                             ? `#${crossLocationStats.cityInStateSalaryRank}`
@@ -1096,8 +1198,8 @@ export default function LocationPage() {
                         </p>
                         <p className="text-[11px] text-gray-400">of {crossLocationStats.totalCitiesInState} cities in {currentStateName}</p>
                       </div>
-                      <div className="bg-gray-50 rounded-lg p-3 text-center">
-                        <p className="text-xs text-gray-500 mb-1">Quality of Life</p>
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 font-medium mb-1">Quality of Life</p>
                         <p className="text-xl font-bold text-carto-slate">
                           {crossLocationStats.cityInStateQolRank > 0
                             ? `#${crossLocationStats.cityInStateQolRank}`
@@ -1105,8 +1207,8 @@ export default function LocationPage() {
                         </p>
                         <p className="text-[11px] text-gray-400">of {crossLocationStats.totalCitiesInState} cities in {currentStateName}</p>
                       </div>
-                      <div className="bg-gray-50 rounded-lg p-3 text-center">
-                        <p className="text-xs text-gray-500 mb-1">Years to Home</p>
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 font-medium mb-1">Years to Home</p>
                         <p className="text-xl font-bold text-carto-slate">
                           {crossLocationStats.cityInStateYearsRank > 0
                             ? `#${crossLocationStats.cityInStateYearsRank}`
@@ -1120,13 +1222,13 @@ export default function LocationPage() {
                   {/* Disposable income + percentile for city pages */}
                   {!isStatePage && (
                     <div className="grid grid-cols-2 gap-3 mt-3">
-                      <div className="bg-gray-50 rounded-lg p-3 text-center">
-                        <p className="text-xs text-gray-500 mb-1">Disposable Income</p>
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 font-medium mb-1">Disposable Income</p>
                         <p className="text-lg font-bold text-carto-slate">{fmtDollars(disposableIncome)}</p>
                         <p className="text-[11px] text-gray-400">Year 1</p>
                       </div>
-                      <div className="bg-gray-50 rounded-lg p-3 text-center">
-                        <p className="text-xs text-gray-500 mb-1">Salary Percentile</p>
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 font-medium mb-1">Salary Percentile</p>
                         <p className="text-lg font-bold text-carto-slate">
                           {crossLocationStats.salaryPercentile > 0
                             ? `Top ${crossLocationStats.salaryPercentile}%`
@@ -1142,12 +1244,11 @@ export default function LocationPage() {
               {/* State Heat Map — shows where in the state an occupation is most viable */}
               {isStatePage && heatMapCities.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                    Where in {locationName} is {profile?.userOccupation || 'your occupation'} most viable?
-                  </h3>
                   <StateHeatMap
                     stateName={locationName}
+                    stateAbbrev={heatMapStateAbbrev}
                     cities={heatMapCities}
+                    stateData={stateHeatData}
                     userOccupation={profile?.userOccupation}
                     onCityClick={(name) => router.push(`/location/${encodeSlug(name)}`)}
                   />
@@ -1157,12 +1258,11 @@ export default function LocationPage() {
               {/* City page: state heat map showing viability across the state */}
               {!isStatePage && currentStateName && cityPageHeatMapCities.length > 1 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                    Viability across {currentStateName}
-                  </h3>
                   <StateHeatMap
                     stateName={currentStateName}
+                    stateAbbrev={heatMapStateAbbrev}
                     cities={cityPageHeatMapCities}
+                    stateData={stateHeatData}
                     userOccupation={profile?.userOccupation}
                     onCityClick={(name) => router.push(`/location/${encodeSlug(name)}`)}
                   />
