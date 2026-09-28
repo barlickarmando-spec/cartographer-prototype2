@@ -1,13 +1,28 @@
 import Database from "better-sqlite3";
 import path from "path";
+import os from "os";
+import fs from "fs";
 
-const DB_PATH = path.join(process.cwd(), "prisma", "dev.db");
+function resolveDbPath(): string {
+  const primaryDir = path.join(process.cwd(), "prisma");
+  const primaryPath = path.join(primaryDir, "dev.db");
+
+  try {
+    if (!fs.existsSync(primaryDir)) fs.mkdirSync(primaryDir, { recursive: true });
+    fs.accessSync(primaryDir, fs.constants.W_OK);
+    return primaryPath;
+  } catch {}
+
+  const tmpPath = path.join(os.tmpdir(), "cartographer-dev.db");
+  return tmpPath;
+}
 
 let _db: Database.Database | null = null;
 
 function getDb(): Database.Database {
   if (!_db) {
-    _db = new Database(DB_PATH);
+    const dbPath = resolveDbPath();
+    _db = new Database(dbPath);
     _db.pragma("journal_mode = WAL");
     _db.exec(`
       CREATE TABLE IF NOT EXISTS users (

@@ -20,16 +20,16 @@ export default function Home() {
             </Link>
 
             <div className="hidden md:flex items-center gap-8">
-              <Link href="/login" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">
+              <Link href="/signup" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">
                 Calculator
               </Link>
-              <Link href="/login" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">
+              <Link href="/signup" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">
                 Analysis
               </Link>
-              <Link href="/login" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">
+              <Link href="/signup" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">
                 Research
               </Link>
-              <Link href="/login" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">
+              <Link href="/signup" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">
                 Pricing
               </Link>
             </div>
@@ -85,7 +85,7 @@ export default function Home() {
               </svg>
             </Link>
             <Link
-              href="/login"
+              href="/signup"
               className="bg-white text-slate-700 px-8 py-3.5 rounded-xl text-base font-medium border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all inline-flex items-center justify-center gap-2"
             >
               See how it works
@@ -367,25 +367,25 @@ export default function Home() {
             <div>
               <h4 className="text-sm font-semibold text-white mb-4">Product</h4>
               <ul className="space-y-2.5 text-sm">
-                <li><Link href="/login" className="hover:text-white transition-colors">Calculator</Link></li>
-                <li><Link href="/login" className="hover:text-white transition-colors">Analysis</Link></li>
-                <li><Link href="/login" className="hover:text-white transition-colors">Research</Link></li>
-                <li><Link href="/login" className="hover:text-white transition-colors">Pricing</Link></li>
+                <li><Link href="/signup" className="hover:text-white transition-colors">Calculator</Link></li>
+                <li><Link href="/signup" className="hover:text-white transition-colors">Analysis</Link></li>
+                <li><Link href="/signup" className="hover:text-white transition-colors">Research</Link></li>
+                <li><Link href="/signup" className="hover:text-white transition-colors">Pricing</Link></li>
               </ul>
             </div>
             <div>
               <h4 className="text-sm font-semibold text-white mb-4">Company</h4>
               <ul className="space-y-2.5 text-sm">
-                <li><Link href="/login" className="hover:text-white transition-colors">About</Link></li>
-                <li><Link href="/login" className="hover:text-white transition-colors">Blog</Link></li>
-                <li><Link href="/login" className="hover:text-white transition-colors">Contact</Link></li>
+                <li><Link href="/signup" className="hover:text-white transition-colors">About</Link></li>
+                <li><Link href="/signup" className="hover:text-white transition-colors">Blog</Link></li>
+                <li><Link href="/signup" className="hover:text-white transition-colors">Contact</Link></li>
               </ul>
             </div>
             <div>
               <h4 className="text-sm font-semibold text-white mb-4">Legal</h4>
               <ul className="space-y-2.5 text-sm">
-                <li><Link href="/login" className="hover:text-white transition-colors">Privacy</Link></li>
-                <li><Link href="/login" className="hover:text-white transition-colors">Terms</Link></li>
+                <li><Link href="/signup" className="hover:text-white transition-colors">Privacy</Link></li>
+                <li><Link href="/signup" className="hover:text-white transition-colors">Terms</Link></li>
               </ul>
             </div>
             <div>
