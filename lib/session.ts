@@ -4,14 +4,12 @@ import { cookies } from "next/headers";
 export interface SessionData {
   userId: string;
   isLoggedIn: boolean;
-  username?: string;
   email?: string;
   isDemo?: boolean;
 }
 
 export interface CurrentUser {
   id: string;
-  username: string;
   email: string;
   isDemo: boolean;
 }
@@ -23,7 +21,7 @@ const sessionOptions: SessionOptions = {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax" as const,
-    maxAge: 60 * 60 * 24 * 7, // 7 days
+    maxAge: 60 * 60 * 24 * 7,
   },
 };
 
@@ -48,21 +46,17 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   try {
     const session = await getSession();
     if (!session.isLoggedIn || !session.userId) return null;
-    if (session.isDemo && session.username != null && session.email != null) {
+    if (session.isDemo && session.email != null) {
       return {
         id: session.userId,
-        username: session.username,
         email: session.email,
         isDemo: true,
       };
     }
-    const { prisma } = await import("@/lib/db");
-    const user = await prisma.user.findUnique({
-      where: { id: session.userId },
-      select: { id: true, username: true, email: true },
-    });
+    const { db } = await import("@/lib/db");
+    const user = db.findUserById(session.userId);
     if (!user) return null;
-    return { id: user.id, username: user.username, email: user.email, isDemo: false };
+    return { id: user.id, email: user.email, isDemo: false };
   } catch (e) {
     console.error("getCurrentUser error:", e);
     return null;

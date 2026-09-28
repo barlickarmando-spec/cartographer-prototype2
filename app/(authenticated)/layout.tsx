@@ -13,7 +13,8 @@ export default function AuthenticatedLayout({
   const router = useRouter();
   const pathname = usePathname();
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    try { await fetch('/api/auth/logout', { method: 'POST' }); } catch {}
     localStorage.clear();
     router.push('/');
   };

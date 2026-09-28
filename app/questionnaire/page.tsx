@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 
 export default function QuestionnairePage() {
   const router = useRouter();
-  const [user, setUser] = useState<{ username: string; email: string; isDemo?: boolean } | null>(null);
+  const [user, setUser] = useState<{ email: string; isDemo?: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -55,7 +55,7 @@ export default function QuestionnairePage() {
       <main className="max-w-md mx-auto px-4 py-16">
         <h1 className="text-2xl font-bold text-slate-800 mb-4">Questionnaire placeholder</h1>
         <p className="text-slate-600 mb-2">
-          Logged in as <span className="font-semibold text-slate-800">{user.username}</span>
+          Logged in as <span className="font-semibold text-slate-800">{user.email}</span>
         </p>
         <p className="text-slate-600 mb-8">
           Email: <span className="text-slate-800">{user.email}</span>

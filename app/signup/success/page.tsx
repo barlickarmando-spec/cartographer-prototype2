@@ -24,20 +24,25 @@ export default function SignupSuccessPage() {
       </nav>
 
       <main className="max-w-md mx-auto px-4 py-16 text-center">
+        <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <svg className="w-8 h-8 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+        </div>
         <h1 className="text-2xl font-bold text-slate-800 mb-4">Account created</h1>
-        <p className="text-slate-600 mb-8">You can now log in or go to your account.</p>
+        <p className="text-slate-600 mb-8">Your account has been set up. You can now explore your personalized financial roadmap.</p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link
-            href="/login"
+            href="/account"
             className="rounded-lg border border-slate-300 bg-white px-6 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
           >
-            Log in
+            View account
           </Link>
           <Link
-            href="/account"
-            className="bg-gradient-to-r from-cyan-500 to-blue-500 text-white px-6 py-3 rounded-lg font-semibold hover:from-cyan-600 hover:to-blue-600 transition-all shadow-md"
+            href="/onboarding"
+            className="bg-[#5BA4E5] text-white px-6 py-3 rounded-lg font-semibold hover:bg-[#4A93D4] transition-all shadow-md"
           >
-            Go to account
+            Get started
           </Link>
         </div>
       </main>

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import * as bcryptNamespace from "bcryptjs";
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
 import { getSession } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -11,65 +11,40 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { login, password } = body;
-    const loginTrim = typeof login === "string" ? login.trim() : "";
+    const loginTrim = typeof login === "string" ? login.trim().toLowerCase() : "";
 
     if (!loginTrim || !password) {
       return NextResponse.json(
-        { error: "Username or email and password are required." },
+        { error: "Email and password are required." },
         { status: 400 }
       );
     }
 
-    // Demo auth: any non-empty password, session-only
-    if (process.env.DEMO_AUTH === "1") {
-      const isEmail = loginTrim.includes("@");
-      const session = await getSession();
-      session.userId = "demo";
-      session.isLoggedIn = true;
-      session.username = isEmail ? loginTrim.split("@")[0] : loginTrim;
-      session.email = isEmail ? loginTrim : `${loginTrim}@demo.local`;
-      session.isDemo = true;
-      await session.save();
-      return NextResponse.json({
-        success: true,
-        user: {
-          id: "demo",
-          username: session.username,
-          email: session.email,
-          isDemo: true,
-        },
-      });
-    }
-
-    const isEmail = loginTrim.includes("@");
-    const user = await prisma.user.findUnique({
-      where: isEmail ? { email: loginTrim } : { username: loginTrim },
-    });
+    const user = db.findUserByEmail(loginTrim);
 
     if (!user) {
-      return NextResponse.json({ error: "Invalid username/email or password." }, { status: 401 });
+      return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
     }
 
     if (!bcrypt?.compare) {
       console.error("bcrypt.compare not available");
       return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
     }
-    const valid = await bcrypt.compare(password, user.passwordHash);
+    const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
-      return NextResponse.json({ error: "Invalid username/email or password." }, { status: 401 });
+      return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
     }
 
     const session = await getSession();
     session.userId = user.id;
     session.isLoggedIn = true;
-    session.username = undefined;
-    session.email = undefined;
+    session.email = user.email;
     session.isDemo = false;
     await session.save();
 
     return NextResponse.json({
       success: true,
-      user: { id: user.id, username: user.username, email: user.email, createdAt: user.createdAt },
+      user: { id: user.id, email: user.email, createdAt: user.created_at },
     });
   } catch (e) {
     console.error("Login error:", e);

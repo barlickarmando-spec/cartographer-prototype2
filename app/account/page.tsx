@@ -2,23 +2,19 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { getCurrentUserId } from "@/lib/session";
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
 import { LogoutButton } from "./LogoutButton";
 
-// This page uses Prisma + cookies at runtime, skip static pre-rendering
 export const dynamic = "force-dynamic";
 
 export default async function AccountPage() {
   const userId = await getCurrentUserId();
   if (!userId) redirect("/login");
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { username: true, email: true, createdAt: true },
-  });
+  const user = db.findUserById(userId);
   if (!user) redirect("/login");
 
-  const createdAtFormatted = new Date(user.createdAt).toLocaleDateString("en-US", {
+  const createdAtFormatted = new Date(user.created_at).toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -50,10 +46,12 @@ export default async function AccountPage() {
 
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 space-y-4">
           <p className="text-slate-600">
-            Logged in as <span className="font-semibold text-slate-800">{user.username}</span>
+            <span className="text-slate-500">Email:</span>{" "}
+            <span className="font-semibold text-slate-800">{user.email}</span>
           </p>
           <p className="text-slate-600">
-            <span className="text-slate-500">Email:</span> {user.email}
+            <span className="text-slate-500">Email updates:</span>{" "}
+            {user.email_updates ? "Enabled" : "Disabled"}
           </p>
           <p className="text-slate-600">
             <span className="text-slate-500">Member since:</span> {createdAtFormatted}
