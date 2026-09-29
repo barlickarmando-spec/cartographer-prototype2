@@ -285,7 +285,8 @@ function buildLocationData(
   stateCode?: string
 ): LocationData {
   // Extract three bedroom rent data (from 3BR columns or estimate from 2BR)
-  const threeBedroomRent = housingData['Average Annual Rent (Three Bedroom)'] || 
+  const threeBedroomRent = housingData['Average Annual Rent (Three Bedroom)'] ||
+                           housingData['Average Annual Rent (Three Bed)'] ||
                            (housingData['Average Annual Rent'] * 1.3);
   const threeBedroomSqFt = housingData['Corresponding Apartment Size (Sq Ft.).2'] || 
                           (housingData['Corresponding Apartment Size (Sq Ft.)'] * 1.2);
@@ -300,31 +301,35 @@ function buildLocationData(
     type,
     state: stateCode || housingData.State || affordabilityData.State || '',
     
-    salaries: {
-      management: affordabilityData['Management'] || 0,
-      businessAndOperations: affordabilityData['Business and Operations'] || 0,
-      computerAndMathematics: affordabilityData['Computer and Mathematics'] || 0,
-      architectureAndEngineering: affordabilityData['Architecture and Engineering'] || 0,
-      lifePhysicalSocialScience: affordabilityData['Life, Physical, and Social Science'] || 0,
-      communityService: affordabilityData['Community Service'] || 0,
-      legalWork: affordabilityData['Legal Work'] || 0,
-      educationTrainingLibrary: affordabilityData['Education, Training, Library'] || 0,
-      artsDesignEntertainmentSportsMedia: affordabilityData['Arts, Design, Entertainment, Sports, Media'] || 0,
-      healthcarePractitionersTechnical: affordabilityData['Healthcare Practioners and Technical Work'] || 0,
-      healthcareSupport: affordabilityData['Healthcare Support'] || 0,
-      protectiveService: affordabilityData['Protective Service'] || 0,
-      foodPreparationServing: affordabilityData['Food Preparation and Serving'] || 0,
-      cleaningMaintenance: affordabilityData['Cleaning and Maintenance'] || 0,
-      personalCareService: affordabilityData['Personal Care and Service'] || 0,
-      salesRelated: affordabilityData['Sales and Related'] || 0,
-      officeAdministrativeSupport: affordabilityData['Office and Administrative Support'] || 0,
-      farmingFishingForestry: affordabilityData['Farming, Fishing, and Forestry'] || 0,
-      constructionExtraction: affordabilityData['Construction and Extraction'] || 0,
-      installationMaintenanceRepair: affordabilityData['Insallation, Maintenance, and Repair'] || 0,
-      production: affordabilityData['Production'] || 0,
-      transportationMaterialMoving: affordabilityData['Transportation and Material Moving'] || 0,
-      overallAverage: affordabilityData['Overall Average'] || 0,
-    },
+    salaries: (() => {
+      const avg = affordabilityData['Overall Average'] || 0;
+      const sal = (key: string) => affordabilityData[key] || avg;
+      return {
+        management: sal('Management'),
+        businessAndOperations: sal('Business and Operations'),
+        computerAndMathematics: sal('Computer and Mathematics'),
+        architectureAndEngineering: sal('Architecture and Engineering'),
+        lifePhysicalSocialScience: sal('Life, Physical, and Social Science'),
+        communityService: sal('Community Service'),
+        legalWork: sal('Legal Work'),
+        educationTrainingLibrary: sal('Education, Training, Library'),
+        artsDesignEntertainmentSportsMedia: sal('Arts, Design, Entertainment, Sports, Media'),
+        healthcarePractitionersTechnical: sal('Healthcare Practioners and Technical Work'),
+        healthcareSupport: sal('Healthcare Support'),
+        protectiveService: sal('Protective Service'),
+        foodPreparationServing: sal('Food Preparation and Serving'),
+        cleaningMaintenance: sal('Cleaning and Maintenance'),
+        personalCareService: sal('Personal Care and Service'),
+        salesRelated: sal('Sales and Related'),
+        officeAdministrativeSupport: sal('Office and Administrative Support'),
+        farmingFishingForestry: sal('Farming, Fishing, and Forestry'),
+        constructionExtraction: sal('Construction and Extraction'),
+        installationMaintenanceRepair: sal('Insallation, Maintenance, and Repair'),
+        production: sal('Production'),
+        transportationMaterialMoving: sal('Transportation and Material Moving'),
+        overallAverage: avg,
+      };
+    })(),
     
     housing: {
       medianHomeValue: affordabilityData['Typical Home Value (Single Family Normal)'] ||
