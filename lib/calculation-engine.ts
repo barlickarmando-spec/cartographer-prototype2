@@ -11,6 +11,7 @@
 import { UserProfile, HouseholdTypeEnum, determineHouseholdType, getAdjustedCOLKey, getRentType, DebtEntry, AnnualExpense } from './onboarding/types';
 import { getLocationData, getSalary, LocationData } from './data-extraction';
 import { getTypicalHomeValue, getPricePerSqft } from './home-value-lookup';
+import { getOccupationGrowthRate, getGrowingSalary } from './occupations';
 
 // ===== CONSTANTS =====
 const SAVINGS_GROWTH_RATE = 0.03; // 3% annual growth on savings
@@ -662,10 +663,27 @@ function runYearByYearSimulation(
     formulaAnnualPayment: Math.round(medianAnnualPayment),
   });
 
+  // Pre-compute base salaries and growth rates (constant across years)
+  const baseUserSalary = (profile.currentSalaryOverride && locationData.displayName === profile.currentSalaryLocation)
+    ? profile.currentSalaryOverride
+    : getSalary(locationData.name, profile.userOccupation, profile.userSalary);
+  const userGrowthRate = getOccupationGrowthRate(profile.userOccupation);
+
+  let basePartnerSalary = 0;
+  let partnerGrowthRate = userGrowthRate;
+  if (profile.partnerOccupation) {
+    basePartnerSalary = (profile.partnerSalary && locationData.displayName === profile.currentSalaryLocation)
+      ? profile.partnerSalary
+      : getSalary(locationData.name, profile.partnerOccupation, undefined);
+    partnerGrowthRate = getOccupationGrowthRate(profile.partnerOccupation);
+  } else if (profile.partnerSalary) {
+    basePartnerSalary = profile.partnerSalary;
+  }
+
   for (let year = 1; year <= years; year++) {
     const debugNotes: string[] = [];
     const ageThisYear = currentAge + year - 1;
-    
+
     // === LIFE EVENT: RELATIONSHIP START ===
     let relationshipStartedThisYear = false;
     if (!relationshipStarted && plannedRelationshipAge && ageThisYear >= plannedRelationshipAge) {
@@ -743,29 +761,17 @@ function runYearByYearSimulation(
       }
     }
 
-    // === CALCULATE INCOME ===
-    // Salary override: use user's known salary for their current location, location averages elsewhere
-    const userIncome = (profile.currentSalaryOverride && locationData.displayName === profile.currentSalaryLocation)
-      ? profile.currentSalaryOverride
-      : getSalary(locationData.name, profile.userOccupation, profile.userSalary);
+    // === CALCULATE INCOME (with occupation-specific salary growth) ===
+    const userIncome = getGrowingSalary(baseUserSalary, userGrowthRate, year);
     let partnerIncome = 0;
-    
+
     if (currentNumEarners === 2) {
-      if (profile.partnerOccupation) {
-        // Use partner salary override for current location, location averages elsewhere
-        const partnerSalaryForLocation = (profile.partnerSalary && locationData.displayName === profile.currentSalaryLocation)
-          ? profile.partnerSalary
-          : getSalary(locationData.name, profile.partnerOccupation, undefined);
-        partnerIncome = partnerSalaryForLocation;
-        debugNotes.push(`Partner income from occupation: $${partnerIncome}`);
-      } else if (profile.partnerSalary) {
-        // Partner salary provided directly without occupation
-        partnerIncome = profile.partnerSalary;
-        debugNotes.push(`Partner income from manual salary: $${partnerIncome}`);
+      if (profile.partnerOccupation || profile.partnerSalary) {
+        partnerIncome = getGrowingSalary(basePartnerSalary, partnerGrowthRate, year);
+        debugNotes.push(`Partner income (year ${year}): $${Math.round(partnerIncome)}`);
       } else if (profile.usePartnerIncomeDoubling || relationshipStarted) {
-        // Income doubling rule
         partnerIncome = userIncome;
-        debugNotes.push(`Partner income doubled: $${partnerIncome}`);
+        debugNotes.push(`Partner income doubled: $${Math.round(partnerIncome)}`);
       }
     }
     
