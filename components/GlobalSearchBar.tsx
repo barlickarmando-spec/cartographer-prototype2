@@ -13,12 +13,10 @@ interface SearchResult {
 
 const PAGES: SearchResult[] = [
   { label: 'Your Profile', href: '/profile', type: 'page', description: 'View and edit your profile' },
-  { label: 'Debt Payoff', href: '/debt-payoff', type: 'page', description: 'Debt payoff calculator' },
   { label: 'My Locations', href: '/my-locations', type: 'page', description: 'Saved locations' },
   { label: 'Home Size Calculator', href: '/home-size-calculator', type: 'page', description: 'Calculate affordable home size' },
   { label: 'Rent vs Buy', href: '/rent-vs-buy', type: 'page', description: 'Compare renting vs buying' },
   { label: 'Home Affordability', href: '/home-affordability', type: 'page', description: 'Affordability heat map' },
-  { label: 'Job Finder', href: '/job-finder', type: 'page', description: 'Find jobs by location' },
   { label: 'Wealth Generation', href: '/wealth-generation', type: 'page', description: 'Wealth projection tools' },
 ];
 
