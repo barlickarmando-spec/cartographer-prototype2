@@ -14,6 +14,7 @@ import { getTypicalHomeValue, getPricePerSqft } from './home-value-lookup';
 import { getOccupationGrowthRate, getGrowingSalary } from './occupations';
 
 // ===== CONSTANTS =====
+export const CALC_ENGINE_VERSION = 3; // Increment when formulas change to bust cached results
 const SAVINGS_GROWTH_RATE = 0.03; // 3% annual growth on savings
 const COL_INFLATION_RATE = 0.025; // 2.5% annual inflation on cost of living (BLS CPI long-run avg)
 const RENT_INFLATION_RATE = 0.033; // 3.3% annual rent inflation (BLS shelter CPI pre-pandemic avg)
@@ -208,6 +209,9 @@ export interface CalculationResult {
   // Recommendations
   recommendations: string[];
   warnings: string[];
+
+  // Engine version for cache busting
+  engineVersion?: number;
 }
 
 export type ViabilityClass =
@@ -493,8 +497,9 @@ function calculateAutoApproach(
       kidViability,
       recommendations,
       warnings,
+      engineVersion: CALC_ENGINE_VERSION,
     };
-    
+
   } catch (error) {
     console.error('calculateAutoApproach: Unexpected error:', error);
     if (!locationData) {

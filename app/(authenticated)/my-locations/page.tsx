@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { CalculationResult, calculateAutoApproach } from '@/lib/calculation-engine';
+import { CalculationResult, calculateAutoApproach, CALC_ENGINE_VERSION } from '@/lib/calculation-engine';
 import { formatCurrency } from '@/lib/utils';
 import { normalizeOnboardingAnswers } from '@/lib/onboarding/normalize';
 import { getOnboardingAnswers, getSavedLocations, setSavedLocations } from '@/lib/storage';
@@ -670,9 +670,11 @@ export default function MyLocationsPage() {
     try {
       let results: CalculationResult[] = JSON.parse(stored);
 
-      // Detect stale cached results (missing numericScore from 3-layer system)
-      // and recalculate them with fresh engine — runs once then re-caches
-      const isStale = results.length > 0 && results[0].numericScore === undefined;
+      // Detect stale cached results: missing numericScore OR outdated engine version
+      const isStale = results.length > 0 && (
+        results[0].numericScore === undefined ||
+        results[0].engineVersion !== CALC_ENGINE_VERSION
+      );
 
       const answers = getOnboardingAnswers<OnboardingAnswers>(
         (d): d is OnboardingAnswers => d != null && typeof d === 'object'

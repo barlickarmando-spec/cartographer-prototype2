@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { CalculationResult, HouseProjection, calculateAutoApproach, calculateProjectionForYear } from '@/lib/calculation-engine';
+import { CalculationResult, HouseProjection, calculateAutoApproach, calculateProjectionForYear, CALC_ENGINE_VERSION } from '@/lib/calculation-engine';
 import SimpleHomeCarousel from '@/components/SimpleHomeCarousel';
 import { formatCurrency, pluralize } from '@/lib/utils';
 import { normalizeOnboardingAnswers } from '@/lib/onboarding/normalize';
@@ -49,8 +49,11 @@ export default function ProfilePage() {
         return;
       }
 
-      // Detect stale cached results (missing numericScore from 3-layer system)
-      const isStale = results.length > 0 && results[0].numericScore === undefined;
+      // Detect stale cached results: missing numericScore OR outdated engine version
+      const isStale = results.length > 0 && (
+        results[0].numericScore === undefined ||
+        results[0].engineVersion !== CALC_ENGINE_VERSION
+      );
       if (isStale && storedAnswers) {
         try {
           const answers = JSON.parse(storedAnswers);
