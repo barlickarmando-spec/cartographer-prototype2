@@ -15,6 +15,8 @@ import { getOccupationGrowthRate, getGrowingSalary } from './occupations';
 
 // ===== CONSTANTS =====
 const SAVINGS_GROWTH_RATE = 0.03; // 3% annual growth on savings
+const COL_INFLATION_RATE = 0.025; // 2.5% annual inflation on cost of living (BLS CPI long-run avg)
+const RENT_INFLATION_RATE = 0.033; // 3.3% annual rent inflation (BLS shelter CPI pre-pandemic avg)
 const LOAN_DEBT_GROWTH_TOLERANCE = 5; // Allow loan debt to grow for max 5 consecutive years
 const NEGATIVE_DI_TOLERANCE = 5; // Allow negative DI for max 5 years before declaring unviable
 const MIN_VIABLE_DI = -5000; // Minimum DI before structural failure (very negative)
@@ -786,9 +788,11 @@ function runYearByYearSimulation(
       };
     }
     
-    // === CALCULATE COST OF LIVING ===
+    // === CALCULATE COST OF LIVING (inflation-adjusted) ===
     const colKey = getAdjustedCOLKey(currentHouseholdType);
-    const baseCOL = locationData.adjustedCOL[colKey] || 0;
+    const baseCOLRaw = locationData.adjustedCOL[colKey] || 0;
+    const inflationFactor = Math.pow(1 + COL_INFLATION_RATE, year);
+    const baseCOL = baseCOLRaw * inflationFactor;
 
     // Add annual expenses (conditional on age, debt-free status, and viability)
     let annualExpensesTotal = 0;
@@ -798,26 +802,28 @@ function runYearByYearSimulation(
       if (expense.onlyIfViable && lastYearScore < 5) continue;
       annualExpensesTotal += expense.annualCost;
     }
+    annualExpensesTotal *= inflationFactor;
     const adjustedCOL = baseCOL + annualExpensesTotal;
     if (annualExpensesTotal > 0) {
-      debugNotes.push(`Annual expenses: $${annualExpensesTotal} added to COL`);
+      debugNotes.push(`Annual expenses (inflation-adj): $${Math.round(annualExpensesTotal)} added to COL`);
     }
 
     // Housing cost: rent BEFORE mortgage, calculated mortgage payment AFTER
     // HARD LOCK: housingCost is ALWAYS rent OR mortgage, NEVER both
     // HARD LOCK: After mortgageActive=true, rent must NEVER be included again
     const bedroomSize = getRentType(currentHouseholdType);
+    const rentInflation = Math.pow(1 + RENT_INFLATION_RATE, year);
     let housingCost = 0;
     if (hasMortgage) {
-      // Use the dynamically calculated mortgage payment for the chosen house
       housingCost = calculatedAnnualMortgagePayment;
       debugNotes.push(`Mortgage payment: $${Math.round(housingCost)} (on $${Math.round(chosenHousePrice)} home)`);
     } else {
-      // Rent based on bedroom size for current household type
-      if (bedroomSize === '1br') housingCost = locationData.rent.oneBedroomAnnual || 0;
-      else if (bedroomSize === '2br') housingCost = locationData.rent.twoBedroomAnnual || 0;
-      else housingCost = locationData.rent.threeBedroomAnnual || 0;
-      debugNotes.push(`Rent (${bedroomSize}): $${housingCost}`);
+      let baseRent = 0;
+      if (bedroomSize === '1br') baseRent = locationData.rent.oneBedroomAnnual || 0;
+      else if (bedroomSize === '2br') baseRent = locationData.rent.twoBedroomAnnual || 0;
+      else baseRent = locationData.rent.threeBedroomAnnual || 0;
+      housingCost = baseRent * rentInflation;
+      debugNotes.push(`Rent (${bedroomSize}, inflation-adj): $${Math.round(housingCost)}`);
     }
     
     const totalCOL = adjustedCOL + housingCost;
@@ -963,9 +969,9 @@ function runYearByYearSimulation(
       // Debt is 0 (mortgage requires loanDebt === 0), so all EDI goes to savings
       const rentTypeNM = getRentType(currentHouseholdType);
       let rentCostNM = 0;
-      if (rentTypeNM === '1br') rentCostNM = locationData.rent.oneBedroomAnnual || 0;
-      else if (rentTypeNM === '2br') rentCostNM = locationData.rent.twoBedroomAnnual || 0;
-      else rentCostNM = locationData.rent.threeBedroomAnnual || 0;
+      if (rentTypeNM === '1br') rentCostNM = (locationData.rent.oneBedroomAnnual || 0) * rentInflation;
+      else if (rentTypeNM === '2br') rentCostNM = (locationData.rent.twoBedroomAnnual || 0) * rentInflation;
+      else rentCostNM = (locationData.rent.threeBedroomAnnual || 0) * rentInflation;
 
       const nmDI = totalIncome - (adjustedCOL + rentCostNM);
       const nmEDI = Math.max(0, nmDI * (profile.disposableIncomeAllocation / 100));
